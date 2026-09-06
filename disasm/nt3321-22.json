@@ -17,7 +17,6 @@
     {"start":"0533","end":"053E","kind":"db","width":6},
     {"start":"058C","end":"0593","kind":"db"},
     {"start":"0594","end":"059C","kind":"db","width":3},
-    {"start":"0800","end":"0FFF","kind":"blank"},
     {"start":"1018","end":"1018","kind":"db"},
     {"start":"1800","end":"1FFF","kind":"blank"}
   ],

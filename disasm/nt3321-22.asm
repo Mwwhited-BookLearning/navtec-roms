@@ -3,28 +3,6 @@
         PAGE 0
 
 ; ---- routines located in undumped ROM halves (see docs/rom-status.md) ----
-HI_NIBBLE    EQU  0808H
-FILL_ZERO    EQU  080FH
-X_0817       EQU  0817H
-SAVE_CUR_REC EQU  0875H
-X_08A9       EQU  08A9H
-X_0B8D       EQU  0B8DH
-X_0D79       EQU  0D79H
-X_0DB3       EQU  0DB3H
-X_0DE3       EQU  0DE3H
-X_0DE6       EQU  0DE6H
-X_0E1A       EQU  0E1AH
-X_0E1D       EQU  0E1DH
-X_0E2D       EQU  0E2DH
-X_0EC1       EQU  0EC1H
-X_0ED9       EQU  0ED9H
-X_0EEE       EQU  0EEEH
-X_0F08       EQU  0F08H
-X_0F23       EQU  0F23H
-X_0F31       EQU  0F31H
-X_0F6A       EQU  0F6AH
-X_0FBE       EQU  0FBEH
-X_0FE9       EQU  0FE9H
 X_1804       EQU  1804H
 X_1878       EQU  1878H
 X_189B       EQU  189BH
@@ -39,23 +17,28 @@ X_19A9       EQU  19A9H
 X_19E7       EQU  19E7H
 X_1DBD       EQU  1DBDH
 X_1E05       EQU  1E05H
+SUB_1E23     EQU  1E23H
 X_1E4C       EQU  1E4CH
+L_1E73       EQU  1E73H
+SUB_1F20     EQU  1F20H
 
 ; ---- external addresses (RAM / memory-mapped I/O) ----
 EXTROM_SIG   EQU  2000H  ; rd=1 wr=0 lxi=0
 EXTROM_ENTRY EQU  2001H  ; rd=0 wr=0 lxi=0
-RAM1_BASE    EQU  6F00H  ; rd=0 wr=0 lxi=1
-ACQ_COUNT    EQU  6F01H  ; rd=1 wr=0 lxi=1
-FIRST_SLOT   EQU  6F02H  ; rd=0 wr=2 lxi=1
-SLOT_RESULT  EQU  6F03H  ; rd=0 wr=2 lxi=0
-SLOT_FLAGS   EQU  6F04H  ; rd=3 wr=1 lxi=3
+M_2002       EQU  2002H  ; rd=0 wr=0 lxi=1
+M_2010       EQU  2010H  ; rd=0 wr=0 lxi=1
+RAM1_BASE    EQU  6F00H  ; rd=1 wr=0 lxi=2
+ACQ_COUNT    EQU  6F01H  ; rd=2 wr=0 lxi=1
+FIRST_SLOT   EQU  6F02H  ; rd=5 wr=2 lxi=1
+SLOT_RESULT  EQU  6F03H  ; rd=1 wr=2 lxi=0
+SLOT_FLAGS   EQU  6F04H  ; rd=4 wr=1 lxi=3
 WIN_END      EQU  6F0EH  ; rd=0 wr=4 lxi=4
-TRACK_MASK   EQU  6F0FH  ; rd=1 wr=0 lxi=1
-SLOT_IDX     EQU  6F11H  ; rd=8 wr=0 lxi=1
-SLOT_IDX_B   EQU  6F12H  ; rd=1 wr=0 lxi=0
-TRACK_STATE  EQU  6F13H  ; rd=0 wr=3 lxi=1
-SLOT_COUNT   EQU  6F14H  ; rd=1 wr=1 lxi=3
-SAMPLE_CNT   EQU  6F15H  ; rd=6 wr=3 lxi=2
+TRACK_MASK   EQU  6F0FH  ; rd=2 wr=0 lxi=1
+SLOT_IDX     EQU  6F11H  ; rd=20 wr=0 lxi=1
+SLOT_IDX_B   EQU  6F12H  ; rd=1 wr=1 lxi=0
+TRACK_STATE  EQU  6F13H  ; rd=2 wr=4 lxi=2
+SLOT_COUNT   EQU  6F14H  ; rd=1 wr=1 lxi=4
+SAMPLE_CNT   EQU  6F15H  ; rd=6 wr=4 lxi=2
 SAMPLE_LO    EQU  6F16H  ; rd=1 wr=0 lxi=1
 SYNC_FLAG    EQU  6F17H  ; rd=1 wr=1 lxi=0
 GRI_TMP      EQU  6F18H  ; rd=0 wr=0 lxi=2
@@ -65,73 +48,94 @@ GRI_VAL      EQU  6F1DH  ; rd=1 wr=1 lxi=0
 GRI_BCD_HI   EQU  6F1FH  ; rd=0 wr=0 lxi=1
 BCD_ACC      EQU  6F20H  ; rd=0 wr=0 lxi=5
 BCD_ACC_HI   EQU  6F23H  ; rd=0 wr=0 lxi=1
-REC_MASTER   EQU  6F24H  ; rd=0 wr=0 lxi=6
+REC_MASTER   EQU  6F24H  ; rd=3 wr=0 lxi=8
+M_6F28       EQU  6F28H  ; rd=0 wr=0 lxi=1
+M_6F2D       EQU  6F2DH  ; rd=0 wr=0 lxi=1
+M_6F36       EQU  6F36H  ; rd=1 wr=0 lxi=0
 REC_MASTER_14 EQU  6F38H  ; rd=0 wr=0 lxi=1
 REC_MASTER_16 EQU  6F3AH  ; rd=0 wr=1 lxi=0
 REC_SEC      EQU  6F3DH  ; rd=0 wr=0 lxi=3
 REC_SEC_TOA  EQU  6F41H  ; rd=0 wr=0 lxi=1
+M_6F46       EQU  6F46H  ; rd=0 wr=0 lxi=1
 REC_SEC_14   EQU  6F51H  ; rd=0 wr=0 lxi=1
 SETTLE_CNT   EQU  6F54H  ; rd=0 wr=1 lxi=1
-CUR_REC      EQU  6FA1H  ; rd=2 wr=1 lxi=4
-CUR_TOA      EQU  6FA5H  ; rd=0 wr=0 lxi=5
-CUR_TOA_1    EQU  6FA6H  ; rd=1 wr=1 lxi=0
-CUR_NPULSE   EQU  6FA9H  ; rd=4 wr=3 lxi=4
-CUR_PULSES   EQU  6FAAH  ; rd=0 wr=0 lxi=3
+CUR_REC      EQU  6FA1H  ; rd=11 wr=4 lxi=10
+CUR_TOA      EQU  6FA5H  ; rd=0 wr=0 lxi=11
+CUR_TOA_1    EQU  6FA6H  ; rd=2 wr=1 lxi=0
+M_6FA8       EQU  6FA8H  ; rd=1 wr=0 lxi=0
+CUR_NPULSE   EQU  6FA9H  ; rd=5 wr=3 lxi=7
+CUR_PULSES   EQU  6FAAH  ; rd=0 wr=0 lxi=7
 CUR_PULSES_1 EQU  6FABH  ; rd=2 wr=2 lxi=0
 CUR_PULSES_3 EQU  6FADH  ; rd=1 wr=2 lxi=0
-CUR_PULSE_PTR EQU  6FAFH  ; rd=1 wr=2 lxi=0
-CUR_MODE     EQU  6FB7H  ; rd=0 wr=2 lxi=0
-CUR_FLAGS    EQU  6FBAH  ; rd=3 wr=2 lxi=1
-PHASE_REF    EQU  6FBBH  ; rd=1 wr=0 lxi=1
-PHASE_CODE   EQU  6FBFH  ; rd=2 wr=0 lxi=1
-PHASE_CODE_HI EQU  6FC0H  ; rd=2 wr=0 lxi=0
-DISP_MODE    EQU  6FC1H  ; rd=1 wr=0 lxi=0
-BUTTONS      EQU  6FC4H  ; rd=3 wr=2 lxi=0
-SEL_A        EQU  6FC5H  ; rd=3 wr=2 lxi=0
+CUR_PULSE_PTR EQU  6FAFH  ; rd=2 wr=4 lxi=1
+M_6FB0       EQU  6FB0H  ; rd=0 wr=0 lxi=1
+M_6FB1       EQU  6FB1H  ; rd=0 wr=0 lxi=1
+M_6FB2       EQU  6FB2H  ; rd=0 wr=3 lxi=1
+M_6FB3       EQU  6FB3H  ; rd=3 wr=1 lxi=0
+M_6FB5       EQU  6FB5H  ; rd=4 wr=4 lxi=0
+M_6FB6       EQU  6FB6H  ; rd=1 wr=0 lxi=0
+CUR_MODE     EQU  6FB7H  ; rd=0 wr=3 lxi=1
+M_6FB8       EQU  6FB8H  ; rd=4 wr=4 lxi=0
+M_6FB9       EQU  6FB9H  ; rd=1 wr=0 lxi=0
+CUR_FLAGS    EQU  6FBAH  ; rd=11 wr=3 lxi=5
+PHASE_REF    EQU  6FBBH  ; rd=1 wr=2 lxi=1
+M_6FBC       EQU  6FBCH  ; rd=1 wr=0 lxi=0
+M_6FBD       EQU  6FBDH  ; rd=1 wr=1 lxi=2
+M_6FBE       EQU  6FBEH  ; rd=2 wr=1 lxi=1
+PHASE_CODE   EQU  6FBFH  ; rd=4 wr=0 lxi=1
+PHASE_CODE_HI EQU  6FC0H  ; rd=4 wr=0 lxi=0
+DISP_MODE    EQU  6FC1H  ; rd=2 wr=1 lxi=1
+BUTTONS      EQU  6FC4H  ; rd=4 wr=2 lxi=1
+SEL_A        EQU  6FC5H  ; rd=4 wr=2 lxi=0
 SEL_B        EQU  6FC6H  ; rd=3 wr=2 lxi=0
 VAR_6FCB     EQU  6FCBH  ; rd=0 wr=1 lxi=0
-GRI_SW       EQU  6FCCH  ; rd=1 wr=1 lxi=0
-RESTART_REQ  EQU  6FCEH  ; rd=0 wr=1 lxi=0
+GRI_SW       EQU  6FCCH  ; rd=2 wr=2 lxi=0
+RESTART_REQ  EQU  6FCEH  ; rd=2 wr=1 lxi=1
 BCD_DELTA    EQU  6FCFH  ; rd=0 wr=0 lxi=1
 BCD_DELTA_2  EQU  6FD1H  ; rd=0 wr=0 lxi=2
 BCD_DELTA_3  EQU  6FD2H  ; rd=0 wr=2 lxi=0
 TOA_SAVE     EQU  6FD5H  ; rd=0 wr=0 lxi=2
 VAR_6FD9     EQU  6FD9H  ; rd=0 wr=1 lxi=0
 MISS_CNT     EQU  6FDAH  ; rd=0 wr=1 lxi=1
-NEW_DATA     EQU  6FDCH  ; rd=0 wr=2 lxi=0
+M_6FDB       EQU  6FDBH  ; rd=1 wr=1 lxi=0
+NEW_DATA     EQU  6FDCH  ; rd=0 wr=2 lxi=1
 MISS_LIMIT   EQU  6FDDH  ; rd=1 wr=2 lxi=0
 TOA_ALT      EQU  6FDEH  ; rd=0 wr=0 lxi=1
 PULSE_BCD    EQU  6FDFH  ; rd=0 wr=1 lxi=0
-VAR_6FE2     EQU  6FE2H  ; rd=1 wr=0 lxi=0
-VAR_6FE3     EQU  6FE3H  ; rd=0 wr=0 lxi=1
-VAR_6FE6     EQU  6FE6H  ; rd=0 wr=1 lxi=0
-VAR_6FE7     EQU  6FE7H  ; rd=0 wr=2 lxi=0
+VAR_6FE2     EQU  6FE2H  ; rd=2 wr=1 lxi=0
+VAR_6FE3     EQU  6FE3H  ; rd=0 wr=0 lxi=5
+VAR_6FE6     EQU  6FE6H  ; rd=0 wr=2 lxi=0
+VAR_6FE7     EQU  6FE7H  ; rd=3 wr=2 lxi=0
 BCD_TMP      EQU  6FE9H  ; rd=0 wr=0 lxi=5
 M_6FEA       EQU  6FEAH  ; rd=0 wr=0 lxi=1
 BCD_TMP_2    EQU  6FEBH  ; rd=0 wr=0 lxi=2
 SLOTREC_CNT  EQU  6FEEH  ; rd=0 wr=0 lxi=1
 SLOTREC_3    EQU  6FF1H  ; rd=0 wr=0 lxi=1
 SLOTREC_5    EQU  6FF3H  ; rd=0 wr=0 lxi=1
+M_6FF4       EQU  6FF4H  ; rd=0 wr=0 lxi=1
 RAM2_BASE    EQU  7000H  ; rd=0 wr=0 lxi=1
 M_7034       EQU  7034H  ; rd=0 wr=0 lxi=1
 M_7037       EQU  7037H  ; rd=0 wr=0 lxi=1
 M_703A       EQU  703AH  ; rd=1 wr=0 lxi=0
 KEY_CHANGED  EQU  703BH  ; rd=1 wr=2 lxi=0
-BTN_STATE    EQU  703CH  ; rd=4 wr=3 lxi=0
+BTN_STATE    EQU  703CH  ; rd=5 wr=3 lxi=0
 TICK_BCD     EQU  703DH  ; rd=2 wr=1 lxi=0
 PRTBUF       EQU  703EH  ; rd=0 wr=0 lxi=3
 TX_PENDING   EQU  704EH  ; rd=2 wr=2 lxi=0
 VAR_704F     EQU  704FH  ; rd=2 wr=1 lxi=0
 VAR_7050     EQU  7050H  ; rd=0 wr=1 lxi=0
 VAR_7051     EQU  7051H  ; rd=0 wr=1 lxi=0
+M_7053       EQU  7053H  ; rd=0 wr=0 lxi=1
 SLOT_TBL     EQU  7054H  ; rd=0 wr=0 lxi=1
+M_7057       EQU  7057H  ; rd=0 wr=0 lxi=1
 VAR_70BD     EQU  70BDH  ; rd=0 wr=1 lxi=0
 VAR_70BE     EQU  70BEH  ; rd=0 wr=1 lxi=0
 STATUS_BITS  EQU  70BFH  ; rd=2 wr=2 lxi=0
-SW_D1        EQU  70C8H  ; rd=2 wr=1 lxi=0
-SW_D2        EQU  70C9H  ; rd=2 wr=1 lxi=0
+M_70C3       EQU  70C3H  ; rd=0 wr=0 lxi=4
+SW_D1        EQU  70C8H  ; rd=4 wr=1 lxi=0
+SW_D2        EQU  70C9H  ; rd=3 wr=1 lxi=0
 SW_D3        EQU  70CAH  ; rd=2 wr=1 lxi=0
-SW_D4        EQU  70CBH  ; rd=2 wr=1 lxi=0
+SW_D4        EQU  70CBH  ; rd=3 wr=1 lxi=0
 SW_HI        EQU  70CCH  ; rd=1 wr=1 lxi=0
 SW_LO        EQU  70CDH  ; rd=2 wr=1 lxi=0
 SW_LATCHED   EQU  70CEH  ; rd=1 wr=1 lxi=0
@@ -154,19 +158,27 @@ MON_DIGIT_FLAG EQU  70E6H  ; rd=1 wr=2 lxi=0
 MON_LAST     EQU  70E7H  ; rd=1 wr=1 lxi=0
 PLOT_BASE    EQU  70E8H  ; rd=1 wr=1 lxi=0
 STACK_TOP    EQU  7100H  ; rd=0 wr=0 lxi=1
+M_8020       EQU  8020H  ; rd=0 wr=0 lxi=1
 USART_DATA   EQU  0C000H  ; rd=1 wr=6 lxi=0
 USART_CTRL   EQU  0C001H  ; rd=5 wr=2 lxi=0
 KDC_DATA     EQU  0D000H  ; rd=14 wr=3 lxi=0
 KDC_CMD      EQU  0D001H  ; rd=0 wr=10 lxi=0
 PIO1_CMD     EQU  0E000H  ; rd=0 wr=1 lxi=0
+M_E001       EQU  0E001H  ; rd=0 wr=1 lxi=0
+M_E002       EQU  0E002H  ; rd=0 wr=1 lxi=0
 PIO1_PC      EQU  0E003H  ; rd=7 wr=7 lxi=0
 PIO1_TMRLO   EQU  0E004H  ; rd=0 wr=1 lxi=0
 PIO1_TMRHI   EQU  0E005H  ; rd=0 wr=1 lxi=0
 PIO2_CMD     EQU  0F000H  ; rd=0 wr=5 lxi=0
-PIO2_PB      EQU  0F002H  ; rd=0 wr=1 lxi=1
+M_F001       EQU  0F001H  ; rd=0 wr=1 lxi=0
+PIO2_PB      EQU  0F002H  ; rd=4 wr=5 lxi=1
 PIO2_PC      EQU  0F003H  ; rd=3 wr=0 lxi=0
 PIO2_TMRLO   EQU  0F004H  ; rd=0 wr=5 lxi=0
 PIO2_TMRHI   EQU  0F005H  ; rd=0 wr=1 lxi=0
+M_FF38       EQU  0FF38H  ; rd=0 wr=0 lxi=1
+M_FF80       EQU  0FF80H  ; rd=0 wr=0 lxi=1
+M_FF9C       EQU  0FF9CH  ; rd=0 wr=0 lxi=1
+M_FFC0       EQU  0FFC0H  ; rd=0 wr=0 lxi=1
 
 
         ORG  0000H
@@ -175,15 +187,21 @@ PIO2_TMRHI   EQU  0F005H  ; rd=0 wr=1 lxi=0
 ; Reset vector. Interrupts off, jump to INIT.
 RESET:
         DI
+D_0003       EQU  $+2
         JMP INIT
 
 ; Table of six 4-byte packed-BCD constants (little-endian, LS byte first).
 ; BCD_K_00080980 and BCD_K_00000110 are passed to X_0EC1 (missing half).
 BCD_CONST_TBL:
         DB   08H,88H,88H,88H
-        DB   00H,00H,02H,00H
-        DB   00H,03H,00H,00H
-        DB   06H,00H,00H,01H
+D_0008:
+        DB   00H,00H,02H
+D_000B:
+        DB   00H,00H,03H
+D_000E:
+        DB   00H,00H,06H
+D_0011:
+        DB   00H,00H,01H
 BCD_K_00080980:
         DB   00H,08H,09H,80H
 BCD_K_00000110:
@@ -227,6 +245,7 @@ RST65_ISR:
         ORI 01H
         STA PIO1_PC
         LDA PIO2_PC
+D_0040:
         RLC
         RLC
         MOV B,A
@@ -242,8 +261,10 @@ RST65_ISR:
         CMP M
         MOV A,B
         JNZ ISR_EXIT
+D_005C:
         PUSH PSW
         PUSH D
+D_005F       EQU  $+1
         CALL PULSE_PB2
         CALL X_0E1D
         MVI A,20H                   ; ' '
@@ -266,6 +287,7 @@ INIT:
         LXI SP,STACK_TOP
         CALL PULSE_PB2
         MVI A,0CDH
+D_0080       EQU  $+1
         STA KDC_CMD                 ; 8279: clear display and FIFO (CD=110 CA=1)
         MVI A,0D0H
         STA PIO1_TMRLO              ; 8155#1 timer = 07D0H (2000), square wave
@@ -433,6 +455,7 @@ SETTLE_LOOP:
         LDA SLOT_FLAGS
         ANI 20H                     ; ' '
         JZ ACQ_START
+D_01FF:
         CALL QUAL_CHECK
         JC ACQ_START
         MVI A,03H
@@ -861,6 +884,7 @@ GET_SLOT_REC:
         CPI 00H
         RZ
         CALL GET_FLAGS_A
+SUB_04F7:
         LXI H,REC_SEC
         JMP REC_INDEX
 
@@ -1405,16 +1429,1175 @@ B2D_DONE:
         XRA A
         MOV A,E
         RLC
-; ---- 0800-0FFF: unprogrammed / not dumped (reads as 0FFH) ----
-
-        ORG  1000H
-
+        RLC
+        RLC
+        RLC
+        ORA H
+        RET
+SUB_0805:
+        LDA CUR_TOA_1
+HI_NIBBLE:
+        RRC
+        RRC
+        RRC
+        RRC
+        ANI 0FH
+        RET
+FILL_ZERO:
+        XRA A
+L_0810:
+        MOV M,A
+        INX H
+        DCR B
+        JNZ L_0810
+        RET
+X_0817:
+        CALL ORPHAN_058C
+        SHLD PHASE_REF
+        CALL LOAD_CUR_REC
+        LDA M_6FBE
+        ANI 0FEH
+        JZ L_083A
+        CALL SUB_0E6D
+        PUSH PSW
+        CC SUB_0EBE
+        POP PSW
+        RLC
+        PUSH PSW
+        CC SUB_0EA3
+        POP PSW
+        RLC
+        CC SUB_0EB2
+L_083A:
+        CALL SUB_091B
+        LDA M_6FBC
+        STA PHASE_REF
+        LDA M_6FBD
+        STA M_6FBE
+        LDA RESTART_REQ
+        CPI 01H
+        JNZ SAVE_CUR_REC
+        LDA BUTTONS
+        MOV C,A
+        LDA SEL_A
+        CPI 0CH
+        JZ L_087B
+        CPI 0BH
+        JZ L_0867
+        CPI 0AH
+        JNZ SAVE_CUR_REC
+L_0867:
+        MOV A,C
+        RRC
+        RRC
+        RRC
+        RRC
+        LXI H,M_6FBE
+        ORA M
+        MOV M,A
+L_0871:
+        MOV A,C
+        CALL SUB_0E92
+SAVE_CUR_REC:
+        CALL SUB_0D7F
+        JMP OLD_LOAD_REC
+L_087B:
+        LDA CUR_REC
+        MOV D,A
+        MOV A,C
+        RLC
+        LDA CUR_FLAGS
+        JC L_0899
+        LXI H,RESET
+        SHLD M_6FB5
+        SHLD M_6FB8
+        ANI 0FBH
+        MOV E,A
+        MOV A,D
+        ANI 9FH
+        JMP L_089F
+L_0899:
+        ORI 04H
+        MOV E,A
+        MOV A,D
+        ORI 60H                     ; '`'
+L_089F:
+        STA CUR_REC
+        MOV A,E
+        STA CUR_FLAGS
+        JMP SAVE_CUR_REC
+X_08A9:
+        CALL SUB_08F1
+        CALL SUB_0E6A
+        RLC
+        RLC
+        CC SUB_0EB2
+        LDA RESTART_REQ
+        CPI 01H
+        JNZ SAVE_CUR_REC
+        LXI H,BUTTONS
+        MOV C,M
+        INX H
+        MOV A,M
+        MOV B,A
+        CPI 0CH
+        JZ L_087B
+        CPI 0BH
+        JZ L_08EB
+        CPI 0AH
+        JZ L_08E3
+        LDA SLOT_IDX
+        CMP B
+        JZ L_0871
+        CALL SUB_0805
+        CMP B
+        JZ L_0871
+        JMP SAVE_CUR_REC
+L_08E3:
+        MOV A,C
+        CMA
+        CALL SUB_0E87
+        JMP SAVE_CUR_REC
+L_08EB:
+        CALL SUB_0E95
+        JMP SAVE_CUR_REC
+SUB_08F1:
+        CALL LOAD_CUR_REC
+        CALL GET_SLOT_FLAGS
+        XCHG
+        LHLD DISP_MODE
+        CALL SUB_0805
+        MOV C,A
+        LDA SLOT_IDX
+        CMP C
+        JZ SUB_091B
+        MOV A,L
+        CPI 00H
+        JNZ SUB_091B
+        INR H
+        SHLD DISP_MODE
+        MOV A,H
+        CPI 0FFH
+        JNZ SUB_091B
+        XRA A
+        STAX D
+        CALL SUB_1E23
+SUB_091B:
+        PUSH B
+        LDA SLOT_IDX
+        LXI H,M_7057
+        CALL OLD_MUL10
+        MOV B,H
+        MOV C,L
+        PUSH B
+        LXI H,CUR_TOA
+        LDA SLOT_IDX
+        CPI 00H
+        JZ L_093F
+        CALL BCD_ADD4
+        LXI H,M_70C3
+        CALL BCD_ADD4
+        JMP L_0945
+L_093F:
+        LXI H,M_6F28
+        CALL BCD_ADD4
+L_0945:
+        LDA REC_MASTER
+        ANI 80H
+        JNZ L_0955
+        MVI B,04H
+        LXI H,M_70C3
+        CALL FILL_ZERO
+L_0955:
+        POP B
+        MOV H,B
+        MOV L,C
+        INX H
+        INX H
+        INX H
+        INX H
+        INX H
+        INR M
+        PUSH PSW
+        LDA SW_D1
+        CPI 0AH
+        JNZ L_096E
+        POP PSW
+        MOV A,M
+        CPI 64H                     ; 'd'
+        JMP L_0972
+L_096E:
+        POP PSW
+        MOV A,M
+        CPI 0AH
+L_0972:
+        JNZ L_09CB
+        MVI M,00H
+        PUSH B
+        LDA SW_D2
+        CPI 0AH
+        CNZ SUB_1F20
+        POP B
+        MOV H,B
+        MOV L,C
+        DCX B
+        INX H
+        INX H
+        INX H
+        MVI E,03H
+        LDA CUR_REC
+        ANI 80H
+        JNZ L_1E73
+L_0991:
+        MOV A,M
+        MVI M,00H
+        ANI 0F0H
+        RRC
+        RRC
+        RRC
+        RRC
+        MOV D,A
+        DCX H
+        MOV A,M
+        ANI 0FH
+        RLC
+        RLC
+        RLC
+        RLC
+        ORA D
+        MOV D,A
+        LDA BTN_STATE
+        ANI 80H
+        CPI 00H
+        JNZ L_09B1
+        MOV A,D
+        STAX B
+L_09B1:
+        DCX B
+        DCR E
+        JNZ L_0991
+        MVI M,00H
+        LDA SLOT_IDX
+        CPI 00H
+        JNZ L_09CB
+        MVI M,99H
+        INX H
+        MVI M,99H
+        INX H
+        MVI M,99H
+        INX H
+        MVI M,80H
+L_09CB:
+        POP B
+        LDA CUR_REC
+        ANI 80H
+        MVI A,0FFH
+        JNZ L_09D9
+        LDA CUR_FLAGS
+L_09D9:
+        RLC
+        RLC
+        RLC
+        ANI 01H
+        MOV C,A
+        LDA REC_MASTER
+        MOV B,A
+        LDA CUR_REC
+        ANA B
+        RLC
+        RLC
+        RLC
+        RLC
+        ANI 02H
+        ORA C
+        MOV D,A
+        LDA SLOT_IDX
+        LXI H,M_6FF4
+        CALL MUL9_INDEX
+        XRI 80H
+        ANI 80H
+        RLC
+        RLC
+        RLC
+        ORA D
+        MOV D,A
+        LDA CUR_REC
+        ANI 20H                     ; ' '
+        CPI 20H                     ; ' '
+        MVI A,08H
+        JNZ L_0A14
+        LDA REC_MASTER
+        RRC
+        RRC
+        ANI 08H
+L_0A14:
+        ORA D
+        CMA
+        ANI 0FH
+        MOV D,A
+        ANI 03H
+        JZ L_0A22
+        MOV A,D
+        ANI 0BH
+        MOV D,A
+L_0A22:
+        LDA SLOT_IDX
+        LXI H,M_7053
+        CALL OLD_MUL10
+        ANI 0F0H
+        ORA D
+        MOV M,A
+        CALL WAIT_SAMPLE
+        CALL X_0E1A
+        XRA A
+        STA SAMPLE_CNT
+        STA M_6FBD
+        CALL READ_PHASE
+        LDA TRACK_MASK
+        ANI 0FH
+        JZ L_0A6E
+        LXI H,D_1004
+        LXI D,M_2002
+        LDA CUR_REC
+        MOV B,A
+        LDA CUR_FLAGS
+        ANI 10H
+        JZ L_0A5A
+        XCHG
+L_0A5A:
+        SHLD VAR_6FE6
+        MOV A,B
+        RLC
+        JC L_0C37
+        RRC
+        RRC
+        RRC
+        JC L_0A6E
+        CALL SUB_0BC5
+        JMP L_0A77
+L_0A6E:
+        CALL SUB_0B07
+        LDA CUR_FLAGS
+        ANI 10H
+        RZ
+L_0A77:
+        LXI D,RESET
+        LHLD CUR_PULSE_PTR
+        XCHG
+        LDA CUR_FLAGS
+        ANI 04H
+        MVI B,40H                   ; '@'
+        JNZ L_0A8A
+        MVI B,02H
+L_0A8A:
+        MOV A,D
+        SUI 02H
+        JM L_0A98
+        MOV A,E
+        SUB B
+        JM L_0A9C
+        SHLD CUR_PULSE_PTR
+L_0A98:
+        MOV B,H
+        JMP L_0A9E
+L_0A9C:
+        MVI B,02H
+L_0A9E:
+        LXI H,CUR_REC
+        MOV A,M
+        ANI 0FDH
+        ORA B
+        MOV M,A
+        MOV B,A
+        LHLD M_6FB3
+        LXI D,M_FF38
+        DAD D
+        MOV A,H
+        RLC
+        JC L_0AB9
+        MOV A,B
+        ANI 0DFH
+        STA CUR_REC
+L_0AB9:
+        LHLD M_6FB5
+        LXI B,M_FF80
+        DAD B
+        MOV A,H
+        RLC
+        JC L_0AD2
+        LHLD M_6FB8
+        LXI B,D_0040
+        DAD B
+        MOV A,H
+        RLC
+        JC L_0AE6
+        RET
+L_0AD2:
+        LHLD M_6FB5
+        LXI B,M_FFC0
+        DAD B
+        MOV A,H
+        RLC
+        RC
+        LHLD M_6FB8
+        LXI B,D_0080
+        DAD B
+        MOV A,H
+        RLC
+        RNC
+L_0AE6:
+        LDA SW_D1
+        CPI 0BH
+        RZ
+        LDA CUR_REC
+        MOV B,A
+        ANI 40H                     ; '@'
+        RNZ
+        LDA CUR_FLAGS
+        ANI 20H                     ; ' '
+        RZ
+        MOV A,B
+        ORI 60H                     ; '`'
+        STA CUR_REC
+        LXI H,CUR_FLAGS
+        MOV A,M
+        ORI 04H
+        MOV M,A
+        RET
+SUB_0B07:
+        LXI H,CUR_PULSE_PTR
+        INR M
+        LXI H,CUR_MODE
+        LDA CUR_NPULSE
+        MOV B,A
+        LDA PHASE_CODE
+        MVI E,08H
+L_0B17:
+        RRC
+        MOV C,A
+        MOV A,B
+        JC L_0B21
+        SUB M
+        JMP L_0B22
+L_0B21:
+        ADD M
+L_0B22:
+        MOV B,A
+        MOV A,C
+        DCR E
+        JNZ L_0B17
+        LDA VAR_6FE7
+        MOV C,A
+        LXI H,CUR_NPULSE
+        MOV M,B
+        MOV A,B
+        RLC
+        MOV A,B
+        JC L_0B65
+        SUB C
+        JP L_0B40
+        CALL CALC_TD
+        JMP L_0B8A
+L_0B40:
+        MOV M,A
+        LXI H,CUR_PULSES
+        INR M
+        CALL CALC_TD
+        CALL X_0EC1
+        LDA VAR_6FE7
+        MOV C,A
+        LXI H,CUR_NPULSE
+        MOV A,M
+        SUB C
+        JM L_0B8A
+        MOV M,A
+        LXI H,VAR_6FE3
+        CALL X_0EC1
+        LXI H,CUR_PULSES
+        INR M
+        JMP L_0B8A
+L_0B65:
+        ADD C
+        MOV M,A
+        LXI H,CUR_PULSES
+        DCR M
+        CALL CALC_TD
+        CALL SUB_0EA6
+        LDA VAR_6FE7
+        MOV C,A
+        LXI H,CUR_NPULSE
+        MOV A,M
+        RLC
+        JNC L_0B8A
+        MOV A,M
+        ADD C
+        MOV M,A
+        LXI H,VAR_6FE3
+        CALL SUB_0EA6
+        LXI H,CUR_PULSES
+        DCR M
+L_0B8A:
+        JMP L_0CFE
+X_0B8D:
+        SHLD GRI_SW
+        PUSH B
+        MVI E,00H
+        MOV A,H
+        RLC
+        CC NEG_HL
+        POP B
+        PUSH B
+        PUSH D
+        PUSH H
+        MOV H,B
+        MOV L,C
+        CALL NEG_HL
+        POP D
+        DAD D
+        MOV A,H
+        RLC
+        LHLD GRI_SW
+        POP D
+        JC L_0BB3
+        POP H
+        MOV A,E
+        RRC
+        CC NEG_HL
+        RET
+L_0BB3:
+        POP B
+        RET
+SUB_0BB5:
+        MVI E,08H
+L_0BB7:
+        RRC
+        JC L_0BBF
+        DCX H
+        JMP L_0BC0
+L_0BBF:
+        INX H
+L_0BC0:
+        DCR E
+        JNZ L_0BB7
+        RET
+SUB_0BC5:
+        CALL CALC_TD
+        LDA SW_D4
+        CPI 09H
+        CNC SLOTREC_UPDATE
+        LXI H,M_6FB0
+        INR M
+        LHLD M_6FB5
+        LDA PHASE_CODE
+        CALL SUB_0BB5
+        LXI B,D_01FF
+        CALL X_0B8D
+        SHLD M_6FB5
+        LHLD M_6FB8
+        LDA PHASE_CODE_HI
+        CALL SUB_0BB5
+        LXI B,D_01FF
+        CALL X_0B8D
+        SHLD M_6FB8
+        LDA M_6FB6
+        CPI 0FFH
+        JNZ L_0C08
+        LDA M_6FB5
+        ANI 40H                     ; '@'
+        JZ L_0C24
+L_0C08:
+        LDA M_6FB9
+        CPI 00H
+        RNZ
+        LDA M_6FB8
+        ANI 40H                     ; '@'
+        JNZ L_0C17
+        RET
+L_0C17:
+        LDA CUR_FLAGS
+        ANI 04H
+        RNZ
+        MVI A,80H
+        MVI B,40H                   ; '@'
+        JMP L_0C2E
+L_0C24:
+        LDA CUR_FLAGS
+        ANI 04H
+        RNZ
+        MVI A,40H                   ; '@'
+        MVI B,80H
+L_0C2E:
+        LXI H,M_6FBD
+        ORA M
+        MOV M,A
+        MOV A,B
+        JMP SUB_0E92
+L_0C37:
+        CALL SUB_0B07
+        LXI B,M_8020
+        LXI H,CUR_FLAGS
+        MOV A,M
+        ANI 20H                     ; ' '
+        DCX H
+        ORA M
+        CPI 20H                     ; ' '
+        DCX H
+        JZ L_0C50
+        INR M
+        MOV A,M
+        CPI 64H                     ; 'd'
+        RM
+L_0C50:
+        MVI M,00H
+        INX H
+        INX H
+        MOV A,M
+        ANI 20H                     ; ' '
+        RLC
+        RLC
+        DCX H
+        ORA M
+        CPI 80H
+        JZ L_0CB1
+        MVI E,00H
+        CPI 81H
+        JZ L_0CB0
+        INR E
+        CPI 00H
+        JZ L_0CB0
+        INR E
+        LXI B,M_2010
+        CPI 01H
+        JZ L_0C96
+        CPI 02H
+        JZ L_0CB1
+        INX H
+        MOV A,M
+        ORI 10H
+        MOV M,A
+        LXI H,CUR_REC
+        MOV A,M
+        ANI 7FH
+        MOV M,A
+        LXI H,RESET
+        SHLD CUR_PULSE_PTR
+        SHLD M_6FB5
+        SHLD M_6FB8
+        JMP L_0CB1
+L_0C96:
+        MVI A,01H
+        STA CUR_MODE
+        MOV M,E
+        CALL SUB_0CE8
+        CALL SUB_0ECD
+        MVI C,02H
+SUB_0CA4:
+        XRA A
+        STA M_6FB2
+        LXI H,M_6FBD
+        MOV A,M
+        ORA C
+        MOV M,A
+        MOV A,B
+        RET
+L_0CB0:
+        MOV M,E
+L_0CB1:
+        CALL SUB_0CA4
+        RLC
+        CALL SUB_0CBE
+        JC L_0EB8
+        JMP L_0EC7
+SUB_0CBE:
+        PUSH PSW
+        PUSH B
+        LXI B,M_70C3
+        JC L_0CD7
+        LDA SLOT_IDX
+        CPI 00H
+        JNZ L_0CFB
+        LXI H,D_0008
+        CALL BCD_ADD4
+        JMP L_0CFB
+L_0CD7:
+        LDA SLOT_IDX
+        CPI 00H
+        JNZ L_0CFB
+        LXI H,D_000E
+        CALL BCD_SUB4
+        JMP L_0CFB
+SUB_0CE8:
+        PUSH PSW
+        PUSH B
+        LXI B,M_70C3
+        LDA SLOT_IDX
+        CPI 00H
+        JNZ L_0CFB
+        LXI H,D_000B
+        CALL BCD_ADD4
+L_0CFB:
+        POP B
+        POP PSW
+        RET
+L_0CFE:
+        CALL SLOTREC_PHASE
+        LDA CUR_REC
+        ANI 80H
+        JNZ L_0D0C
+        CALL SLOTREC_UPDATE
+L_0D0C:
+        LXI H,M_6FB2
+        PUSH H
+        MOV A,M
+        MVI H,00H
+        MOV L,A
+        RLC
+        JNC L_0D1A
+        MVI H,0FFH
+L_0D1A:
+        LDA PHASE_CODE_HI
+        CMA
+        CALL SUB_0BB5
+        LXI B,D_005F
+        CALL X_0B8D
+        MOV A,L
+        STA M_6FB2
+        RLC
+        JC L_0D6F
+        MOV A,L
+        SUI 40H                     ; '@'
+        LHLD M_6FB3
+        LXI D,CUR_FLAGS
+        LDAX D
+        JM L_0D44
+        ORI 20H                     ; ' '
+        LXI H,RESET
+        JMP L_0D47
+L_0D44:
+        ANI 0DFH
+        INX H
+L_0D47:
+        STAX D
+        SHLD M_6FB3
+        LXI H,M_6FB1
+        INR M
+        MOV A,M
+        CPI 05H
+        POP B
+        RNZ
+        MVI M,00H
+        LDAX B
+        MOV L,A
+        MVI H,00H
+        MOV E,A
+        RLC
+        JNC L_0D6A
+        MVI H,0FFH
+        PUSH D
+        LXI D,D_005C
+        DAD D
+        POP D
+        MOV A,H
+        RLC
+        RC
+L_0D6A:
+        MOV A,E
+        SUI 03H
+        STAX B
+        RET
+L_0D6F:
+        LHLD M_6FB3
+        LXI D,CUR_FLAGS
+        LDAX D
+        JMP L_0D44
+X_0D79:
+        CALL X_0DB3
+        JMP X_0DE6
+SUB_0D7F:
+        LDA SLOT_IDX
+        CPI 00H
+        JNZ L_0D93
+        LDA M_6FA8
+        CALL BCD_TO_BIN
+        STA VAR_6FE2
+        JMP SUB_0DB0
+L_0D93:
+        LDA VAR_6FE2
+        RRC
+        RRC
+        JNC SUB_0DB0
+        LXI H,VAR_6FE3
+        LXI B,CUR_TOA
+        CALL BCD_ADD4
+        CALL SUB_0DB0
+        LXI H,VAR_6FE3
+        LXI B,CUR_TOA
+        JMP BCD_SUB4
+SUB_0DB0:
+        LDA CUR_REC
+X_0DB3:
+        LXI H,CUR_TOA
+        PUSH PSW
+        LXI B,CUR_REC
+        CALL COPY4
+        DCX B
+        LDAX B
+        ANI 0FEH
+        CALL BCD_TO_BIN
+        RRC
+        CALL BIN_TO_BCD
+        RLC
+        MOV D,A
+        PUSH D
+        LXI H,CUR_REC
+        LXI D,D_0003
+L_0DD1:
+        MOV A,M
+        RAR
+        MOV M,A
+        INX H
+        DCR E
+        JNZ L_0DD1
+        POP D
+        MOV A,D
+        RAR
+        MOV M,A
+        POP PSW
+        LXI B,CUR_REC
+        STAX B
+        RET
+X_0DE3:
+        LXI B,CUR_REC
+X_0DE6:
+        LDA PIO2_PB
+        ANI 74H                     ; 't'
+        MOV L,A
+        LDAX B
+        ANI 0BH
+        ORA L
+        STA PIO2_PB
+L_0DF3:
+        INX B
+        LDAX B
+        STA M_E002
+        INX B
+        LDAX B
+        STA M_E001
+        INX B
+        LDAX B
+        STA M_F001
+        LDA PIO2_PB
+        ORI 80H
+        STA PIO2_PB
+        RET
+L_0E0B:
+        LDA PIO2_PB
+        ANI 7FH
+        STA PIO2_PB
+        LDAX B
+        STA M_6FDB
+        JMP L_0DF3
+X_0E1A:
+        CALL X_0E2D
+X_0E1D:
+        LDA PIO2_PB
+        ANI 0F4H
+        MOV L,A
+        LDA M_6FDB
+        ANI 0BH
+        ORA L
+        STA PIO2_PB
+        RET
+X_0E2D:
+        LXI H,SLOT_COUNT
+        LDA SLOT_IDX
+L_0E33:
+        INR A
+        CMP M
+        JZ L_0E58
+        PUSH H
+        PUSH PSW
+        CALL GET_FLAGS_A
+        MOV B,A
+        RLC
+        JNC L_0E53
+        RLC
+        JC L_0E5F
+        LDA TRACK_STATE
+        CPI 80H
+        JZ L_0E5F
+        CPI 40H                     ; '@'
+        JZ L_0E5F
+L_0E53:
+        POP PSW
+        POP H
+        JMP L_0E33
+L_0E58:
+        XRA A
+        LXI H,REC_MASTER
+        JMP L_0E65
+L_0E5F:
+        MOV A,B
+        CALL SUB_04F7
+        POP PSW
+        POP D
+L_0E65:
+        MOV B,H
+        MOV C,L
+        JMP L_0E0B
+SUB_0E6A:
+        LDA M_6FBE
+SUB_0E6D:
+        RLC
+        PUSH PSW
+        CC SUB_0EA3
+        POP PSW
+        RLC
+        PUSH PSW
+        CC SUB_0EBE
+        POP PSW
+        RLC
+        PUSH PSW
+        CC SUB_0ED3
+        POP PSW
+        RLC
+        PUSH PSW
+        CC SUB_0EAC
+        POP PSW
+        RLC
+        RET
+SUB_0E87:
+        RLC
+        PUSH PSW
+        CC SUB_0EA3
+        POP PSW
+        RLC
+        CC SUB_0EBE
+        RET
+SUB_0E92:
+        CALL SUB_0E87
+SUB_0E95:
+        LXI H,RESET
+        SHLD M_6FB5
+        SHLD M_6FB8
+        MOV A,H
+        STA M_6FB2
+        RET
+SUB_0EA3:
+        LXI H,D_0011
+SUB_0EA6:
+        LXI B,CUR_TOA
+        JMP BCD_SUB4
+SUB_0EAC:
+        LXI H,D_0008
+        JMP SUB_0EA6
+SUB_0EB2:
+        LXI H,D_000B
+        JMP SUB_0EA6
+L_0EB8:
+        LXI H,D_000E
+        JMP SUB_0EA6
+SUB_0EBE:
+        LXI H,D_0011
+X_0EC1:
+        LXI B,CUR_TOA
+        JMP BCD_ADD4
+L_0EC7:
+        LXI H,D_0008
+        JMP X_0EC1
+SUB_0ECD:
+        LXI H,D_000B
+        JMP X_0EC1
+SUB_0ED3:
+        LXI H,D_000E
+        JMP X_0EC1
+X_0ED9:
+        LXI H,DISP_MODE
+        INR M
+        MOV A,M
+        CPI 0AH
+        JC L_0EE5
+        MVI M,00H
+L_0EE5:
+        LXI H,RESTART_REQ
+        MOV A,M
+        CPI 00H
+        RZ
+        DCR M
+        RET
+X_0EEE:
+        LXI H,NEW_DATA
+        MOV A,M
+        MVI M,00H
+        RRC
+        RNC
+        LXI H,TRACK_STATE
+        MVI M,01H
+        DCX H
+        MOV A,M
+        CALL GET_FLAGS_A
+        ANI 0C0H
+        CPI 80H
+        RNZ
+        MVI M,00H
+        RET
+X_0F08:
+        LDA TRACK_STATE
+        CPI 01H
+        RNZ
+        LDA ACQ_COUNT
+        CPI 04H
+        RP
+        LDA SLOT_RESULT
+        CPI 00H
+        RZ
+        MOV D,A
+        PUSH D
+        CALL GET_FLAGS_A
+        POP D
+        RLC
+        RC
+        MOV A,D
+X_0F23:
+        STA SLOT_IDX_B
+        CALL GET_FLAGS_A
+        MVI M,80H
+        MVI A,20H                   ; ' '
+        STA TRACK_STATE
+        RET
+X_0F31:
+        LDA SLOT_FLAGS
+        MOV B,A
+        LXI H,RAM1_BASE
+        MOV A,M
+        CPI 00H
+        PUSH H
+        JNZ L_0F5C
+        LDA FIRST_SLOT
+        CALL GET_FLAGS_A
+        ANI 60H                     ; '`'
+        CPI 60H                     ; '`'
+        XCHG
+        POP H
+        RNZ
+        MVI M,01H
+        LXI H,REC_MASTER
+        CALL X_0FE9
+L_0F54:
+        LDA FIRST_SLOT
+        MOV B,A
+        XRA A
+        JMP L_0F6F
+L_0F5C:
+        CPI 01H
+        POP H
+        JNZ L_0F9E
+        MOV A,B
+        ANI 10H
+        JZ L_0FBC
+        MVI M,02H
+X_0F6A:
+        MVI B,00H
+        LDA FIRST_SLOT
+L_0F6F:
+        PUSH B
+        PUSH PSW
+        CALL GET_FLAGS_A
+        MOV A,M
+        ANI 0F7H
+        MOV M,A
+        POP PSW
+        CPI 00H
+        LXI H,M_6F2D
+        LXI D,M_6F46
+        JZ L_0F85
+        XCHG
+L_0F85:
+        POP B
+        PUSH D
+        PUSH H
+        MOV A,B
+        CALL GET_FLAGS_A
+        MOV A,M
+        ORI 08H
+        MOV M,A
+        POP H
+        POP B
+        PUSH H
+        MVI E,05H
+        CALL COPY_E
+        POP H
+        MVI B,05H
+        JMP FILL_ZERO
+L_0F9E:
+        MOV A,B
+        LHLD M_6F36
+        LXI D,M_FF9C
+        DAD D
+        ANI 08H
+        JZ CHK_H_NEG
+        MOV A,H
+        RLC
+        JC L_0FBC
+        LDA FIRST_SLOT
+        CALL GET_FLAGS_A
+        RLC
+        RLC
+        JC L_0F54
+        RET
+L_0FBC:
+        MVI A,01H
+X_0FBE:
+        PUSH PSW
+        CALL GET_FLAGS_A
+        MOV B,A
+        RLC
+        RLC
+        JNC L_1018
+        RLC
+        RLC
+        JC L_1018
+        MOV A,B
+        CALL SUB_04F7
+        MOV A,M
+        ANI 80H
+        JNZ L_1018
+        POP PSW
+        MOV B,A
+        LDA FIRST_SLOT
+        CMP B
+        JNZ L_0FF7
+        LDA RAM1_BASE
+        CPI 02H
+        MOV A,B
+        JNZ SLOT_INC_CHK
+X_0FE9:
+        MOV A,M
+        ORI 82H
+        MOV M,A
+        LXI D,BCD_K_00000110
+        DAD D
+        MVI M,00H
+        DCX H
+        MVI M,00H
+        RET
+L_0FF7:
+        PUSH PSW
+        PUSH H
+        PUSH B
+        MOV A,B
+        RLC
+        MOV C,A
+        RLC
+        RLC
+        ADD C
 
 ; SLOTTBL_CHK: tail of a routine from the missing half (entered from 0FFxH):
 ; test SLOT_TBL[A]; clean up stack and continue at X_0FE9 or SLOT_INC_CHK.
 SLOTTBL_CHK:
         MOV C,A
         MVI B,00H
+D_1004       EQU  $+1
         LXI H,SLOT_TBL
         DAD B
         MOV A,M
@@ -1428,6 +2611,7 @@ SLOTTBL_ZERO:
         POP PSW
         MOV A,B
         JMP SLOT_INC_CHK
+L_1018:
         DB   0F1H
 SLOT_INC_CHK:
         INR A

@@ -1,15 +1,44 @@
-# ROM dump status: half of the firmware is missing
+# ROM dump status
 
-## What the images contain
+## Resolved: the correct read wiring for these EPROMs
+
+The devices read correctly as a standard **2732** on a TL866-class programmer
+**with three pins re-wired** relative to the normal ZIF mapping:
+
+| Programmer pin | Goes to chip pin(s) |
+|---|---|
+| P21 | chip P18 |
+| P18 | chip P20 **and** chip P21 |
+| P20 | not connected |
+
+This was found by breadboarding NT3321's pins 18/20/21 through all eight
+0/1 combinations while reading the rest of the chip as a 2716, then checking
+each result against the known-good lower half and against the predicted
+continuation of `BIN_TO_BCD` (see "Evidence" below). The `0` `1` `0` combination
+(in the `{p21}{p18}{p20}` order used for those test files) reproduced the known
+lower half exactly when repeated, and produced fully coherent, correctly
+cross-referencing 8085 code for the upper half - confirmed by re-running
+`tools/dis8085.js` after dropping the corrected image into `originals/`: the
+"unreached byte runs" gap at 0800-0FFF closed completely (4034 -> 6082 bytes of
+code) and all 33 previously-external routine references (`X_0817`,
+`SAVE_CUR_REC`, `FILL_ZERO`, etc.) resolved to real, sensible code.
+
+`CN19229N NT3321 7943.BIN` in `originals/` is now the corrected, complete 4 KB
+image (SHA-256 `8ac15a519a859381ef7720573f592ffe0690b838936f8b9117b6adb574eade7f`).
+**NT3322 still needs the same treatment** - it is almost certainly the same
+physical part, so the `010` wiring above should work directly, but it has not
+yet been confirmed on that chip.
+
+## What the images contained (before the fix above)
 
 | File | Bytes | Programmed | Blank (FFH) |
 |---|---|---|---|
-| `CN19229N NT3321 7943.BIN` | 4096 | 0000-07FF | 0800-0FFF |
-| `CN19230N NT3322 7943.BIN` | 4096 | 1000-17FF | 1800-1FFF |
+| `CN19229N NT3321 7943.BIN` | 4096 | 0000-07FF | 0800-0FFF (now recovered, see above) |
+| `CN19230N NT3322 7943.BIN` | 4096 | 1000-17FF | 1800-1FFF (still outstanding) |
 
-Both images are 4 KB and both have an all-FFH upper half. That is not padding:
-the programmed halves call into the blank halves, so the code there exists and
-was not captured.
+Both images were dumped as 4 KB with an all-FFH upper half. That was not
+padding: the programmed halves call into the blank halves, so the code there
+exists and simply was not captured by a plain 2732 read.
 
 ## Evidence that the blank halves are real code
 

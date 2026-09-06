@@ -2,20 +2,26 @@
 ; ---- ORG 0000 ----
 
 ; Reset vector. Interrupts off, jump to INIT.
-RESET:                                       ; refs: lxi068E
+RESET:                                       ; refs: lxi0E95 lxi0887 lxi0A77 lxi0D3E lxi0C87 lxi068E
 0000  F3         DI
+D_0003:                                      ; = 0003, inside the next instruction (entered by jumping past the 21H prefix)
 0001  C3 72 00   JMP INIT
 
 ; Table of six 4-byte packed-BCD constants (little-endian, LS byte first).
 ; BCD_K_00080980 and BCD_K_00000110 are passed to X_0EC1 (missing half).
 BCD_CONST_TBL:                               
 0004  08 88 88 88  DB   08H,88H,88H,88H        ; |....|
-0008  00 00 02 00  DB   00H,00H,02H,00H        ; |....|
-000C  00 03 00 00  DB   00H,03H,00H,00H        ; |....|
-0010  06 00 00 01  DB   06H,00H,00H,01H        ; |....|
+D_0008:                                      ; refs: lxi0EAC lxi0EC7 lxi0CCE
+0008  00 00 02   DB   00H,00H,02H            ; |...|
+D_000B:                                      ; refs: lxi0EB2 lxi0ECD lxi0CF5
+000B  00 00 03   DB   00H,00H,03H            ; |...|
+D_000E:                                      ; refs: lxi0ED3 lxi0EB8 lxi0CDF
+000E  00 00 06   DB   00H,00H,06H            ; |...|
+D_0011:                                      ; refs: lxi0EBE lxi0EA3
+0011  00 00 01   DB   00H,00H,01H            ; |...|
 BCD_K_00080980:                              ; refs: lxi0149
 0014  00 08 09 80  DB   00H,08H,09H,80H        ; |....|
-BCD_K_00000110:                              ; refs: lxi034A
+BCD_K_00000110:                              ; refs: lxi0FED lxi034A
 0018  00 00 01 10  DB   00H,00H,01H,10H        ; |....|
 
 ; PULSE_PB2: pulse bit 2 of 8155#2 port B.
@@ -56,6 +62,7 @@ RST65_ISR:
 0038  F6 01      ORI 01H
 003A  32 03 E0   STA PIO1_PC
 003D  3A 03 F0   LDA PIO2_PC
+D_0040:                                      ; refs: lxi0AC8
 0040  07         RLC
 0041  07         RLC
 0042  47         MOV B,A
@@ -71,8 +78,10 @@ RST65_ISR:
 0057  BE         CMP M
 0058  78         MOV A,B
 0059  C2 70 00   JNZ ISR_EXIT
+D_005C:                                      ; refs: lxi0D62
 005C  F5         PUSH PSW
 005D  D5         PUSH D
+D_005F:                                      ; = 005F, inside the next instruction (entered by jumping past the 21H prefix)
 005E  CD 1C 00   CALL PULSE_PB2
 0061  CD 1D 0E   CALL X_0E1D
 0064  3E 20      MVI A,20H                   ; ' '
@@ -95,6 +104,7 @@ INIT:                                        ; xref: j0001
 0077  31 00 71   LXI SP,STACK_TOP
 007A  CD 1C 00   CALL PULSE_PB2
 007D  3E CD      MVI A,0CDH
+D_0080:                                      ; = 0080, inside the next instruction (entered by jumping past the 21H prefix)
 007F  32 01 D0   STA KDC_CMD                 ; 8279: clear display and FIFO (CD=110 CA=1)
 0082  3E D0      MVI A,0D0H
 0084  32 04 E0   STA PIO1_TMRLO              ; 8155#1 timer = 07D0H (2000), square wave
@@ -262,6 +272,7 @@ SETTLE_LOOP:                                 ; xref: j01F4
 01F7  3A 04 6F   LDA SLOT_FLAGS
 01FA  E6 20      ANI 20H                     ; ' '
 01FC  CA 2D 01   JZ ACQ_START
+D_01FF:                                      ; refs: lxi0BDD lxi0BEF
 01FF  CD 45 04   CALL QUAL_CHECK
 0202  DA 2D 01   JC ACQ_START
 0205  3E 03      MVI A,03H
@@ -585,7 +596,7 @@ QUAL_BAD:                                    ; xref: j044B j0451
 ; when RST 6.5 fires the ISR returns directly to WAIT_SAMPLE's caller (see RST65_ISR).
 ; Between windows: optional expansion ROM hook at 2000H (signature 0A5H), serial receive,
 ; serial transmit, and, if RST 7.5 latched (RIM bit 6), the periodic tick tasks.
-WAIT_SAMPLE:                                 ; xref: c0169 c01A2 c0397 j0498 c031D c05FE c05AF c049B
+WAIT_SAMPLE:                                 ; xref: c0169 c01A2 c0A2F j0498 c0397 c031D c05FE c05AF c049B
 0459  FB         EI                          ; one-instruction window for RST 6.5
 045A  00         NOP
 045B  F3         DI
@@ -660,7 +671,7 @@ SHIFT_IN_BIT:                                ; xref: j04B3
 04D0  C9         RET
 
 ; READ_PHASE: SHIFT_IN16 then XOR with PHASE_REF -> PHASE_CODE (2 bytes).
-READ_PHASE:                                  ; xref: c039D
+READ_PHASE:                                  ; xref: c0A3C c039D
 04D1  CD AE 04   CALL SHIFT_IN16
 04D4  21 BB 6F   LXI H,PHASE_REF
 04D7  11 BF 6F   LXI D,PHASE_CODE
@@ -673,9 +684,9 @@ READ_PHASE:                                  ; xref: c039D
 04E0  C9         RET
 
 ; GET_SLOT_FLAGS: A = SLOT_FLAGS[SLOT_IDX].  GET_FLAGS_A: A = SLOT_FLAGS[A].
-GET_SLOT_FLAGS:                              ; xref: c024D c0522
+GET_SLOT_FLAGS:                              ; xref: c024D c08F4 c0522
 04E1  3A 11 6F   LDA SLOT_IDX
-GET_FLAGS_A:                                 ; xref: c029A c02CF c16CC c04F4
+GET_FLAGS_A:                                 ; xref: c0F71 c0F89 c0FBF c0E3A c16CC c04F4 c029A c02CF c0F1C c0F26 c0F42 c0FB3 c0EFD
 04E4  21 04 6F   LXI H,SLOT_FLAGS
 04E7  85         ADD L
 04E8  6F         MOV L,A
@@ -690,6 +701,7 @@ GET_SLOT_REC:                                ; xref: c0528
 04F1  FE 00      CPI 00H
 04F3  C8         RZ
 04F4  CD E4 04   CALL GET_FLAGS_A
+SUB_04F7:                                    ; xref: c0FCE c0E60
 04F7  21 3D 6F   LXI H,REC_SEC
 04FA  C3 00 05   JMP REC_INDEX
 
@@ -706,7 +718,7 @@ REC_INDEX_LOOP:                              ; xref: j0508
 0508  C3 05 05   JMP REC_INDEX_LOOP
 
 ; MUL9_INDEX: A = (HL + 9*A). Patched: the original x10 body survives at OLD_MUL10.
-MUL9_INDEX:                                  ; xref: c1062 c102E c17E7
+MUL9_INDEX:                                  ; xref: c1062 c102E c09F5 c17E7
 050B  C5         PUSH B
 050C  47         MOV B,A
 050D  07         RLC
@@ -717,7 +729,7 @@ MUL9_INDEX:                                  ; xref: c1062 c102E c17E7
 0512  C3 1B 05   JMP MUL9_INDEX_2
 
 ; OLD_MUL10: dead code left by an in-place patch (PUSH B / RLC / MOV C,A / RLC / RLC / ADD C).
-OLD_MUL10:                                   
+OLD_MUL10:                                   ; xref: c0922 c0A28
 0515  C5 07 4F 07 07 81  DB   0C5H,07H,4FH,07H,07H,81H; |..O...|
 MUL9_INDEX_2:                                ; xref: j0512
 051B  4F         MOV C,A
@@ -728,7 +740,7 @@ MUL9_INDEX_2:                                ; xref: j0512
 0521  C9         RET
 
 ; LOAD_CUR_REC: CUR_FLAGS = slot flags; copy the slot's 25-byte record into CUR_REC.
-LOAD_CUR_REC:                                ; xref: c0262
+LOAD_CUR_REC:                                ; xref: c08F1 c0262 c081D
 0522  CD E1 04   CALL GET_SLOT_FLAGS
 0525  32 BA 6F   STA CUR_FLAGS
 0528  CD EB 04   CALL GET_SLOT_REC
@@ -738,7 +750,7 @@ COPY25_TO_CUR:                               ; xref: j0542
 0530  C3 BD 07   JMP COPY_E                  ; copy 25 bytes
 
 ; OLD_LOAD_REC: dead code left by an in-place patch (copied in the opposite direction).
-OLD_LOAD_REC:                                
+OLD_LOAD_REC:                                ; xref: j0878
 0533  CD E1 04 3A BA 6F  DB   0CDH,0E1H,04H,3AH,0BAH,6FH; |...:.o|
 0539  77 CD EB 04 44 4D  DB   77H,0CDH,0EBH,04H,44H,4DH; |w...DM|
 LOAD_REC_HL:                                 ; xref: c01DE
@@ -806,7 +818,7 @@ CLEAR_PULSES:                                ; xref: c01B5 c057A c040C c036B
 
 ; ORPHAN_058C: dead code from a patch, followed by the Loran-C phase-code table
 ; (CA F9 = master A / secondary A, 9F AC = master B / secondary B, each preceded by 21H LXI-skip).
-ORPHAN_058C:                                 
+ORPHAN_058C:                                 ; xref: c0817
 058C  21 04 6F 7E 07 3F 1F 77  DB   21H,04H,6FH,7EH,07H,3FH,1FH,77H; |!.o~.?.w|
 PHASE_CODE_TBL:                              
 0594  07 21 CA   DB   07H,21H,0CAH           ; |.!.|
@@ -1067,7 +1079,7 @@ ADJ_ZERO:                                    ; xref: j06E2
 0720  C9         RET
 
 ; NEG_HL: HL = -HL, E = E + 1 (sign flag).
-NEG_HL:                                      ; xref: c06C7 c06F7
+NEG_HL:                                      ; xref: c06C7 c06F7 c0B95 c0B9E c0BAF
 0721  7C         MOV A,H
 0722  2F         CMA
 0723  67         MOV H,A
@@ -1079,7 +1091,7 @@ NEG_HL:                                      ; xref: c06C7 c06F7
 0729  C9         RET
 
 ; CALC_TD: form the time difference: copy TOA (or GRI) to BCD_ACC, adjust, store to CUR_TOA.
-CALC_TD:                                     
+CALC_TD:                                     ; xref: c0BC5 c0B3A c0B45 c0B6B
 072A  3A BA 6F   LDA CUR_FLAGS
 072D  E6 08      ANI 08H
 072F  C2 58 07   JNZ CALC_TD_GRI
@@ -1118,7 +1130,7 @@ CALC_TD_EXIT:                                ; xref: j0772
 
 ; BCD_ADD4: (BC) += (HL), 4 packed-BCD bytes, LS byte first.
 ; PTR_TO_MSB: HL += DE-1, BC += DE-1 (point both at the MS byte).
-BCD_ADD4:                                    ; xref: c10BA j0704
+BCD_ADD4:                                    ; xref: c10BA j0704 c0DA1 j0EC4 c0933 c0939 c0CD1 c0CF8 c0942
 0782  11 04 00   LXI D,0004H                 ; DE = 4 bytes
 0785  CD 94 07   CALL PTR_TO_MSB
 0788  AF         XRA A
@@ -1146,7 +1158,7 @@ PTR_TO_MSB:                                  ; xref: c0785 c07A2
 079E  C9         RET
 
 ; BCD_SUB4: (BC) -= (HL), 4 packed-BCD bytes, ten's-complement subtract.
-BCD_SUB4:                                    ; xref: c1088 c109E j0707
+BCD_SUB4:                                    ; xref: c1088 c109E j0707 j0DAD j0EA9 c0CE2
 079F  11 04 00   LXI D,0004H                 ; DE = 4 bytes
 07A2  CD 94 07   CALL PTR_TO_MSB
 07A5  D5         PUSH D
@@ -1170,9 +1182,9 @@ BCD_SUB4_LOOP:                               ; xref: j07B8
 07B8  C3 AA 07   JMP BCD_SUB4_LOOP
 
 ; COPY4: copy 4 bytes (HL) -> (BC).  COPY_E: copy E bytes.
-COPY4:                                       ; xref: c107B c0740 c077B c075E c076A c0146 c015A j002E c0374
+COPY4:                                       ; xref: c107B c0740 c077B c075E c076A c0146 c015A c0DBA j002E c0374
 07BB  1E 04      MVI E,04H
-COPY_E:                                      ; xref: j07C2 j0530
+COPY_E:                                      ; xref: j07C2 c0F95 j0530
 07BD  7E         MOV A,M
 07BE  02         STAX B
 07BF  23         INX H
@@ -1200,7 +1212,7 @@ MUL8_SHIFT:                                  ; xref: j07D0
 07D6  C3 CA 07   JMP MUL8_LOOP
 
 ; BCD_TO_BIN: A = binary value of packed-BCD byte A (uses HI_NIBBLE in the missing half).
-BCD_TO_BIN:                                  ; xref: c0570 c037A
+BCD_TO_BIN:                                  ; xref: c0D8A c0DC1 c0570 c037A
 07D9  47         MOV B,A
 07DA  CD 08 08   CALL HI_NIBBLE
 07DD  5F         MOV E,A
@@ -1220,7 +1232,7 @@ B2B_DONE:                                    ; xref: j07E2
 
 ; BIN_TO_BCD: A = packed BCD of binary A (0..99). Continues at 0800 in the missing half:
 ; RLC RLC RLC / ADD H / RET.
-BIN_TO_BCD:                                  ; xref: c06DA c066A c0383
+BIN_TO_BCD:                                  ; xref: c06DA c0DC5 c066A c0383
 07EF  1E 00      MVI E,00H
 07F1  16 0A      MVI D,0AH
 B2D_LOOP:                                    ; xref: j07F8
@@ -1234,15 +1246,1175 @@ B2D_DONE:                                    ; xref: j07F4
 07FD  AF         XRA A
 07FE  7B         MOV A,E
 07FF  07         RLC
-0800  FF ...     ; unprogrammed (0FFH) through 0FFF -- 2048 bytes not present in dump
-
-; ---- ORG 1000 ----
+0800  07         RLC
+0801  07         RLC
+0802  07         RLC
+0803  B4         ORA H
+0804  C9         RET
+SUB_0805:                                    ; xref: c08D9 c08FB
+0805  3A A6 6F   LDA CUR_TOA_1
+HI_NIBBLE:                                   ; xref: c07DA
+0808  0F         RRC
+0809  0F         RRC
+080A  0F         RRC
+080B  0F         RRC
+080C  E6 0F      ANI 0FH
+080E  C9         RET
+FILL_ZERO:                                   ; xref: c1091 c10C9 j0F9B c00C9 c00D1 c0952 j0589
+080F  AF         XRA A
+L_0810:                                      ; xref: j0813
+0810  77         MOV M,A
+0811  23         INX H
+0812  05         DCR B
+0813  C2 10 08   JNZ L_0810
+0816  C9         RET
+X_0817:                                      ; xref: c01E7 c023A
+0817  CD 8C 05   CALL ORPHAN_058C
+081A  22 BB 6F   SHLD PHASE_REF
+081D  CD 22 05   CALL LOAD_CUR_REC
+0820  3A BE 6F   LDA M_6FBE
+0823  E6 FE      ANI 0FEH
+0825  CA 3A 08   JZ L_083A
+0828  CD 6D 0E   CALL SUB_0E6D
+082B  F5         PUSH PSW
+082C  DC BE 0E   CC SUB_0EBE
+082F  F1         POP PSW
+0830  07         RLC
+0831  F5         PUSH PSW
+0832  DC A3 0E   CC SUB_0EA3
+0835  F1         POP PSW
+0836  07         RLC
+0837  DC B2 0E   CC SUB_0EB2
+L_083A:                                      ; xref: j0825
+083A  CD 1B 09   CALL SUB_091B
+083D  3A BC 6F   LDA M_6FBC
+0840  32 BB 6F   STA PHASE_REF
+0843  3A BD 6F   LDA M_6FBD
+0846  32 BE 6F   STA M_6FBE
+0849  3A CE 6F   LDA RESTART_REQ
+084C  FE 01      CPI 01H
+084E  C2 75 08   JNZ SAVE_CUR_REC
+0851  3A C4 6F   LDA BUTTONS
+0854  4F         MOV C,A
+0855  3A C5 6F   LDA SEL_A
+0858  FE 0C      CPI 0CH
+085A  CA 7B 08   JZ L_087B
+085D  FE 0B      CPI 0BH
+085F  CA 67 08   JZ L_0867
+0862  FE 0A      CPI 0AH
+0864  C2 75 08   JNZ SAVE_CUR_REC
+L_0867:                                      ; xref: j085F
+0867  79         MOV A,C
+0868  0F         RRC
+0869  0F         RRC
+086A  0F         RRC
+086B  0F         RRC
+086C  21 BE 6F   LXI H,M_6FBE
+086F  B6         ORA M
+0870  77         MOV M,A
+L_0871:                                      ; xref: j08D6 j08DD
+0871  79         MOV A,C
+0872  CD 92 0E   CALL SUB_0E92
+SAVE_CUR_REC:                                ; xref: j08B9 j08E0 j08E8 j08EE j08A6 c0317 j084E j0864
+0875  CD 7F 0D   CALL SUB_0D7F
+0878  C3 33 05   JMP OLD_LOAD_REC
+L_087B:                                      ; xref: j08C5 j085A
+087B  3A A1 6F   LDA CUR_REC
+087E  57         MOV D,A
+087F  79         MOV A,C
+0880  07         RLC
+0881  3A BA 6F   LDA CUR_FLAGS
+0884  DA 99 08   JC L_0899
+0887  21 00 00   LXI H,RESET
+088A  22 B5 6F   SHLD M_6FB5
+088D  22 B8 6F   SHLD M_6FB8
+0890  E6 FB      ANI 0FBH
+0892  5F         MOV E,A
+0893  7A         MOV A,D
+0894  E6 9F      ANI 9FH
+0896  C3 9F 08   JMP L_089F
+L_0899:                                      ; xref: j0884
+0899  F6 04      ORI 04H
+089B  5F         MOV E,A
+089C  7A         MOV A,D
+089D  F6 60      ORI 60H                     ; '`'
+L_089F:                                      ; xref: j0896
+089F  32 A1 6F   STA CUR_REC
+08A2  7B         MOV A,E
+08A3  32 BA 6F   STA CUR_FLAGS
+08A6  C3 75 08   JMP SAVE_CUR_REC
+X_08A9:                                      ; xref: c025C
+08A9  CD F1 08   CALL SUB_08F1
+08AC  CD 6A 0E   CALL SUB_0E6A
+08AF  07         RLC
+08B0  07         RLC
+08B1  DC B2 0E   CC SUB_0EB2
+08B4  3A CE 6F   LDA RESTART_REQ
+08B7  FE 01      CPI 01H
+08B9  C2 75 08   JNZ SAVE_CUR_REC
+08BC  21 C4 6F   LXI H,BUTTONS
+08BF  4E         MOV C,M
+08C0  23         INX H
+08C1  7E         MOV A,M
+08C2  47         MOV B,A
+08C3  FE 0C      CPI 0CH
+08C5  CA 7B 08   JZ L_087B
+08C8  FE 0B      CPI 0BH
+08CA  CA EB 08   JZ L_08EB
+08CD  FE 0A      CPI 0AH
+08CF  CA E3 08   JZ L_08E3
+08D2  3A 11 6F   LDA SLOT_IDX
+08D5  B8         CMP B
+08D6  CA 71 08   JZ L_0871
+08D9  CD 05 08   CALL SUB_0805
+08DC  B8         CMP B
+08DD  CA 71 08   JZ L_0871
+08E0  C3 75 08   JMP SAVE_CUR_REC
+L_08E3:                                      ; xref: j08CF
+08E3  79         MOV A,C
+08E4  2F         CMA
+08E5  CD 87 0E   CALL SUB_0E87
+08E8  C3 75 08   JMP SAVE_CUR_REC
+L_08EB:                                      ; xref: j08CA
+08EB  CD 95 0E   CALL SUB_0E95
+08EE  C3 75 08   JMP SAVE_CUR_REC
+SUB_08F1:                                    ; xref: c08A9
+08F1  CD 22 05   CALL LOAD_CUR_REC
+08F4  CD E1 04   CALL GET_SLOT_FLAGS
+08F7  EB         XCHG
+08F8  2A C1 6F   LHLD DISP_MODE
+08FB  CD 05 08   CALL SUB_0805
+08FE  4F         MOV C,A
+08FF  3A 11 6F   LDA SLOT_IDX
+0902  B9         CMP C
+0903  CA 1B 09   JZ SUB_091B
+0906  7D         MOV A,L
+0907  FE 00      CPI 00H
+0909  C2 1B 09   JNZ SUB_091B
+090C  24         INR H
+090D  22 C1 6F   SHLD DISP_MODE
+0910  7C         MOV A,H
+0911  FE FF      CPI 0FFH
+0913  C2 1B 09   JNZ SUB_091B
+0916  AF         XRA A
+0917  12         STAX D
+0918  CD 23 1E   CALL SUB_1E23
+SUB_091B:                                    ; xref: j0903 j0909 j0913 c083A
+091B  C5         PUSH B
+091C  3A 11 6F   LDA SLOT_IDX
+091F  21 57 70   LXI H,M_7057
+0922  CD 15 05   CALL OLD_MUL10
+0925  44         MOV B,H
+0926  4D         MOV C,L
+0927  C5         PUSH B
+0928  21 A5 6F   LXI H,CUR_TOA
+092B  3A 11 6F   LDA SLOT_IDX
+092E  FE 00      CPI 00H
+0930  CA 3F 09   JZ L_093F
+0933  CD 82 07   CALL BCD_ADD4
+0936  21 C3 70   LXI H,M_70C3
+0939  CD 82 07   CALL BCD_ADD4
+093C  C3 45 09   JMP L_0945
+L_093F:                                      ; xref: j0930
+093F  21 28 6F   LXI H,M_6F28
+0942  CD 82 07   CALL BCD_ADD4
+L_0945:                                      ; xref: j093C
+0945  3A 24 6F   LDA REC_MASTER
+0948  E6 80      ANI 80H
+094A  C2 55 09   JNZ L_0955
+094D  06 04      MVI B,04H
+094F  21 C3 70   LXI H,M_70C3
+0952  CD 0F 08   CALL FILL_ZERO
+L_0955:                                      ; xref: j094A
+0955  C1         POP B
+0956  60         MOV H,B
+0957  69         MOV L,C
+0958  23         INX H
+0959  23         INX H
+095A  23         INX H
+095B  23         INX H
+095C  23         INX H
+095D  34         INR M
+095E  F5         PUSH PSW
+095F  3A C8 70   LDA SW_D1
+0962  FE 0A      CPI 0AH
+0964  C2 6E 09   JNZ L_096E
+0967  F1         POP PSW
+0968  7E         MOV A,M
+0969  FE 64      CPI 64H                     ; 'd'
+096B  C3 72 09   JMP L_0972
+L_096E:                                      ; xref: j0964
+096E  F1         POP PSW
+096F  7E         MOV A,M
+0970  FE 0A      CPI 0AH
+L_0972:                                      ; xref: j096B
+0972  C2 CB 09   JNZ L_09CB
+0975  36 00      MVI M,00H
+0977  C5         PUSH B
+0978  3A C9 70   LDA SW_D2
+097B  FE 0A      CPI 0AH
+097D  C4 20 1F   CNZ SUB_1F20
+0980  C1         POP B
+0981  60         MOV H,B
+0982  69         MOV L,C
+0983  0B         DCX B
+0984  23         INX H
+0985  23         INX H
+0986  23         INX H
+0987  1E 03      MVI E,03H
+0989  3A A1 6F   LDA CUR_REC
+098C  E6 80      ANI 80H
+098E  C2 73 1E   JNZ L_1E73
+L_0991:                                      ; xref: j09B3
+0991  7E         MOV A,M
+0992  36 00      MVI M,00H
+0994  E6 F0      ANI 0F0H
+0996  0F         RRC
+0997  0F         RRC
+0998  0F         RRC
+0999  0F         RRC
+099A  57         MOV D,A
+099B  2B         DCX H
+099C  7E         MOV A,M
+099D  E6 0F      ANI 0FH
+099F  07         RLC
+09A0  07         RLC
+09A1  07         RLC
+09A2  07         RLC
+09A3  B2         ORA D
+09A4  57         MOV D,A
+09A5  3A 3C 70   LDA BTN_STATE
+09A8  E6 80      ANI 80H
+09AA  FE 00      CPI 00H
+09AC  C2 B1 09   JNZ L_09B1
+09AF  7A         MOV A,D
+09B0  02         STAX B
+L_09B1:                                      ; xref: j09AC
+09B1  0B         DCX B
+09B2  1D         DCR E
+09B3  C2 91 09   JNZ L_0991
+09B6  36 00      MVI M,00H
+09B8  3A 11 6F   LDA SLOT_IDX
+09BB  FE 00      CPI 00H
+09BD  C2 CB 09   JNZ L_09CB
+09C0  36 99      MVI M,99H
+09C2  23         INX H
+09C3  36 99      MVI M,99H
+09C5  23         INX H
+09C6  36 99      MVI M,99H
+09C8  23         INX H
+09C9  36 80      MVI M,80H
+L_09CB:                                      ; xref: j0972 j09BD
+09CB  C1         POP B
+09CC  3A A1 6F   LDA CUR_REC
+09CF  E6 80      ANI 80H
+09D1  3E FF      MVI A,0FFH
+09D3  C2 D9 09   JNZ L_09D9
+09D6  3A BA 6F   LDA CUR_FLAGS
+L_09D9:                                      ; xref: j09D3
+09D9  07         RLC
+09DA  07         RLC
+09DB  07         RLC
+09DC  E6 01      ANI 01H
+09DE  4F         MOV C,A
+09DF  3A 24 6F   LDA REC_MASTER
+09E2  47         MOV B,A
+09E3  3A A1 6F   LDA CUR_REC
+09E6  A0         ANA B
+09E7  07         RLC
+09E8  07         RLC
+09E9  07         RLC
+09EA  07         RLC
+09EB  E6 02      ANI 02H
+09ED  B1         ORA C
+09EE  57         MOV D,A
+09EF  3A 11 6F   LDA SLOT_IDX
+09F2  21 F4 6F   LXI H,M_6FF4
+09F5  CD 0B 05   CALL MUL9_INDEX
+09F8  EE 80      XRI 80H
+09FA  E6 80      ANI 80H
+09FC  07         RLC
+09FD  07         RLC
+09FE  07         RLC
+09FF  B2         ORA D
+0A00  57         MOV D,A
+0A01  3A A1 6F   LDA CUR_REC
+0A04  E6 20      ANI 20H                     ; ' '
+0A06  FE 20      CPI 20H                     ; ' '
+0A08  3E 08      MVI A,08H
+0A0A  C2 14 0A   JNZ L_0A14
+0A0D  3A 24 6F   LDA REC_MASTER
+0A10  0F         RRC
+0A11  0F         RRC
+0A12  E6 08      ANI 08H
+L_0A14:                                      ; xref: j0A0A
+0A14  B2         ORA D
+0A15  2F         CMA
+0A16  E6 0F      ANI 0FH
+0A18  57         MOV D,A
+0A19  E6 03      ANI 03H
+0A1B  CA 22 0A   JZ L_0A22
+0A1E  7A         MOV A,D
+0A1F  E6 0B      ANI 0BH
+0A21  57         MOV D,A
+L_0A22:                                      ; xref: j0A1B
+0A22  3A 11 6F   LDA SLOT_IDX
+0A25  21 53 70   LXI H,M_7053
+0A28  CD 15 05   CALL OLD_MUL10
+0A2B  E6 F0      ANI 0F0H
+0A2D  B2         ORA D
+0A2E  77         MOV M,A
+0A2F  CD 59 04   CALL WAIT_SAMPLE
+0A32  CD 1A 0E   CALL X_0E1A
+0A35  AF         XRA A
+0A36  32 15 6F   STA SAMPLE_CNT
+0A39  32 BD 6F   STA M_6FBD
+0A3C  CD D1 04   CALL READ_PHASE
+0A3F  3A 0F 6F   LDA TRACK_MASK
+0A42  E6 0F      ANI 0FH
+0A44  CA 6E 0A   JZ L_0A6E
+0A47  21 04 10   LXI H,D_1004
+0A4A  11 02 20   LXI D,M_2002
+0A4D  3A A1 6F   LDA CUR_REC
+0A50  47         MOV B,A
+0A51  3A BA 6F   LDA CUR_FLAGS
+0A54  E6 10      ANI 10H
+0A56  CA 5A 0A   JZ L_0A5A
+0A59  EB         XCHG
+L_0A5A:                                      ; xref: j0A56
+0A5A  22 E6 6F   SHLD VAR_6FE6
+0A5D  78         MOV A,B
+0A5E  07         RLC
+0A5F  DA 37 0C   JC L_0C37
+0A62  0F         RRC
+0A63  0F         RRC
+0A64  0F         RRC
+0A65  DA 6E 0A   JC L_0A6E
+0A68  CD C5 0B   CALL SUB_0BC5
+0A6B  C3 77 0A   JMP L_0A77
+L_0A6E:                                      ; xref: j0A44 j0A65
+0A6E  CD 07 0B   CALL SUB_0B07
+0A71  3A BA 6F   LDA CUR_FLAGS
+0A74  E6 10      ANI 10H
+0A76  C8         RZ
+L_0A77:                                      ; xref: j0A6B
+0A77  11 00 00   LXI D,RESET
+0A7A  2A AF 6F   LHLD CUR_PULSE_PTR
+0A7D  EB         XCHG
+0A7E  3A BA 6F   LDA CUR_FLAGS
+0A81  E6 04      ANI 04H
+0A83  06 40      MVI B,40H                   ; '@'
+0A85  C2 8A 0A   JNZ L_0A8A
+0A88  06 02      MVI B,02H
+L_0A8A:                                      ; xref: j0A85
+0A8A  7A         MOV A,D
+0A8B  D6 02      SUI 02H
+0A8D  FA 98 0A   JM L_0A98
+0A90  7B         MOV A,E
+0A91  90         SUB B
+0A92  FA 9C 0A   JM L_0A9C
+0A95  22 AF 6F   SHLD CUR_PULSE_PTR
+L_0A98:                                      ; xref: j0A8D
+0A98  44         MOV B,H
+0A99  C3 9E 0A   JMP L_0A9E
+L_0A9C:                                      ; xref: j0A92
+0A9C  06 02      MVI B,02H
+L_0A9E:                                      ; xref: j0A99
+0A9E  21 A1 6F   LXI H,CUR_REC
+0AA1  7E         MOV A,M
+0AA2  E6 FD      ANI 0FDH
+0AA4  B0         ORA B
+0AA5  77         MOV M,A
+0AA6  47         MOV B,A
+0AA7  2A B3 6F   LHLD M_6FB3
+0AAA  11 38 FF   LXI D,M_FF38
+0AAD  19         DAD D
+0AAE  7C         MOV A,H
+0AAF  07         RLC
+0AB0  DA B9 0A   JC L_0AB9
+0AB3  78         MOV A,B
+0AB4  E6 DF      ANI 0DFH
+0AB6  32 A1 6F   STA CUR_REC
+L_0AB9:                                      ; xref: j0AB0
+0AB9  2A B5 6F   LHLD M_6FB5
+0ABC  01 80 FF   LXI B,M_FF80
+0ABF  09         DAD B
+0AC0  7C         MOV A,H
+0AC1  07         RLC
+0AC2  DA D2 0A   JC L_0AD2
+0AC5  2A B8 6F   LHLD M_6FB8
+0AC8  01 40 00   LXI B,D_0040
+0ACB  09         DAD B
+0ACC  7C         MOV A,H
+0ACD  07         RLC
+0ACE  DA E6 0A   JC L_0AE6
+0AD1  C9         RET
+L_0AD2:                                      ; xref: j0AC2
+0AD2  2A B5 6F   LHLD M_6FB5
+0AD5  01 C0 FF   LXI B,M_FFC0
+0AD8  09         DAD B
+0AD9  7C         MOV A,H
+0ADA  07         RLC
+0ADB  D8         RC
+0ADC  2A B8 6F   LHLD M_6FB8
+0ADF  01 80 00   LXI B,D_0080
+0AE2  09         DAD B
+0AE3  7C         MOV A,H
+0AE4  07         RLC
+0AE5  D0         RNC
+L_0AE6:                                      ; xref: j0ACE
+0AE6  3A C8 70   LDA SW_D1
+0AE9  FE 0B      CPI 0BH
+0AEB  C8         RZ
+0AEC  3A A1 6F   LDA CUR_REC
+0AEF  47         MOV B,A
+0AF0  E6 40      ANI 40H                     ; '@'
+0AF2  C0         RNZ
+0AF3  3A BA 6F   LDA CUR_FLAGS
+0AF6  E6 20      ANI 20H                     ; ' '
+0AF8  C8         RZ
+0AF9  78         MOV A,B
+0AFA  F6 60      ORI 60H                     ; '`'
+0AFC  32 A1 6F   STA CUR_REC
+0AFF  21 BA 6F   LXI H,CUR_FLAGS
+0B02  7E         MOV A,M
+0B03  F6 04      ORI 04H
+0B05  77         MOV M,A
+0B06  C9         RET
+SUB_0B07:                                    ; xref: c0A6E c0C37
+0B07  21 AF 6F   LXI H,CUR_PULSE_PTR
+0B0A  34         INR M
+0B0B  21 B7 6F   LXI H,CUR_MODE
+0B0E  3A A9 6F   LDA CUR_NPULSE
+0B11  47         MOV B,A
+0B12  3A BF 6F   LDA PHASE_CODE
+0B15  1E 08      MVI E,08H
+L_0B17:                                      ; xref: j0B25
+0B17  0F         RRC
+0B18  4F         MOV C,A
+0B19  78         MOV A,B
+0B1A  DA 21 0B   JC L_0B21
+0B1D  96         SUB M
+0B1E  C3 22 0B   JMP L_0B22
+L_0B21:                                      ; xref: j0B1A
+0B21  86         ADD M
+L_0B22:                                      ; xref: j0B1E
+0B22  47         MOV B,A
+0B23  79         MOV A,C
+0B24  1D         DCR E
+0B25  C2 17 0B   JNZ L_0B17
+0B28  3A E7 6F   LDA VAR_6FE7
+0B2B  4F         MOV C,A
+0B2C  21 A9 6F   LXI H,CUR_NPULSE
+0B2F  70         MOV M,B
+0B30  78         MOV A,B
+0B31  07         RLC
+0B32  78         MOV A,B
+0B33  DA 65 0B   JC L_0B65
+0B36  91         SUB C
+0B37  F2 40 0B   JP L_0B40
+0B3A  CD 2A 07   CALL CALC_TD
+0B3D  C3 8A 0B   JMP L_0B8A
+L_0B40:                                      ; xref: j0B37
+0B40  77         MOV M,A
+0B41  21 AA 6F   LXI H,CUR_PULSES
+0B44  34         INR M
+0B45  CD 2A 07   CALL CALC_TD
+0B48  CD C1 0E   CALL X_0EC1
+0B4B  3A E7 6F   LDA VAR_6FE7
+0B4E  4F         MOV C,A
+0B4F  21 A9 6F   LXI H,CUR_NPULSE
+0B52  7E         MOV A,M
+0B53  91         SUB C
+0B54  FA 8A 0B   JM L_0B8A
+0B57  77         MOV M,A
+0B58  21 E3 6F   LXI H,VAR_6FE3
+0B5B  CD C1 0E   CALL X_0EC1
+0B5E  21 AA 6F   LXI H,CUR_PULSES
+0B61  34         INR M
+0B62  C3 8A 0B   JMP L_0B8A
+L_0B65:                                      ; xref: j0B33
+0B65  81         ADD C
+0B66  77         MOV M,A
+0B67  21 AA 6F   LXI H,CUR_PULSES
+0B6A  35         DCR M
+0B6B  CD 2A 07   CALL CALC_TD
+0B6E  CD A6 0E   CALL SUB_0EA6
+0B71  3A E7 6F   LDA VAR_6FE7
+0B74  4F         MOV C,A
+0B75  21 A9 6F   LXI H,CUR_NPULSE
+0B78  7E         MOV A,M
+0B79  07         RLC
+0B7A  D2 8A 0B   JNC L_0B8A
+0B7D  7E         MOV A,M
+0B7E  81         ADD C
+0B7F  77         MOV M,A
+0B80  21 E3 6F   LXI H,VAR_6FE3
+0B83  CD A6 0E   CALL SUB_0EA6
+0B86  21 AA 6F   LXI H,CUR_PULSES
+0B89  35         DCR M
+L_0B8A:                                      ; xref: j0B3D j0B54 j0B62 j0B7A
+0B8A  C3 FE 0C   JMP L_0CFE
+X_0B8D:                                      ; xref: c0749 c0BE0 c0BF2 c0D24
+0B8D  22 CC 6F   SHLD GRI_SW
+0B90  C5         PUSH B
+0B91  1E 00      MVI E,00H
+0B93  7C         MOV A,H
+0B94  07         RLC
+0B95  DC 21 07   CC NEG_HL
+0B98  C1         POP B
+0B99  C5         PUSH B
+0B9A  D5         PUSH D
+0B9B  E5         PUSH H
+0B9C  60         MOV H,B
+0B9D  69         MOV L,C
+0B9E  CD 21 07   CALL NEG_HL
+0BA1  D1         POP D
+0BA2  19         DAD D
+0BA3  7C         MOV A,H
+0BA4  07         RLC
+0BA5  2A CC 6F   LHLD GRI_SW
+0BA8  D1         POP D
+0BA9  DA B3 0B   JC L_0BB3
+0BAC  E1         POP H
+0BAD  7B         MOV A,E
+0BAE  0F         RRC
+0BAF  DC 21 07   CC NEG_HL
+0BB2  C9         RET
+L_0BB3:                                      ; xref: j0BA9
+0BB3  C1         POP B
+0BB4  C9         RET
+SUB_0BB5:                                    ; xref: c0BDA c0BEC c0D1E
+0BB5  1E 08      MVI E,08H
+L_0BB7:                                      ; xref: j0BC1
+0BB7  0F         RRC
+0BB8  DA BF 0B   JC L_0BBF
+0BBB  2B         DCX H
+0BBC  C3 C0 0B   JMP L_0BC0
+L_0BBF:                                      ; xref: j0BB8
+0BBF  23         INX H
+L_0BC0:                                      ; xref: j0BBC
+0BC0  1D         DCR E
+0BC1  C2 B7 0B   JNZ L_0BB7
+0BC4  C9         RET
+SUB_0BC5:                                    ; xref: c0A68
+0BC5  CD 2A 07   CALL CALC_TD
+0BC8  3A CB 70   LDA SW_D4
+0BCB  FE 09      CPI 09H
+0BCD  D4 5C 10   CNC SLOTREC_UPDATE
+0BD0  21 B0 6F   LXI H,M_6FB0
+0BD3  34         INR M
+0BD4  2A B5 6F   LHLD M_6FB5
+0BD7  3A BF 6F   LDA PHASE_CODE
+0BDA  CD B5 0B   CALL SUB_0BB5
+0BDD  01 FF 01   LXI B,D_01FF
+0BE0  CD 8D 0B   CALL X_0B8D
+0BE3  22 B5 6F   SHLD M_6FB5
+0BE6  2A B8 6F   LHLD M_6FB8
+0BE9  3A C0 6F   LDA PHASE_CODE_HI
+0BEC  CD B5 0B   CALL SUB_0BB5
+0BEF  01 FF 01   LXI B,D_01FF
+0BF2  CD 8D 0B   CALL X_0B8D
+0BF5  22 B8 6F   SHLD M_6FB8
+0BF8  3A B6 6F   LDA M_6FB6
+0BFB  FE FF      CPI 0FFH
+0BFD  C2 08 0C   JNZ L_0C08
+0C00  3A B5 6F   LDA M_6FB5
+0C03  E6 40      ANI 40H                     ; '@'
+0C05  CA 24 0C   JZ L_0C24
+L_0C08:                                      ; xref: j0BFD
+0C08  3A B9 6F   LDA M_6FB9
+0C0B  FE 00      CPI 00H
+0C0D  C0         RNZ
+0C0E  3A B8 6F   LDA M_6FB8
+0C11  E6 40      ANI 40H                     ; '@'
+0C13  C2 17 0C   JNZ L_0C17
+0C16  C9         RET
+L_0C17:                                      ; xref: j0C13
+0C17  3A BA 6F   LDA CUR_FLAGS
+0C1A  E6 04      ANI 04H
+0C1C  C0         RNZ
+0C1D  3E 80      MVI A,80H
+0C1F  06 40      MVI B,40H                   ; '@'
+0C21  C3 2E 0C   JMP L_0C2E
+L_0C24:                                      ; xref: j0C05
+0C24  3A BA 6F   LDA CUR_FLAGS
+0C27  E6 04      ANI 04H
+0C29  C0         RNZ
+0C2A  3E 40      MVI A,40H                   ; '@'
+0C2C  06 80      MVI B,80H
+L_0C2E:                                      ; xref: j0C21
+0C2E  21 BD 6F   LXI H,M_6FBD
+0C31  B6         ORA M
+0C32  77         MOV M,A
+0C33  78         MOV A,B
+0C34  C3 92 0E   JMP SUB_0E92
+L_0C37:                                      ; xref: j0A5F
+0C37  CD 07 0B   CALL SUB_0B07
+0C3A  01 20 80   LXI B,M_8020
+0C3D  21 BA 6F   LXI H,CUR_FLAGS
+0C40  7E         MOV A,M
+0C41  E6 20      ANI 20H                     ; ' '
+0C43  2B         DCX H
+0C44  B6         ORA M
+0C45  FE 20      CPI 20H                     ; ' '
+0C47  2B         DCX H
+0C48  CA 50 0C   JZ L_0C50
+0C4B  34         INR M
+0C4C  7E         MOV A,M
+0C4D  FE 64      CPI 64H                     ; 'd'
+0C4F  F8         RM
+L_0C50:                                      ; xref: j0C48
+0C50  36 00      MVI M,00H
+0C52  23         INX H
+0C53  23         INX H
+0C54  7E         MOV A,M
+0C55  E6 20      ANI 20H                     ; ' '
+0C57  07         RLC
+0C58  07         RLC
+0C59  2B         DCX H
+0C5A  B6         ORA M
+0C5B  FE 80      CPI 80H
+0C5D  CA B1 0C   JZ L_0CB1
+0C60  1E 00      MVI E,00H
+0C62  FE 81      CPI 81H
+0C64  CA B0 0C   JZ L_0CB0
+0C67  1C         INR E
+0C68  FE 00      CPI 00H
+0C6A  CA B0 0C   JZ L_0CB0
+0C6D  1C         INR E
+0C6E  01 10 20   LXI B,M_2010
+0C71  FE 01      CPI 01H
+0C73  CA 96 0C   JZ L_0C96
+0C76  FE 02      CPI 02H
+0C78  CA B1 0C   JZ L_0CB1
+0C7B  23         INX H
+0C7C  7E         MOV A,M
+0C7D  F6 10      ORI 10H
+0C7F  77         MOV M,A
+0C80  21 A1 6F   LXI H,CUR_REC
+0C83  7E         MOV A,M
+0C84  E6 7F      ANI 7FH
+0C86  77         MOV M,A
+0C87  21 00 00   LXI H,RESET
+0C8A  22 AF 6F   SHLD CUR_PULSE_PTR
+0C8D  22 B5 6F   SHLD M_6FB5
+0C90  22 B8 6F   SHLD M_6FB8
+0C93  C3 B1 0C   JMP L_0CB1
+L_0C96:                                      ; xref: j0C73
+0C96  3E 01      MVI A,01H
+0C98  32 B7 6F   STA CUR_MODE
+0C9B  73         MOV M,E
+0C9C  CD E8 0C   CALL SUB_0CE8
+0C9F  CD CD 0E   CALL SUB_0ECD
+0CA2  0E 02      MVI C,02H
+SUB_0CA4:                                    ; xref: c0CB1
+0CA4  AF         XRA A
+0CA5  32 B2 6F   STA M_6FB2
+0CA8  21 BD 6F   LXI H,M_6FBD
+0CAB  7E         MOV A,M
+0CAC  B1         ORA C
+0CAD  77         MOV M,A
+0CAE  78         MOV A,B
+0CAF  C9         RET
+L_0CB0:                                      ; xref: j0C64 j0C6A
+0CB0  73         MOV M,E
+L_0CB1:                                      ; xref: j0C5D j0C78 j0C93
+0CB1  CD A4 0C   CALL SUB_0CA4
+0CB4  07         RLC
+0CB5  CD BE 0C   CALL SUB_0CBE
+0CB8  DA B8 0E   JC L_0EB8
+0CBB  C3 C7 0E   JMP L_0EC7
+SUB_0CBE:                                    ; xref: c0CB5
+0CBE  F5         PUSH PSW
+0CBF  C5         PUSH B
+0CC0  01 C3 70   LXI B,M_70C3
+0CC3  DA D7 0C   JC L_0CD7
+0CC6  3A 11 6F   LDA SLOT_IDX
+0CC9  FE 00      CPI 00H
+0CCB  C2 FB 0C   JNZ L_0CFB
+0CCE  21 08 00   LXI H,D_0008
+0CD1  CD 82 07   CALL BCD_ADD4
+0CD4  C3 FB 0C   JMP L_0CFB
+L_0CD7:                                      ; xref: j0CC3
+0CD7  3A 11 6F   LDA SLOT_IDX
+0CDA  FE 00      CPI 00H
+0CDC  C2 FB 0C   JNZ L_0CFB
+0CDF  21 0E 00   LXI H,D_000E
+0CE2  CD 9F 07   CALL BCD_SUB4
+0CE5  C3 FB 0C   JMP L_0CFB
+SUB_0CE8:                                    ; xref: c0C9C
+0CE8  F5         PUSH PSW
+0CE9  C5         PUSH B
+0CEA  01 C3 70   LXI B,M_70C3
+0CED  3A 11 6F   LDA SLOT_IDX
+0CF0  FE 00      CPI 00H
+0CF2  C2 FB 0C   JNZ L_0CFB
+0CF5  21 0B 00   LXI H,D_000B
+0CF8  CD 82 07   CALL BCD_ADD4
+L_0CFB:                                      ; xref: j0CCB j0CD4 j0CDC j0CE5 j0CF2
+0CFB  C1         POP B
+0CFC  F1         POP PSW
+0CFD  C9         RET
+L_0CFE:                                      ; xref: j0B8A
+0CFE  CD 28 10   CALL SLOTREC_PHASE
+0D01  3A A1 6F   LDA CUR_REC
+0D04  E6 80      ANI 80H
+0D06  C2 0C 0D   JNZ L_0D0C
+0D09  CD 5C 10   CALL SLOTREC_UPDATE
+L_0D0C:                                      ; xref: j0D06
+0D0C  21 B2 6F   LXI H,M_6FB2
+0D0F  E5         PUSH H
+0D10  7E         MOV A,M
+0D11  26 00      MVI H,00H
+0D13  6F         MOV L,A
+0D14  07         RLC
+0D15  D2 1A 0D   JNC L_0D1A
+0D18  26 FF      MVI H,0FFH
+L_0D1A:                                      ; xref: j0D15
+0D1A  3A C0 6F   LDA PHASE_CODE_HI
+0D1D  2F         CMA
+0D1E  CD B5 0B   CALL SUB_0BB5
+0D21  01 5F 00   LXI B,D_005F
+0D24  CD 8D 0B   CALL X_0B8D
+0D27  7D         MOV A,L
+0D28  32 B2 6F   STA M_6FB2
+0D2B  07         RLC
+0D2C  DA 6F 0D   JC L_0D6F
+0D2F  7D         MOV A,L
+0D30  D6 40      SUI 40H                     ; '@'
+0D32  2A B3 6F   LHLD M_6FB3
+0D35  11 BA 6F   LXI D,CUR_FLAGS
+0D38  1A         LDAX D
+0D39  FA 44 0D   JM L_0D44
+0D3C  F6 20      ORI 20H                     ; ' '
+0D3E  21 00 00   LXI H,RESET
+0D41  C3 47 0D   JMP L_0D47
+L_0D44:                                      ; xref: j0D39 j0D76
+0D44  E6 DF      ANI 0DFH
+0D46  23         INX H
+L_0D47:                                      ; xref: j0D41
+0D47  12         STAX D
+0D48  22 B3 6F   SHLD M_6FB3
+0D4B  21 B1 6F   LXI H,M_6FB1
+0D4E  34         INR M
+0D4F  7E         MOV A,M
+0D50  FE 05      CPI 05H
+0D52  C1         POP B
+0D53  C0         RNZ
+0D54  36 00      MVI M,00H
+0D56  0A         LDAX B
+0D57  6F         MOV L,A
+0D58  26 00      MVI H,00H
+0D5A  5F         MOV E,A
+0D5B  07         RLC
+0D5C  D2 6A 0D   JNC L_0D6A
+0D5F  26 FF      MVI H,0FFH
+0D61  D5         PUSH D
+0D62  11 5C 00   LXI D,D_005C
+0D65  19         DAD D
+0D66  D1         POP D
+0D67  7C         MOV A,H
+0D68  07         RLC
+0D69  D8         RC
+L_0D6A:                                      ; xref: j0D5C
+0D6A  7B         MOV A,E
+0D6B  D6 03      SUI 03H
+0D6D  02         STAX B
+0D6E  C9         RET
+L_0D6F:                                      ; xref: j0D2C
+0D6F  2A B3 6F   LHLD M_6FB3
+0D72  11 BA 6F   LXI D,CUR_FLAGS
+0D75  1A         LDAX D
+0D76  C3 44 0D   JMP L_0D44
+X_0D79:                                      ; xref: c019C
+0D79  CD B3 0D   CALL X_0DB3
+0D7C  C3 E6 0D   JMP X_0DE6
+SUB_0D7F:                                    ; xref: c0875
+0D7F  3A 11 6F   LDA SLOT_IDX
+0D82  FE 00      CPI 00H
+0D84  C2 93 0D   JNZ L_0D93
+0D87  3A A8 6F   LDA M_6FA8
+0D8A  CD D9 07   CALL BCD_TO_BIN
+0D8D  32 E2 6F   STA VAR_6FE2
+0D90  C3 B0 0D   JMP SUB_0DB0
+L_0D93:                                      ; xref: j0D84
+0D93  3A E2 6F   LDA VAR_6FE2
+0D96  0F         RRC
+0D97  0F         RRC
+0D98  D2 B0 0D   JNC SUB_0DB0
+0D9B  21 E3 6F   LXI H,VAR_6FE3
+0D9E  01 A5 6F   LXI B,CUR_TOA
+0DA1  CD 82 07   CALL BCD_ADD4
+0DA4  CD B0 0D   CALL SUB_0DB0
+0DA7  21 E3 6F   LXI H,VAR_6FE3
+0DAA  01 A5 6F   LXI B,CUR_TOA
+0DAD  C3 9F 07   JMP BCD_SUB4
+SUB_0DB0:                                    ; xref: j0D90 j0D98 c0DA4
+0DB0  3A A1 6F   LDA CUR_REC
+X_0DB3:                                      ; xref: c013D c0151 c01D8 c0D79
+0DB3  21 A5 6F   LXI H,CUR_TOA
+0DB6  F5         PUSH PSW
+0DB7  01 A1 6F   LXI B,CUR_REC
+0DBA  CD BB 07   CALL COPY4
+0DBD  0B         DCX B
+0DBE  0A         LDAX B
+0DBF  E6 FE      ANI 0FEH
+0DC1  CD D9 07   CALL BCD_TO_BIN
+0DC4  0F         RRC
+0DC5  CD EF 07   CALL BIN_TO_BCD
+0DC8  07         RLC
+0DC9  57         MOV D,A
+0DCA  D5         PUSH D
+0DCB  21 A1 6F   LXI H,CUR_REC
+0DCE  11 03 00   LXI D,D_0003
+L_0DD1:                                      ; xref: j0DD6
+0DD1  7E         MOV A,M
+0DD2  1F         RAR
+0DD3  77         MOV M,A
+0DD4  23         INX H
+0DD5  1D         DCR E
+0DD6  C2 D1 0D   JNZ L_0DD1
+0DD9  D1         POP D
+0DDA  7A         MOV A,D
+0DDB  1F         RAR
+0DDC  77         MOV M,A
+0DDD  F1         POP PSW
+0DDE  01 A1 6F   LXI B,CUR_REC
+0DE1  02         STAX B
+0DE2  C9         RET
+X_0DE3:                                      ; xref: c01E1
+0DE3  01 A1 6F   LXI B,CUR_REC
+X_0DE6:                                      ; xref: c0163 c0218 j0D7C
+0DE6  3A 02 F0   LDA PIO2_PB
+0DE9  E6 74      ANI 74H                     ; 't'
+0DEB  6F         MOV L,A
+0DEC  0A         LDAX B
+0DED  E6 0B      ANI 0BH
+0DEF  B5         ORA L
+0DF0  32 02 F0   STA PIO2_PB
+L_0DF3:                                      ; xref: j0E17
+0DF3  03         INX B
+0DF4  0A         LDAX B
+0DF5  32 02 E0   STA M_E002
+0DF8  03         INX B
+0DF9  0A         LDAX B
+0DFA  32 01 E0   STA M_E001
+0DFD  03         INX B
+0DFE  0A         LDAX B
+0DFF  32 01 F0   STA M_F001
+0E02  3A 02 F0   LDA PIO2_PB
+0E05  F6 80      ORI 80H
+0E07  32 02 F0   STA PIO2_PB
+0E0A  C9         RET
+L_0E0B:                                      ; xref: j0E67
+0E0B  3A 02 F0   LDA PIO2_PB
+0E0E  E6 7F      ANI 7FH
+0E10  32 02 F0   STA PIO2_PB
+0E13  0A         LDAX B
+0E14  32 DB 6F   STA M_6FDB
+0E17  C3 F3 0D   JMP L_0DF3
+X_0E1A:                                      ; xref: c0A32 c0278 c039A
+0E1A  CD 2D 0E   CALL X_0E2D
+X_0E1D:                                      ; xref: c0061 c0336
+0E1D  3A 02 F0   LDA PIO2_PB
+0E20  E6 F4      ANI 0F4H
+0E22  6F         MOV L,A
+0E23  3A DB 6F   LDA M_6FDB
+0E26  E6 0B      ANI 0BH
+0E28  B5         ORA L
+0E29  32 02 F0   STA PIO2_PB
+0E2C  C9         RET
+X_0E2D:                                      ; xref: c0E1A c0320
+0E2D  21 14 6F   LXI H,SLOT_COUNT
+0E30  3A 11 6F   LDA SLOT_IDX
+L_0E33:                                      ; xref: j0E55
+0E33  3C         INR A
+0E34  BE         CMP M
+0E35  CA 58 0E   JZ L_0E58
+0E38  E5         PUSH H
+0E39  F5         PUSH PSW
+0E3A  CD E4 04   CALL GET_FLAGS_A
+0E3D  47         MOV B,A
+0E3E  07         RLC
+0E3F  D2 53 0E   JNC L_0E53
+0E42  07         RLC
+0E43  DA 5F 0E   JC L_0E5F
+0E46  3A 13 6F   LDA TRACK_STATE
+0E49  FE 80      CPI 80H
+0E4B  CA 5F 0E   JZ L_0E5F
+0E4E  FE 40      CPI 40H                     ; '@'
+0E50  CA 5F 0E   JZ L_0E5F
+L_0E53:                                      ; xref: j0E3F
+0E53  F1         POP PSW
+0E54  E1         POP H
+0E55  C3 33 0E   JMP L_0E33
+L_0E58:                                      ; xref: j0E35
+0E58  AF         XRA A
+0E59  21 24 6F   LXI H,REC_MASTER
+0E5C  C3 65 0E   JMP L_0E65
+L_0E5F:                                      ; xref: j0E43 j0E4B j0E50
+0E5F  78         MOV A,B
+0E60  CD F7 04   CALL SUB_04F7
+0E63  F1         POP PSW
+0E64  D1         POP D
+L_0E65:                                      ; xref: j0E5C
+0E65  44         MOV B,H
+0E66  4D         MOV C,L
+0E67  C3 0B 0E   JMP L_0E0B
+SUB_0E6A:                                    ; xref: c08AC
+0E6A  3A BE 6F   LDA M_6FBE
+SUB_0E6D:                                    ; xref: c0828
+0E6D  07         RLC
+0E6E  F5         PUSH PSW
+0E6F  DC A3 0E   CC SUB_0EA3
+0E72  F1         POP PSW
+0E73  07         RLC
+0E74  F5         PUSH PSW
+0E75  DC BE 0E   CC SUB_0EBE
+0E78  F1         POP PSW
+0E79  07         RLC
+0E7A  F5         PUSH PSW
+0E7B  DC D3 0E   CC SUB_0ED3
+0E7E  F1         POP PSW
+0E7F  07         RLC
+0E80  F5         PUSH PSW
+0E81  DC AC 0E   CC SUB_0EAC
+0E84  F1         POP PSW
+0E85  07         RLC
+0E86  C9         RET
+SUB_0E87:                                    ; xref: c0E92 c08E5
+0E87  07         RLC
+0E88  F5         PUSH PSW
+0E89  DC A3 0E   CC SUB_0EA3
+0E8C  F1         POP PSW
+0E8D  07         RLC
+0E8E  DC BE 0E   CC SUB_0EBE
+0E91  C9         RET
+SUB_0E92:                                    ; xref: c0872 j0C34
+0E92  CD 87 0E   CALL SUB_0E87
+SUB_0E95:                                    ; xref: c08EB
+0E95  21 00 00   LXI H,RESET
+0E98  22 B5 6F   SHLD M_6FB5
+0E9B  22 B8 6F   SHLD M_6FB8
+0E9E  7C         MOV A,H
+0E9F  32 B2 6F   STA M_6FB2
+0EA2  C9         RET
+SUB_0EA3:                                    ; xref: c0E89 c0E6F c0832
+0EA3  21 11 00   LXI H,D_0011
+SUB_0EA6:                                    ; xref: j0EB5 j0EAF c0B6E c0B83 j0EBB
+0EA6  01 A5 6F   LXI B,CUR_TOA
+0EA9  C3 9F 07   JMP BCD_SUB4
+SUB_0EAC:                                    ; xref: c0E81
+0EAC  21 08 00   LXI H,D_0008
+0EAF  C3 A6 0E   JMP SUB_0EA6
+SUB_0EB2:                                    ; xref: c08B1 c0837
+0EB2  21 0B 00   LXI H,D_000B
+0EB5  C3 A6 0E   JMP SUB_0EA6
+L_0EB8:                                      ; xref: j0CB8
+0EB8  21 0E 00   LXI H,D_000E
+0EBB  C3 A6 0E   JMP SUB_0EA6
+SUB_0EBE:                                    ; xref: c0E8E c0E75 c082C
+0EBE  21 11 00   LXI H,D_0011
+X_0EC1:                                      ; xref: c014C c0197 j0ED6 c0B48 c0B5B j0ECA j0ED0 c034D
+0EC1  01 A5 6F   LXI B,CUR_TOA
+0EC4  C3 82 07   JMP BCD_ADD4
+L_0EC7:                                      ; xref: j0CBB
+0EC7  21 08 00   LXI H,D_0008
+0ECA  C3 C1 0E   JMP X_0EC1
+SUB_0ECD:                                    ; xref: c0C9F
+0ECD  21 0B 00   LXI H,D_000B
+0ED0  C3 C1 0E   JMP X_0EC1
+SUB_0ED3:                                    ; xref: c0E7B
+0ED3  21 0E 00   LXI H,D_000E
+0ED6  C3 C1 0E   JMP X_0EC1
+X_0ED9:                                      ; xref: c0170 c01ED c0221
+0ED9  21 C1 6F   LXI H,DISP_MODE
+0EDC  34         INR M
+0EDD  7E         MOV A,M
+0EDE  FE 0A      CPI 0AH
+0EE0  DA E5 0E   JC L_0EE5
+0EE3  36 00      MVI M,00H
+L_0EE5:                                      ; xref: j0EE0
+0EE5  21 CE 6F   LXI H,RESTART_REQ
+0EE8  7E         MOV A,M
+0EE9  FE 00      CPI 00H
+0EEB  C8         RZ
+0EEC  35         DCR M
+0EED  C9         RET
+X_0EEE:                                      ; xref: c021E
+0EEE  21 DC 6F   LXI H,NEW_DATA
+0EF1  7E         MOV A,M
+0EF2  36 00      MVI M,00H
+0EF4  0F         RRC
+0EF5  D0         RNC
+0EF6  21 13 6F   LXI H,TRACK_STATE
+0EF9  36 01      MVI M,01H
+0EFB  2B         DCX H
+0EFC  7E         MOV A,M
+0EFD  CD E4 04   CALL GET_FLAGS_A
+0F00  E6 C0      ANI 0C0H
+0F02  FE 80      CPI 80H
+0F04  C0         RNZ
+0F05  36 00      MVI M,00H
+0F07  C9         RET
+X_0F08:                                      ; xref: c0231
+0F08  3A 13 6F   LDA TRACK_STATE
+0F0B  FE 01      CPI 01H
+0F0D  C0         RNZ
+0F0E  3A 01 6F   LDA ACQ_COUNT
+0F11  FE 04      CPI 04H
+0F13  F0         RP
+0F14  3A 03 6F   LDA SLOT_RESULT
+0F17  FE 00      CPI 00H
+0F19  C8         RZ
+0F1A  57         MOV D,A
+0F1B  D5         PUSH D
+0F1C  CD E4 04   CALL GET_FLAGS_A
+0F1F  D1         POP D
+0F20  07         RLC
+0F21  D8         RC
+0F22  7A         MOV A,D
+X_0F23:                                      ; xref: c0212
+0F23  32 12 6F   STA SLOT_IDX_B
+0F26  CD E4 04   CALL GET_FLAGS_A
+0F29  36 80      MVI M,80H
+0F2B  3E 20      MVI A,20H                   ; ' '
+0F2D  32 13 6F   STA TRACK_STATE
+0F30  C9         RET
+X_0F31:                                      ; xref: c0237
+0F31  3A 04 6F   LDA SLOT_FLAGS
+0F34  47         MOV B,A
+0F35  21 00 6F   LXI H,RAM1_BASE
+0F38  7E         MOV A,M
+0F39  FE 00      CPI 00H
+0F3B  E5         PUSH H
+0F3C  C2 5C 0F   JNZ L_0F5C
+0F3F  3A 02 6F   LDA FIRST_SLOT
+0F42  CD E4 04   CALL GET_FLAGS_A
+0F45  E6 60      ANI 60H                     ; '`'
+0F47  FE 60      CPI 60H                     ; '`'
+0F49  EB         XCHG
+0F4A  E1         POP H
+0F4B  C0         RNZ
+0F4C  36 01      MVI M,01H
+0F4E  21 24 6F   LXI H,REC_MASTER
+0F51  CD E9 0F   CALL X_0FE9
+L_0F54:                                      ; xref: j0FB8
+0F54  3A 02 6F   LDA FIRST_SLOT
+0F57  47         MOV B,A
+0F58  AF         XRA A
+0F59  C3 6F 0F   JMP L_0F6F
+L_0F5C:                                      ; xref: j0F3C
+0F5C  FE 01      CPI 01H
+0F5E  E1         POP H
+0F5F  C2 9E 0F   JNZ L_0F9E
+0F62  78         MOV A,B
+0F63  E6 10      ANI 10H
+0F65  CA BC 0F   JZ L_0FBC
+0F68  36 02      MVI M,02H
+X_0F6A:                                      ; xref: j1024
+0F6A  06 00      MVI B,00H
+0F6C  3A 02 6F   LDA FIRST_SLOT
+L_0F6F:                                      ; xref: j0F59
+0F6F  C5         PUSH B
+0F70  F5         PUSH PSW
+0F71  CD E4 04   CALL GET_FLAGS_A
+0F74  7E         MOV A,M
+0F75  E6 F7      ANI 0F7H
+0F77  77         MOV M,A
+0F78  F1         POP PSW
+0F79  FE 00      CPI 00H
+0F7B  21 2D 6F   LXI H,M_6F2D
+0F7E  11 46 6F   LXI D,M_6F46
+0F81  CA 85 0F   JZ L_0F85
+0F84  EB         XCHG
+L_0F85:                                      ; xref: j0F81
+0F85  C1         POP B
+0F86  D5         PUSH D
+0F87  E5         PUSH H
+0F88  78         MOV A,B
+0F89  CD E4 04   CALL GET_FLAGS_A
+0F8C  7E         MOV A,M
+0F8D  F6 08      ORI 08H
+0F8F  77         MOV M,A
+0F90  E1         POP H
+0F91  C1         POP B
+0F92  E5         PUSH H
+0F93  1E 05      MVI E,05H
+0F95  CD BD 07   CALL COPY_E
+0F98  E1         POP H
+0F99  06 05      MVI B,05H
+0F9B  C3 0F 08   JMP FILL_ZERO
+L_0F9E:                                      ; xref: j0F5F
+0F9E  78         MOV A,B
+0F9F  2A 36 6F   LHLD M_6F36
+0FA2  11 9C FF   LXI D,M_FF9C
+0FA5  19         DAD D
+0FA6  E6 08      ANI 08H
+0FA8  CA 22 10   JZ CHK_H_NEG
+0FAB  7C         MOV A,H
+0FAC  07         RLC
+0FAD  DA BC 0F   JC L_0FBC
+0FB0  3A 02 6F   LDA FIRST_SLOT
+0FB3  CD E4 04   CALL GET_FLAGS_A
+0FB6  07         RLC
+0FB7  07         RLC
+0FB8  DA 54 0F   JC L_0F54
+0FBB  C9         RET
+L_0FBC:                                      ; xref: j0F65 j0FAD
+0FBC  3E 01      MVI A,01H
+X_0FBE:                                      ; xref: j101E
+0FBE  F5         PUSH PSW
+0FBF  CD E4 04   CALL GET_FLAGS_A
+0FC2  47         MOV B,A
+0FC3  07         RLC
+0FC4  07         RLC
+0FC5  D2 18 10   JNC L_1018
+0FC8  07         RLC
+0FC9  07         RLC
+0FCA  DA 18 10   JC L_1018
+0FCD  78         MOV A,B
+0FCE  CD F7 04   CALL SUB_04F7
+0FD1  7E         MOV A,M
+0FD2  E6 80      ANI 80H
+0FD4  C2 18 10   JNZ L_1018
+0FD7  F1         POP PSW
+0FD8  47         MOV B,A
+0FD9  3A 02 6F   LDA FIRST_SLOT
+0FDC  B8         CMP B
+0FDD  C2 F7 0F   JNZ L_0FF7
+0FE0  3A 00 6F   LDA RAM1_BASE
+0FE3  FE 02      CPI 02H
+0FE5  78         MOV A,B
+0FE6  C2 19 10   JNZ SLOT_INC_CHK
+X_0FE9:                                      ; xref: j1010 c0F51
+0FE9  7E         MOV A,M
+0FEA  F6 82      ORI 82H
+0FEC  77         MOV M,A
+0FED  11 18 00   LXI D,BCD_K_00000110
+0FF0  19         DAD D
+0FF1  36 00      MVI M,00H
+0FF3  2B         DCX H
+0FF4  36 00      MVI M,00H
+0FF6  C9         RET
+L_0FF7:                                      ; xref: j0FDD
+0FF7  F5         PUSH PSW
+0FF8  E5         PUSH H
+0FF9  C5         PUSH B
+0FFA  78         MOV A,B
+0FFB  07         RLC
+0FFC  4F         MOV C,A
+0FFD  07         RLC
+0FFE  07         RLC
+0FFF  81         ADD C
 
 ; SLOTTBL_CHK: tail of a routine from the missing half (entered from 0FFxH):
 ; test SLOT_TBL[A]; clean up stack and continue at X_0FE9 or SLOT_INC_CHK.
 SLOTTBL_CHK:                                 
 1000  4F         MOV C,A
 1001  06 00      MVI B,00H
+D_1004:                                      ; = 1004, inside the next instruction (entered by jumping past the 21H prefix)
 1003  21 54 70   LXI H,SLOT_TBL
 1006  09         DAD B
 1007  7E         MOV A,M
@@ -1256,21 +2428,22 @@ SLOTTBL_ZERO:                                ; xref: j100C
 1013  F1         POP PSW
 1014  78         MOV A,B
 1015  C3 19 10   JMP SLOT_INC_CHK
+L_1018:                                      ; xref: j0FC5 j0FCA j0FD4
 1018  F1         DB   0F1H                   ; |.|
-SLOT_INC_CHK:                                ; xref: j1015
+SLOT_INC_CHK:                                ; xref: j1015 j0FE6
 1019  3C         INR A
 101A  21 14 6F   LXI H,SLOT_COUNT
 101D  BE         CMP M
 101E  C2 BE 0F   JNZ X_0FBE
 1021  C9         RET
-CHK_H_NEG:                                   
+CHK_H_NEG:                                   ; xref: j0FA8
 1022  7C         MOV A,H
 1023  07         RLC
 1024  DA 6A 0F   JC X_0F6A
 1027  C9         RET
 
 ; SLOTREC_PHASE: update the 9-byte per-slot record from PHASE_CODE_HI.
-SLOTREC_PHASE:                               
+SLOTREC_PHASE:                               ; xref: c0CFE
 1028  3A 11 6F   LDA SLOT_IDX
 102B  21 F3 6F   LXI H,SLOTREC_5
 102E  CD 0B 05   CALL MUL9_INDEX
@@ -1309,7 +2482,7 @@ SRP_STORE:                                   ; xref: j1052
 105B  C9         RET
 
 ; SLOTREC_UPDATE: bump the per-slot counter, subtract BCD_TMP / 0400H, add popcount, etc.
-SLOTREC_UPDATE:                              
+SLOTREC_UPDATE:                              ; xref: c0BCD c0D09
 105C  3A 11 6F   LDA SLOT_IDX
 105F  21 EE 6F   LXI H,SLOTREC_CNT
 1062  CD 0B 05   CALL MUL9_INDEX
