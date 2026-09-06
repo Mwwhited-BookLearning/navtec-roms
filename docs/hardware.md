@@ -241,4 +241,67 @@ arithmetic in packed BCD.
 2. What drives RST 7.5 (8155 #1 timer out is the guess).
 3. What the 8279 CLK is fed from (prescaler 6 implies about 600 kHz).
 4. Whether the display uses BCD-to-7-segment decoders on OUTA/OUTB.
-5. The EPROM type (see [rom-status.md](rom-status.md)).
+5. ~~The EPROM type~~ - resolved, see [rom-status.md](rom-status.md): Intel 8332
+   masked ROMs.
+
+## Physical board observations (photographed, not yet fully cross-traced)
+
+Everything above this section was inferred purely from the ROM contents. The
+board itself has since been photographed; this section adds what's visible
+there. None of it has been traced with a meter against the schematic above -
+treat it as corroborating context, not verified fact, until someone confirms
+continuity.
+
+**Identification.** Silkscreened `NAVTEC CORP. NASHUA, N.H.`, board number
+`983733-1 ATC20`, labeled `PROCESSOR/FRONT PANEL`. This is one board in a
+larger Navtec Loran-C receiver system (consistent with `EXTROM_SIG`/expansion
+ROM hook in the code - there is more system than this one board).
+
+**Confirms the 8279 identification above.** The chip at what the silkscreen
+calls the display/keyboard position reads `D8279-5`, `INTEL '77` - matches the
+"certain" 8279 identification from the command-byte evidence exactly. (An
+earlier photo read of a *different* chip on this board was misidentified as
+"8275" - Intel's CRT controller, a different part entirely - almost certainly
+just a misread of similar-looking silkscreen; the 8279 command-byte evidence
+in this document is the reliable identification.)
+
+**Possible answer to open question 1 (crystal frequency).** There's a
+precision oscillator can on the board: `MICROSONICS, WEYMOUTH MASS., MODEL
+TX8A/099, FREQ 10.000 MHz, SET AT 25°C`, silkscreened `PROCESSOR BOARD OSC/TP`
+right next to it. This is a TCXO (temperature-compensated), which fits a
+Loran-C timing reference better than an ordinary CPU clock crystal would. It
+does not directly match any of the three candidate CPU-clock frequencies
+above, so it's more likely either (a) feeding a divider chain (there are
+several 74-series counter/divider ICs across the top of the board) down to
+the actual 8085 clock and/or the receiver sample clock, or (b) a separate,
+independent reference for the receiver front end's timing, distinct from
+whatever clocks the CPU. Worth tracing before assuming it answers question 1
+directly.
+
+**New hardware not visible from the code alone: RS-422/485 differential line
+receiver.** An `AM26LS32DC` (quad differential line receiver) sits near a
+silkscreened `COMM` section, close to a connector labeled `P5 IO/TLS`. The
+diagram above shows the 8251A USART going to a generic "RS-232/TTY host or
+printer" - the real physical link is more specifically RS-422/485-style
+differential signaling, which naturally supports the multi-drop bus topology
+[serial-protocol.md](serial-protocol.md) already describes from the code side.
+This is corroboration, not new capability: the software evidence and the
+hardware evidence agree on "multi-drop," they just each explain a different
+half of it.
+
+**Silkscreened functional sections**, for whoever traces this next: `SAMPLER`
+(near the front-end/receiver logic - matches the "receiver front end" section
+above), `SYNCRONIZER` [sic], `COMM` (see above), `READOUT` (connector `J1` -
+almost certainly the display, matching the 8279/`DISP` block), `PWR/DIM`
+(connector `P4` - display brightness/power, matching the dimming behavior
+already inferred from the code), `IO/TLS` (connector `P5`), `TRF` (connector
+`P7`, near the oscillator - "time reference frequency" would fit).
+
+**Other chips present, not yet connected to the code analysis:** an `8212`
+(8-bit I/O latch, board reference marked by hand with a paper label rather
+than legible silkscreen) and two unpopulated 24-pin sockets silkscreened
+`OPTION` (references near U29 and U39, on either side of the main ROM
+sockets) plus an 8-pin header `J8 OPTION`. These are plausible physical
+implementations of the `EXTROM_SIG`/expansion-ROM hook already identified in
+the code (see the chip inventory table above), but which physical socket
+corresponds to `2000-2FFF` in the memory map hasn't been confirmed.

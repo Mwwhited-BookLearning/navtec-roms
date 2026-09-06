@@ -56,32 +56,35 @@ exists and simply was not captured by a plain 2732 read.
 The address layout also means the parts are not two 2 KB devices in a four-ROM
 system: each chip's own upper half is what is missing.
 
-## What probably happened
+## What actually happened
 
 The date code 7943 (week 43 of 1979) puts these at the transition from 2716 to
-2732 EPROMs. Two readings fit a 4 KB file with a blank upper half:
+2732 EPROMs, and the board is otherwise built entirely from Intel 8085-family
+parts (8085A, two 8155s, an 8251A, an 8279/8275). Both facts pointed the same
+direction, and it turned out to be right: **these are Intel 8332 masked ROMs**
+(Intel's own mask-ROM equivalent of the 2732, the 4 KB counterpart to their
+2Kx8 8316), not generic 2732-class EPROMs. They differ from a plain 2732 on
+exactly the pins the initial hypothesis pointed at - 18, 20 and 21 - which is
+why a stock "2732" read got the low half right and the high half deselected
+(solid FFh) instead of, say, scrambled data.
 
-1. **The parts are 2732-class 4 KB EPROMs and the programmer failed to read the
-   upper half.** Reading a TI TMS2532 with the programmer set to Intel 2732 (or
-   vice versa) gives exactly this symptom, because the two devices swap the
-   roles of pins 18, 20 and 21 (A11, CE/PD, Vpp). One half comes back valid, the
-   other comes back FFH because the chip is deselected.
-2. The parts are 2716s that were read as 2732s. This normally gives a duplicated
-   half rather than a blank one, so it is less likely, but worth ruling out.
+The full, confirmed pin-remapping and read procedure is documented in
+[../originals/README.md](../originals/README.md) - that is now the canonical
+reference for reading one of these chips. In short: read as "2732" on the
+programmer, but wire programmer-pin-21 to chip-pin-18, programmer-pin-18 to
+both chip-pins 20 and 21, and leave programmer-pin-20 disconnected.
 
-## What to do
+## What's left to do
 
-1. Read the part number printed on the EPROM body (not the label): 2732,
-   2732A, TMS2532, 2716, TMS2516, or a house number.
-2. Re-read each device with the programmer set to that exact type. For a
-   TMS2532 select "2532", not "2732".
-3. Check the new dump: the bytes at 0000-07FF must be identical to the current
-   file, and 0800-0FFF must not be all FFH. `BIN_TO_BCD` must continue with
-   `07 07 07 84 C9` (RLC RLC RLC ADD H RET) at 0800-0804 if the analysis is
-   right.
-4. Drop the new files into `originals/` and re-run `node tools/dis8085.js
-   disasm/nt3321-22.json`. The hints file already names the routines that live
-   in the missing halves, so the listing will fill in immediately.
+1. **NT3322** still needs a fresh read using the wiring in
+   `originals/README.md`. It's almost certainly the same physical part as
+   NT3321, so the same rewire should work directly, but this hasn't been
+   confirmed on that specific chip yet.
+2. Drop the corrected NT3322 image into `originals/` (replacing the current
+   half-blank file) and re-run `node tools/dis8085.js disasm/nt3321-22.json`.
+   The hints file already names the routines that live in the missing half
+   (`X_1804`, `X_1878`, `X_1DBD`, etc. - see the table below), so the listing
+   should fill in immediately, the same way it did for NT3321.
 
 ## Routines in the missing halves and what the callers tell us
 

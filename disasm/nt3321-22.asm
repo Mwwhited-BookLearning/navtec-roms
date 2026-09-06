@@ -2,26 +2,6 @@
         CPU  8085
         PAGE 0
 
-; ---- routines located in undumped ROM halves (see docs/rom-status.md) ----
-X_1804       EQU  1804H
-X_1878       EQU  1878H
-X_189B       EQU  189BH
-X_18C0       EQU  18C0H
-X_1940       EQU  1940H
-X_1990       EQU  1990H
-X_1995       EQU  1995H
-X_199A       EQU  199AH
-X_199F       EQU  199FH
-X_19A4       EQU  19A4H
-X_19A9       EQU  19A9H
-X_19E7       EQU  19E7H
-X_1DBD       EQU  1DBDH
-X_1E05       EQU  1E05H
-SUB_1E23     EQU  1E23H
-X_1E4C       EQU  1E4CH
-L_1E73       EQU  1E73H
-SUB_1F20     EQU  1F20H
-
 ; ---- external addresses (RAM / memory-mapped I/O) ----
 EXTROM_SIG   EQU  2000H  ; rd=1 wr=0 lxi=0
 EXTROM_ENTRY EQU  2001H  ; rd=0 wr=0 lxi=0
@@ -31,10 +11,10 @@ RAM1_BASE    EQU  6F00H  ; rd=1 wr=0 lxi=2
 ACQ_COUNT    EQU  6F01H  ; rd=2 wr=0 lxi=1
 FIRST_SLOT   EQU  6F02H  ; rd=5 wr=2 lxi=1
 SLOT_RESULT  EQU  6F03H  ; rd=1 wr=2 lxi=0
-SLOT_FLAGS   EQU  6F04H  ; rd=4 wr=1 lxi=3
+SLOT_FLAGS   EQU  6F04H  ; rd=5 wr=1 lxi=7
 WIN_END      EQU  6F0EH  ; rd=0 wr=4 lxi=4
 TRACK_MASK   EQU  6F0FH  ; rd=2 wr=0 lxi=1
-SLOT_IDX     EQU  6F11H  ; rd=20 wr=0 lxi=1
+SLOT_IDX     EQU  6F11H  ; rd=22 wr=1 lxi=1
 SLOT_IDX_B   EQU  6F12H  ; rd=1 wr=1 lxi=0
 TRACK_STATE  EQU  6F13H  ; rd=2 wr=4 lxi=2
 SLOT_COUNT   EQU  6F14H  ; rd=1 wr=1 lxi=4
@@ -43,12 +23,12 @@ SAMPLE_LO    EQU  6F16H  ; rd=1 wr=0 lxi=1
 SYNC_FLAG    EQU  6F17H  ; rd=1 wr=1 lxi=0
 GRI_TMP      EQU  6F18H  ; rd=0 wr=0 lxi=2
 GRI_TMP_VAL  EQU  6F19H  ; rd=0 wr=1 lxi=0
-GRI_BCD      EQU  6F1CH  ; rd=0 wr=0 lxi=4
-GRI_VAL      EQU  6F1DH  ; rd=1 wr=1 lxi=0
+GRI_BCD      EQU  6F1CH  ; rd=0 wr=0 lxi=6
+GRI_VAL      EQU  6F1DH  ; rd=1 wr=1 lxi=1
 GRI_BCD_HI   EQU  6F1FH  ; rd=0 wr=0 lxi=1
 BCD_ACC      EQU  6F20H  ; rd=0 wr=0 lxi=5
 BCD_ACC_HI   EQU  6F23H  ; rd=0 wr=0 lxi=1
-REC_MASTER   EQU  6F24H  ; rd=3 wr=0 lxi=8
+REC_MASTER   EQU  6F24H  ; rd=4 wr=0 lxi=8
 M_6F28       EQU  6F28H  ; rd=0 wr=0 lxi=1
 M_6F2D       EQU  6F2DH  ; rd=0 wr=0 lxi=1
 M_6F36       EQU  6F36H  ; rd=1 wr=0 lxi=0
@@ -85,9 +65,9 @@ M_6FBE       EQU  6FBEH  ; rd=2 wr=1 lxi=1
 PHASE_CODE   EQU  6FBFH  ; rd=4 wr=0 lxi=1
 PHASE_CODE_HI EQU  6FC0H  ; rd=4 wr=0 lxi=0
 DISP_MODE    EQU  6FC1H  ; rd=2 wr=1 lxi=1
-BUTTONS      EQU  6FC4H  ; rd=4 wr=2 lxi=1
-SEL_A        EQU  6FC5H  ; rd=4 wr=2 lxi=0
-SEL_B        EQU  6FC6H  ; rd=3 wr=2 lxi=0
+BUTTONS      EQU  6FC4H  ; rd=6 wr=2 lxi=1
+SEL_A        EQU  6FC5H  ; rd=14 wr=2 lxi=0
+SEL_B        EQU  6FC6H  ; rd=14 wr=2 lxi=0
 VAR_6FCB     EQU  6FCBH  ; rd=0 wr=1 lxi=0
 GRI_SW       EQU  6FCCH  ; rd=2 wr=2 lxi=0
 RESTART_REQ  EQU  6FCEH  ; rd=2 wr=1 lxi=1
@@ -106,42 +86,60 @@ VAR_6FE2     EQU  6FE2H  ; rd=2 wr=1 lxi=0
 VAR_6FE3     EQU  6FE3H  ; rd=0 wr=0 lxi=5
 VAR_6FE6     EQU  6FE6H  ; rd=0 wr=2 lxi=0
 VAR_6FE7     EQU  6FE7H  ; rd=3 wr=2 lxi=0
-BCD_TMP      EQU  6FE9H  ; rd=0 wr=0 lxi=5
+BCD_TMP      EQU  6FE9H  ; rd=0 wr=0 lxi=7
 M_6FEA       EQU  6FEAH  ; rd=0 wr=0 lxi=1
-BCD_TMP_2    EQU  6FEBH  ; rd=0 wr=0 lxi=2
-SLOTREC_CNT  EQU  6FEEH  ; rd=0 wr=0 lxi=1
+BCD_TMP_2    EQU  6FEBH  ; rd=0 wr=1 lxi=2
+SLOTREC_CNT  EQU  6FEEH  ; rd=0 wr=0 lxi=2
+M_6FEF       EQU  6FEFH  ; rd=0 wr=0 lxi=3
 SLOTREC_3    EQU  6FF1H  ; rd=0 wr=0 lxi=1
 SLOTREC_5    EQU  6FF3H  ; rd=0 wr=0 lxi=1
-M_6FF4       EQU  6FF4H  ; rd=0 wr=0 lxi=1
+M_6FF4       EQU  6FF4H  ; rd=0 wr=0 lxi=2
 RAM2_BASE    EQU  7000H  ; rd=0 wr=0 lxi=1
-M_7034       EQU  7034H  ; rd=0 wr=0 lxi=1
-M_7037       EQU  7037H  ; rd=0 wr=0 lxi=1
-M_703A       EQU  703AH  ; rd=1 wr=0 lxi=0
+M_7034       EQU  7034H  ; rd=0 wr=3 lxi=9
+M_7035       EQU  7035H  ; rd=0 wr=6 lxi=0
+M_7036       EQU  7036H  ; rd=0 wr=3 lxi=0
+M_7037       EQU  7037H  ; rd=0 wr=2 lxi=7
+M_7038       EQU  7038H  ; rd=0 wr=5 lxi=0
+M_7039       EQU  7039H  ; rd=0 wr=2 lxi=0
+M_703A       EQU  703AH  ; rd=3 wr=2 lxi=0
 KEY_CHANGED  EQU  703BH  ; rd=1 wr=2 lxi=0
-BTN_STATE    EQU  703CH  ; rd=5 wr=3 lxi=0
-TICK_BCD     EQU  703DH  ; rd=2 wr=1 lxi=0
+BTN_STATE    EQU  703CH  ; rd=8 wr=3 lxi=0
+TICK_BCD     EQU  703DH  ; rd=7 wr=1 lxi=0
 PRTBUF       EQU  703EH  ; rd=0 wr=0 lxi=3
 TX_PENDING   EQU  704EH  ; rd=2 wr=2 lxi=0
-VAR_704F     EQU  704FH  ; rd=2 wr=1 lxi=0
-VAR_7050     EQU  7050H  ; rd=0 wr=1 lxi=0
-VAR_7051     EQU  7051H  ; rd=0 wr=1 lxi=0
-M_7053       EQU  7053H  ; rd=0 wr=0 lxi=1
+VAR_704F     EQU  704FH  ; rd=7 wr=3 lxi=0
+VAR_7050     EQU  7050H  ; rd=2 wr=3 lxi=0
+VAR_7051     EQU  7051H  ; rd=2 wr=3 lxi=0
+M_7053       EQU  7053H  ; rd=0 wr=0 lxi=10
 SLOT_TBL     EQU  7054H  ; rd=0 wr=0 lxi=1
 M_7057       EQU  7057H  ; rd=0 wr=0 lxi=1
-VAR_70BD     EQU  70BDH  ; rd=0 wr=1 lxi=0
-VAR_70BE     EQU  70BEH  ; rd=0 wr=1 lxi=0
-STATUS_BITS  EQU  70BFH  ; rd=2 wr=2 lxi=0
+M_70B7       EQU  70B7H  ; rd=1 wr=15 lxi=0
+M_70B8       EQU  70B8H  ; rd=1 wr=16 lxi=0
+M_70B9       EQU  70B9H  ; rd=3 wr=2 lxi=0
+M_70BA       EQU  70BAH  ; rd=1 wr=1 lxi=0
+M_70BB       EQU  70BBH  ; rd=1 wr=1 lxi=0
+M_70BC       EQU  70BCH  ; rd=1 wr=1 lxi=0
+VAR_70BD     EQU  70BDH  ; rd=1 wr=2 lxi=0
+VAR_70BE     EQU  70BEH  ; rd=2 wr=3 lxi=0
+STATUS_BITS  EQU  70BFH  ; rd=3 wr=2 lxi=0
+M_70C0       EQU  70C0H  ; rd=3 wr=3 lxi=0
+M_70C1       EQU  70C1H  ; rd=3 wr=3 lxi=0
+M_70C2       EQU  70C2H  ; rd=3 wr=3 lxi=0
 M_70C3       EQU  70C3H  ; rd=0 wr=0 lxi=4
-SW_D1        EQU  70C8H  ; rd=4 wr=1 lxi=0
-SW_D2        EQU  70C9H  ; rd=3 wr=1 lxi=0
-SW_D3        EQU  70CAH  ; rd=2 wr=1 lxi=0
-SW_D4        EQU  70CBH  ; rd=3 wr=1 lxi=0
-SW_HI        EQU  70CCH  ; rd=1 wr=1 lxi=0
-SW_LO        EQU  70CDH  ; rd=2 wr=1 lxi=0
+M_70C7       EQU  70C7H  ; rd=1 wr=1 lxi=0
+SW_D1        EQU  70C8H  ; rd=6 wr=1 lxi=0
+SW_D2        EQU  70C9H  ; rd=5 wr=1 lxi=0
+SW_D3        EQU  70CAH  ; rd=4 wr=1 lxi=0
+SW_D4        EQU  70CBH  ; rd=5 wr=1 lxi=0
+SW_HI        EQU  70CCH  ; rd=4 wr=3 lxi=0
+SW_LO        EQU  70CDH  ; rd=5 wr=3 lxi=0
 SW_LATCHED   EQU  70CEH  ; rd=1 wr=1 lxi=0
 PLOT_COL     EQU  70CFH  ; rd=3 wr=1 lxi=1
-RPT_STATE    EQU  70D0H  ; rd=6 wr=3 lxi=0
-PRTBUF_PTR   EQU  70D1H  ; rd=1 wr=3 lxi=0
+RPT_STATE    EQU  70D0H  ; rd=11 wr=3 lxi=0
+PRTBUF_PTR   EQU  70D1H  ; rd=2 wr=4 lxi=0
+M_70D3       EQU  70D3H  ; rd=1 wr=2 lxi=0
+M_70D4       EQU  70D4H  ; rd=0 wr=0 lxi=1
+M_70D6       EQU  70D6H  ; rd=0 wr=0 lxi=1
 QUAL_LO      EQU  70D8H  ; rd=2 wr=1 lxi=0
 TICK_HOOK    EQU  70DAH  ; rd=2 wr=0 lxi=0
 OUT_MODE     EQU  70DCH  ; rd=2 wr=6 lxi=0
@@ -162,7 +160,7 @@ M_8020       EQU  8020H  ; rd=0 wr=0 lxi=1
 USART_DATA   EQU  0C000H  ; rd=1 wr=6 lxi=0
 USART_CTRL   EQU  0C001H  ; rd=5 wr=2 lxi=0
 KDC_DATA     EQU  0D000H  ; rd=14 wr=3 lxi=0
-KDC_CMD      EQU  0D001H  ; rd=0 wr=10 lxi=0
+KDC_CMD      EQU  0D001H  ; rd=0 wr=11 lxi=0
 PIO1_CMD     EQU  0E000H  ; rd=0 wr=1 lxi=0
 M_E001       EQU  0E001H  ; rd=0 wr=1 lxi=0
 M_E002       EQU  0E002H  ; rd=0 wr=1 lxi=0
@@ -193,7 +191,9 @@ D_0003       EQU  $+2
 ; Table of six 4-byte packed-BCD constants (little-endian, LS byte first).
 ; BCD_K_00080980 and BCD_K_00000110 are passed to X_0EC1 (missing half).
 BCD_CONST_TBL:
-        DB   08H,88H,88H,88H
+        DB   08H
+D_0005:
+        DB   88H,88H,88H
 D_0008:
         DB   00H,00H,02H
 D_000B:
@@ -880,6 +880,7 @@ GET_FLAGS_A:
 ; Slot 0 = REC_MASTER; otherwise REC_SEC + 25 * (flags & 3).
 GET_SLOT_REC:
         LDA SLOT_IDX
+SUB_04EE:
         LXI H,REC_MASTER
         CPI 00H
         RZ
@@ -3696,5 +3697,1034 @@ RPT_FORMAT:
         LXI H,GRI_BCD_HI
         JMP X_1804
 RPT_ITEM_OFS:
-        LXI H,0FF56H                ; operand high byte is at 1800 in the undumped half: real value unknown (dump shows 0FFH)
-; ---- 1801-1FFF: unprogrammed / not dumped (reads as 0FFH) ----
+        LXI H,7056H                 ; operand high byte is at 1800 in the undumped half: real value unknown (dump shows 0FFH)
+        CALL OLD_MUL10
+X_1804:
+        CALL SUB_1885
+        CALL X_1878
+        CALL X_1878
+        LDA RPT_STATE
+        CALL SUB_04EE
+        MOV A,M
+        ANI 20H                     ; ' '
+        CPI 00H
+        JZ L_1836
+        LDA RPT_STATE
+        CALL GET_FLAGS_A
+        ANI 20H                     ; ' '
+        JZ L_1836
+        LDA RPT_STATE
+        LXI H,M_6FF4
+        CALL MUL9_INDEX
+        CPI 00H
+        MVI A,42H                   ; 'B'
+        JNZ L_1838
+L_1836:
+        MVI A,20H                   ; ' '
+L_1838:
+        CALL SUB_186D
+        LDA RPT_STATE
+        MOV C,A
+        MVI B,00H
+        LXI H,SLOT_FLAGS
+        DAD B
+        MOV A,M
+        ANI 20H                     ; ' '
+        CPI 20H                     ; ' '
+        MVI A,4CH                   ; 'L'
+        JNZ SUB_186D
+        LDA RPT_STATE
+        CALL SUB_04EE
+        MOV A,M
+        ANI 20H                     ; ' '
+        CPI 00H
+        MVI A,55H                   ; 'U'
+        JZ SUB_186D
+        LDA REC_MASTER
+        ANI 20H                     ; ' '
+        CPI 00H
+        MVI A,4DH                   ; 'M'
+        JZ SUB_186D
+        MVI A,20H                   ; ' '
+SUB_186D:
+        PUSH H
+        LHLD PRTBUF_PTR
+        MOV M,A
+        INX H
+        SHLD PRTBUF_PTR
+        POP H
+        RET
+X_1878:
+        MOV A,M
+        CALL SUB_18AA
+        CALL SUB_186D
+        MOV A,B
+        CALL SUB_186D
+        DCX H
+        RET
+SUB_1885:
+        MVI A,20H                   ; ' '
+        CALL SUB_186D
+        MOV A,M
+        DCX H
+        CALL SUB_18AA
+        CALL SUB_186D
+        MVI A,2EH                   ; '.'
+        CALL SUB_186D
+        MOV A,B
+        JMP SUB_186D
+X_189B:
+        MVI A,20H                   ; ' '
+        CALL SUB_186D
+        MOV A,M
+        CALL SUB_18AA
+        MOV A,B
+        CALL SUB_186D
+        DCX H
+        RET
+SUB_18AA:
+        MOV C,A
+        RRC
+        RRC
+        RRC
+        RRC
+        CALL SUB_18B4
+        MOV B,A
+        MOV A,C
+SUB_18B4:
+        ANI 0FH
+        CPI 0AH
+        JM L_18BD
+        ADI 07H
+L_18BD:
+        ADI 30H                     ; '0'
+        RET
+X_18C0:
+        LDA TICK_BCD
+        CPI 00H
+        JNZ L_18FE
+        LDA VAR_704F
+        INR A
+        DAA
+        CPI 60H                     ; '`'
+        STA VAR_704F
+        JNZ L_18FE
+        MVI A,00H
+        STA VAR_704F
+        LDA SW_LO
+        INR A
+        DAA
+        CPI 60H                     ; '`'
+        STA SW_LO
+        JNZ L_18FE
+        MVI A,00H
+        STA SW_LO
+        LDA SW_HI
+        INR A
+        DAA
+        CPI 24H                     ; '$'
+        STA SW_HI
+        JNZ L_18FE
+        MVI A,00H
+        STA SW_HI
+L_18FE:
+        LDA STATUS_BITS
+        RLC
+        RC
+        LDA VAR_70BD
+        INR A
+        INR A
+        DAA
+        STA VAR_70BD
+        CPI 00H
+        RNZ
+        LDA VAR_70BE
+        INR A
+        DAA
+        CPI 60H                     ; '`'
+        STA VAR_70BE
+        RNZ
+        MVI A,00H
+        STA VAR_70BE
+        LDA VAR_7050
+        INR A
+        DAA
+        CPI 60H                     ; '`'
+        STA VAR_7050
+        RNZ
+        MVI A,00H
+        STA VAR_7050
+        LDA VAR_7051
+        INR A
+        DAA
+        CPI 24H                     ; '$'
+        STA VAR_7051
+        RNZ
+        MVI A,00H
+        STA VAR_7051
+        RET
+X_1940:
+        MVI A,0AH
+        CALL SUB_186D
+        MVI A,0DH
+        CALL SUB_186D
+        LDA BTN_STATE
+        RLC
+        RLC
+        ANI 03H
+        ORI 30H                     ; '0'
+        CALL SUB_186D
+        LDA SW_D1
+        CALL SUB_1984
+        LDA SEL_B
+        CALL SUB_1984
+        LDA SEL_A
+        CALL SUB_1984
+        LDA VAR_704F
+        CALL SUB_197A
+        LDA SW_LO
+        CALL SUB_197A
+        LDA SW_HI
+        JMP SUB_197A
+SUB_197A:
+        CALL SUB_18AA
+        CALL SUB_186D
+        MOV A,B
+        JMP SUB_186D
+SUB_1984:
+        CALL SUB_18AA
+        JMP SUB_186D
+D_198A:
+        DB   0AAH,0ABH,0BBH,0AAH,0ABH,0BBH
+X_1990:
+        MVI B,01H
+        JMP L_19B8
+X_1995:
+        MVI B,02H
+        JMP L_19B8
+X_199A:
+        MVI B,03H
+        JMP L_19B8
+X_199F:
+        MVI B,04H
+        JMP L_19B8
+X_19A4:
+        MVI B,05H
+        JMP L_19B8
+X_19A9:
+        MVI B,06H
+        JMP L_19B8
+        DB   06H,07H,0C3H,0B8H,19H,06H,08H,0C3H
+        DB   0B8H,19H
+L_19B8:
+        PUSH B
+        MVI E,06H
+        LXI H,M_7034
+        LXI B,D_198A
+L_19C1:
+        LDAX B
+        MOV M,A
+        INX B
+        INX H
+        DCR E
+        JNZ L_19C1
+        POP B
+        XRA A
+        MOV A,B
+        DAA
+        STA M_7038
+        XRA A
+        MOV A,B
+        DAA
+        STA M_7035
+        LXI H,M_7034
+        LXI B,M_7037
+        MVI A,33H                   ; '3'
+        STA M_70B7
+        STA M_70B8
+        JMP L_1CEA
+X_19E7:
+        LDA SW_D4
+        CPI 0BH
+        JZ L_1A23
+        LDA M_70BB
+        CPI 19H
+        JZ L_1A0C
+        INR A
+        STA M_70BB
+L_19FB:
+        MVI A,00H
+        STA M_70B7
+        STA M_70B8
+L_1A03:
+        LXI H,D_0005
+        LXI B,D_0005
+        JMP L_1CEA
+L_1A0C:
+        LDA M_70BC
+        CPI 19H
+        JZ L_1A23
+        INR A
+        STA M_70BC
+        MVI A,3FH                   ; '?'
+        STA M_70B7
+        STA M_70B8
+        JMP L_1A03
+L_1A23:
+        LDA SW_D2
+        CPI 0BH
+        JNZ L_1A51
+        MVI A,00H
+        STA M_70B7
+        STA M_70B8
+        LDA ORPHAN_0031
+        STA M_7034
+        MVI A,0FFH
+        STA M_7035
+        LDA D_1A4D
+        STA M_7036
+        LXI H,M_7034
+        LXI B,D_1A4E
+        JMP L_1CEA
+D_1A4D:
+        DB   30H
+D_1A4E:
+        DB   11H,0FFH,78H
+L_1A51:
+        CPI 0AH
+        JZ L_1A5E
+        LDA SW_D3
+        CPI 0AH
+        JNZ L_1AD5
+L_1A5E:
+        MVI A,00H
+        STA M_70B7
+        STA M_70B8
+        LDA SEL_A
+        STA M_7034
+        LDA SEL_B
+        STA M_7035
+        LDA SW_D1
+        STA M_7036
+        LDA SW_D2
+        STA M_7037
+        LDA SW_D3
+        STA M_7038
+        LDA SW_D4
+        STA M_7039
+        LXI H,M_7034
+        LXI B,M_7037
+        LDA BTN_STATE
+        ANI 80H
+        JNZ L_19FB
+        LDA BUTTONS
+        ANI 40H                     ; '@'
+        JZ L_1AA3
+        LXI H,D_0005
+L_1AA3:
+        LDA BUTTONS
+        ANI 80H
+        JZ L_1AAE
+        LXI B,D_0005
+L_1AAE:
+        JMP L_1CEA
+L_1AB1:
+        LDA SLOT_FLAGS
+        RLC
+        RLC
+        JC L_1ACA
+        MVI A,43H                   ; 'C'
+        STA M_70B7
+        STA M_70B8
+        LXI H,GRI_BCD
+        LXI B,GRI_BCD
+        JMP L_1CEA
+L_1ACA:
+        MVI A,00H
+        STA M_70B7
+        STA M_70B8
+        JMP L_1B14
+L_1AD5:
+        LDA SEL_B
+        CPI 0CH
+        JNZ L_1AB1
+        MVI A,00H
+        STA M_70B7
+        MVI A,40H                   ; '@'
+        STA M_70B8
+        LDA SW_HI
+        STA M_7034
+        LDA SW_LO
+        STA M_7035
+        LDA VAR_704F
+        STA M_7036
+        LDA VAR_70BE
+        STA M_7039
+        LDA VAR_7050
+        STA M_7038
+        LDA VAR_7051
+        STA M_7037
+        LXI H,M_7034
+        LXI B,M_7037
+        JMP L_1CEA
+L_1B14:
+        LDA SEL_A
+        CPI 0AH
+        JP L_1CC5
+        LXI H,M_7053
+        CALL OLD_MUL10
+        STA M_70B7
+        INX H
+        MOV A,M
+        CPI 00H
+        JNZ L_1B9F
+        LDA SEL_A
+        DCR A
+        JZ L_1B48
+        LXI H,M_7053
+        CALL OLD_MUL10
+        ORI 80H
+        STA M_70B7
+        INX H
+        LDA SEL_A
+        CALL SUB_1C3F
+        JNC L_1B9F
+L_1B48:
+        LDA SEL_A
+        INR A
+        CPI 0AH
+        JZ L_1B6C
+        LXI H,M_7053
+        CALL OLD_MUL10
+        ORI 80H
+        STA M_70B7
+        INX H
+        MOV A,M
+        CPI 00H
+        JZ L_1B6C
+        LDA SEL_A
+        CALL SUB_1C3F
+        JNC L_1B9F
+L_1B6C:
+        MVI A,77H                   ; 'w'
+        STA M_70B7
+        LDA SEL_A
+        STA M_7035
+        CPI 0AH
+        JC L_1B7E
+        MVI A,00H
+L_1B7E:
+        MOV C,A
+        MVI B,00H
+        LXI H,SLOT_FLAGS
+        DAD B
+        MOV A,M
+        ANI 0C0H
+        CPI 80H
+        LDA SEL_A
+        JNZ L_1B9C
+        ANI 0FH
+        ORI 50H                     ; 'P'
+        STA M_7035
+        MVI A,0F7H
+        STA M_70B7
+L_1B9C:
+        LXI H,M_7034
+L_1B9F:
+        PUSH H
+        LDA SEL_B
+        CPI 0AH
+        JZ L_1C51
+        CPI 0BH
+        JZ L_1C65
+L_1BAD:
+        LXI H,M_7053
+        CALL OLD_MUL10
+        STA M_70B8
+        INX H
+        MOV A,M
+        CPI 00H
+        JNZ L_1C39
+        LDA SEL_B
+        DCR A
+        JZ L_1BDF
+        LXI H,M_7053
+        CALL OLD_MUL10
+        ORI 80H
+        STA M_70B8
+        INX H
+        MOV A,M
+        CPI 00H
+        JZ L_1BDF
+        LDA SEL_B
+        CALL SUB_1C3F
+        JNC L_1C39
+L_1BDF:
+        LDA SEL_B
+        INR A
+        CPI 0AH
+        JZ L_1C03
+        LXI H,M_7053
+        CALL OLD_MUL10
+        ORI 80H
+        STA M_70B8
+        INX H
+        MOV A,M
+        CPI 00H
+        JZ L_1C03
+        LDA SEL_B
+        CALL SUB_1C3F
+        JNC L_1C39
+L_1C03:
+        MVI A,77H                   ; 'w'
+        STA M_70B8
+        LDA SEL_B
+        CPI 0AH
+        JC L_1C12
+        MVI A,00H
+L_1C12:
+        MOV C,A
+        MVI B,00H
+        LXI H,SLOT_FLAGS
+        DAD B
+        MOV A,M
+        ANI 0C0H
+        CPI 80H
+        LDA SEL_B
+        STA M_7038
+        JNZ L_1C33
+        ANI 0FH
+        ORI 50H                     ; 'P'
+        STA M_7038
+        MVI A,0F7H
+        STA M_70B8
+L_1C33:
+        LXI B,M_7037
+        JMP L_1C3B
+L_1C39:
+        MOV B,H
+        MOV C,L
+L_1C3B:
+        POP H
+        JMP L_1CEA
+SUB_1C3F:
+        RLC
+        RLC
+        RLC
+        RLC
+        ANI 0F0H
+        SUI 09H
+        CMP M
+        JNC L_1C4F
+        ADI 1BH
+        CMP M
+        RNC
+L_1C4F:
+        STC
+        RET
+L_1C51:
+        LDA SEL_A
+        LXI H,M_6FEF
+        CALL MUL9_INDEX
+        MOV B,H
+        MOV C,L
+        MVI A,40H                   ; '@'
+        STA M_70B8
+        POP H
+        JMP L_1CEA
+L_1C65:
+        POP H
+        LDA M_70B9
+        MOV E,A
+        LDA TICK_BCD
+        CPI 00H
+        JNZ L_1CA9
+        LDA VAR_704F
+        ANI 0FH
+        JNZ L_1CA9
+        LDA M_70B9
+        STA M_70BA
+L_1C80:
+        LDA M_70B9
+        INR A
+        STA M_70B9
+        CPI 0AH
+        JNZ L_1C91
+        MVI A,00H
+        STA M_70B9
+L_1C91:
+        MOV C,A
+        MOV E,A
+        MVI B,00H
+        LXI H,SLOT_FLAGS
+        DAD B
+        MOV A,M
+        ANI 0C0H
+        CPI 0C0H
+        JZ L_1CA9
+        LDA M_70BA
+        CMP E
+        RZ
+        JMP L_1C80
+L_1CA9:
+        MOV A,E
+        LXI H,M_6FEF
+        CALL MUL9_INDEX
+        PUSH H
+        MOV A,E
+        LXI H,M_7053
+        CALL OLD_MUL10
+        STA M_70B7
+        MVI A,40H                   ; '@'
+        STA M_70B8
+        INX H
+        POP B
+        JMP L_1CEA
+L_1CC5:
+        LXI H,M_7053
+        MOV A,M
+        STA M_70B7
+        INX H
+        PUSH H
+        LDA SEL_B
+        CPI 0AH
+        JZ L_1CDE
+        CPI 0BH
+        JZ L_1C65
+        JMP L_1BAD
+L_1CDE:
+        LXI B,M_6FEF
+        MVI A,40H                   ; '@'
+        STA M_70B8
+        POP H
+        JMP L_1CEA
+L_1CEA:
+        CALL SUB_1CF3
+        CALL SUB_1D10
+        JMP DISP_REFRESH
+SUB_1CF3:
+        MVI E,03H
+        PUSH H
+        LXI H,M_7037
+L_1CF9:
+        LDAX B
+        MOV M,A
+        INX H
+        INX B
+        DCR E
+        JNZ L_1CF9
+        MVI E,03H
+        POP H
+        LXI B,M_7034
+L_1D07:
+        MOV A,M
+        STAX B
+        INX H
+        INX B
+        DCR E
+        JNZ L_1D07
+        RET
+SUB_1D10:
+        LXI H,M_7034
+        LDA M_70B7
+        CALL SUB_1D45
+        LXI H,M_7037
+        LDA M_70B8
+        CALL SUB_1D45
+        LDA BTN_STATE
+        RLC
+        JNC L_1D3A
+        LDA TICK_BCD
+        ANI 40H                     ; '@'
+        JNZ L_1D3A
+        LDA M_703A
+        ANI 0FH
+        STA M_703A
+        RET
+L_1D3A:
+        LDA M_703A
+        ANI 0FH
+        ORI 10H
+        STA M_703A
+        RET
+SUB_1D45:
+        PUSH PSW
+        ANI 80H
+        JZ L_1D66
+        LDA VAR_704F
+        ANI 01H
+        JZ L_1D66
+        LDA TICK_BCD
+        ANI 40H                     ; '@'
+        JZ L_1D66
+        MVI E,03H
+L_1D5D:
+        MVI M,0FFH
+        INX H
+        DCR E
+        JNZ L_1D5D
+L_1D64:
+        POP PSW
+        RET
+L_1D66:
+        POP PSW
+        PUSH PSW
+        ANI 40H                     ; '@'
+        JNZ L_1D92
+        LDA TICK_BCD
+        ANI 40H                     ; '@'
+        JZ L_1D64
+L_1D75:
+        POP PSW
+        MVI E,03H
+L_1D78:
+        RRC
+        JNC L_1D82
+        MOV B,A
+        MOV A,M
+        ORI 0F0H
+        MOV M,A
+        MOV A,B
+L_1D82:
+        RRC
+        JNC L_1D8C
+        MOV B,A
+        MOV A,M
+        ORI 0FH
+        MOV M,A
+        MOV A,B
+L_1D8C:
+        INX H
+        DCR E
+        JNZ L_1D78
+        RET
+L_1D92:
+        POP PSW
+        PUSH PSW
+        ANI 7FH
+        CPI 40H                     ; '@'
+        JNZ L_1D75
+        MVI E,03H
+L_1D9D:
+        MOV A,M
+        ANI 0F0H
+        CPI 00H
+        JNZ L_1D64
+        MOV A,M
+        ORI 0F0H
+        MOV M,A
+        MOV A,M
+        ANI 0FH
+        CPI 00H
+        JNZ L_1D64
+        MOV A,M
+        ORI 0FH
+        MOV M,A
+        INX H
+        DCR E
+        JNZ L_1D9D
+        JMP L_1D64
+X_1DBD:
+        MOV B,A
+        LDA M_70C0
+        CPI 00H
+        JZ L_1DF0
+        LDA M_70C1
+        CPI 00H
+        JZ L_1DF7
+        LDA M_70C2
+        CPI 00H
+        JZ L_1DFE
+        LDA M_70C0
+        MOV C,A
+        LDA M_70C1
+        STA M_70C0
+        LDA M_70C2
+        STA M_70C1
+        MOV A,B
+        STA M_70C2
+        MOV A,C
+        STC
+        RET
+L_1DED:
+        STC
+        CMC
+        RET
+L_1DF0:
+        MOV A,B
+        STA M_70C0
+        JMP L_1DED
+L_1DF7:
+        MOV A,B
+        STA M_70C1
+        JMP L_1DED
+L_1DFE:
+        MOV A,B
+        STA M_70C2
+        JMP L_1DED
+X_1E05:
+        LDA M_70C0
+        MOV C,A
+        LDA M_70C1
+        STA M_70C0
+        LDA M_70C2
+        STA M_70C1
+        MVI A,00H
+        STA M_70C2
+        MOV A,C
+        RET
+        DB   3AH,11H,6FH,57H,0C3H,2BH,1EH
+SUB_1E23:
+        LDA SLOT_IDX
+        MOV D,A
+        MOV A,C
+        STA SLOT_IDX
+        MOV A,D
+        LXI H,M_7053
+        CALL OLD_MUL10
+        MVI E,0AH
+L_1E34:
+        MVI M,00H
+        INX H
+        DCR E
+        JNZ L_1E34
+        MOV A,D
+        LXI H,SLOTREC_CNT
+        CALL MUL9_INDEX
+        MVI E,08H
+L_1E44:
+        MVI M,00H
+        INX H
+        DCR E
+        JNZ L_1E44
+        RET
+X_1E4C:
+        CALL SUB_1E4F
+SUB_1E4F:
+        CALL SUB_1E52
+SUB_1E52:
+        CALL SUB_1E55
+SUB_1E55:
+        MVI A,0E0H
+        STA KDC_CMD
+        XRA A
+        LXI H,X_1E4C
+L_1E5E:
+        XRA M
+        DCX H
+        INR H
+        DCR H
+        JNZ L_1E5E
+        INR L
+        DCR L
+        JNZ L_1E5E
+        CPI 9AH
+        RET
+        DB   0C4H,0AEH,19H,0C3H,6DH,1EH
+L_1E73:
+        MVI M,00H
+        DCX H
+        MVI M,00H
+        DCX H
+        MVI M,00H
+        DCX H
+        MVI M,00H
+        CALL SUB_1E9B
+        RRC
+        DCX H
+        JC L_1E8F
+        XRA A
+        MOV A,M
+        ADI 01H
+        DAA
+        MOV M,A
+        JMP L_1E98
+L_1E8F:
+        XRA A
+        STC
+        MVI A,98H
+        ACI 00H
+        ADD M
+        DAA
+        MOV M,A
+L_1E98:
+        JMP L_09CB
+SUB_1E9B:
+        LDA M_70C7
+        MOV B,A
+        RLC
+        RLC
+        RLC
+        XRA B
+        RLC
+        CMC
+        RAL
+        STA M_70C7
+        RET
+SUB_1EAA:
+        MVI D,04H
+L_1EAC:
+        STC
+        CMC
+        MOV A,H
+        RAR
+        MOV H,A
+        MOV A,L
+        RAR
+        MOV L,A
+        DCR D
+        JNZ L_1EAC
+        RNC
+        INX H
+        RET
+SUB_1EBB:
+        MVI D,04H
+L_1EBD:
+        MOV A,E
+        RAL
+        MOV E,A
+        MOV A,L
+        RAL
+        MOV L,A
+        MOV A,H
+        RAL
+        MOV H,A
+        DCR D
+        JNZ L_1EBD
+        MOV A,E
+        RLC
+        RNC
+        INX H
+        RET
+SUB_1ECF:
+        LDAX B
+        MOV H,A
+        INX B
+        LDAX B
+        MOV L,A
+        INX B
+        LDAX B
+        MOV E,A
+        INX B
+        RET
+SUB_1ED9:
+        STC
+        MVI A,99H
+        ACI 00H
+        SUB L
+        ADI 00H
+        DAA
+        MOV L,A
+        MVI A,99H
+        ACI 00H
+        SUB H
+        ADI 00H
+        DAA
+        MOV H,A
+        RET
+SUB_1EED:
+        STC
+        MVI A,99H
+        ACI 00H
+        SUB E
+        ADD L
+        DAA
+        MOV L,A
+        MVI A,99H
+        ACI 00H
+        SUB D
+        ADD H
+        DAA
+        MOV H,A
+        RLC
+        RET
+L_1F00:
+        XTHL
+        XRA A
+        MOV A,L
+        ADD C
+        DAA
+        MOV L,A
+        MOV A,H
+        ADC B
+        DAA
+        MOV H,A
+        XTHL
+        JMP L_1F61
+SUB_1F0E:
+        MOV A,L
+        MOV L,H
+        MOV H,A
+        NOP
+        NOP
+        NOP
+        SHLD BCD_TMP_2
+        LXI H,BCD_TMP
+        MVI M,00H
+        INX H
+        MVI M,00H
+        RET
+SUB_1F20:
+        LDA SLOT_IDX
+        CPI 00H
+        JNZ L_1F30
+        PUSH B
+        POP H
+        LXI B,M_70D4
+        JMP COPY4
+L_1F30:
+        PUSH B
+        LXI H,RESET
+        PUSH H
+        CALL SUB_1ECF
+        CALL SUB_1EBB
+        PUSH H
+        LXI B,GRI_VAL
+        CALL SUB_1ECF
+        CALL SUB_1EAA
+        PUSH H
+        LXI B,M_70D6
+        CALL SUB_1ECF
+        MOV A,H
+        RLC
+        MVI A,01H
+        STA M_70D3
+        JNC L_1F5D
+        XRA A
+        STA M_70D3
+        CALL SUB_1ED9
+L_1F5D:
+        PUSH H
+        POP B
+        POP D
+        POP H
+L_1F61:
+        CALL SUB_1EED
+        JC L_1F6A
+        JMP L_1F00
+L_1F6A:
+        POP H
+        CALL SUB_1EAA
+        CALL SUB_1F0E
+        POP B
+        LXI H,BCD_TMP
+        LDA M_70D3
+        CPI 00H
+        JZ BCD_ADD4
+        JMP BCD_SUB4
+        DB   6FH,0CAH,85H,0FH,0EBH,0C1H,0D5H,0E5H
+        DB   78H,0CDH,0E4H,04H,7EH,0F6H,08H,77H
+        DB   0E1H,0C1H,0E5H,1EH,05H,0CDH,0BDH,07H
+        DB   0E1H,06H,05H,0C3H,0FH,08H,78H,2AH
+        DB   36H,6FH,11H,9CH,0FFH,19H,0E6H,08H
+        DB   0CAH,22H,10H,7CH,07H,0DAH,0BCH,0FH
+        DB   3AH,02H,6FH,0CDH,0E4H,04H,07H,07H
+        DB   0DAH,54H,0FH,0C9H,3EH,01H,0F5H,0CDH
+        DB   0E4H,04H,47H,07H,07H,0D2H,18H,10H
+        DB   07H,07H,0DAH,18H,10H,78H,0CDH,0F7H
+        DB   04H,7EH,0E6H,80H,0C2H,18H,10H,0F1H
+        DB   47H,3AH,02H,6FH,0B8H,0C2H,0F7H,0FH
+        DB   3AH,00H,6FH,0FEH,02H,78H,0C2H,19H
+        DB   10H,7EH,0F6H,82H,77H,11H,18H,00H
+        DB   19H,36H,00H,2BH,36H,00H,0C9H,0F5H
+        DB   0E5H,0C5H,78H,07H,4FH,07H,07H,81H

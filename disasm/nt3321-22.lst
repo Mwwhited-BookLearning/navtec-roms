@@ -2,7 +2,7 @@
 ; ---- ORG 0000 ----
 
 ; Reset vector. Interrupts off, jump to INIT.
-RESET:                                       ; refs: lxi0E95 lxi0887 lxi0A77 lxi0D3E lxi0C87 lxi068E
+RESET:                                       ; refs: lxi0E95 lxi0887 lxi0A77 lxi0D3E lxi0C87 lxi1F31 lxi068E
 0000  F3         DI
 D_0003:                                      ; = 0003, inside the next instruction (entered by jumping past the 21H prefix)
 0001  C3 72 00   JMP INIT
@@ -10,7 +10,9 @@ D_0003:                                      ; = 0003, inside the next instructi
 ; Table of six 4-byte packed-BCD constants (little-endian, LS byte first).
 ; BCD_K_00080980 and BCD_K_00000110 are passed to X_0EC1 (missing half).
 BCD_CONST_TBL:                               
-0004  08 88 88 88  DB   08H,88H,88H,88H        ; |....|
+0004  08         DB   08H                    ; |.|
+D_0005:                                      ; refs: lxi1A03 lxi1A06 lxi1AA0 lxi1AAB
+0005  88 88 88   DB   88H,88H,88H            ; |...|
 D_0008:                                      ; refs: lxi0EAC lxi0EC7 lxi0CCE
 0008  00 00 02   DB   00H,00H,02H            ; |...|
 D_000B:                                      ; refs: lxi0EB2 lxi0ECD lxi0CF5
@@ -48,7 +50,7 @@ CPY4_TO_TOA:                                 ; xref: c0303 c03DC c0360
 002E  C3 BB 07   JMP COPY4
 
 ; Three orphan bytes (never reached).
-ORPHAN_0031:                                 
+ORPHAN_0031:                                 ; refs: r1A33
 0031  30 18 3A   DB   30H,18H,3AH            ; |0.:|
 
 ; RST 6.5 interrupt: receiver sample-ready strobe.
@@ -686,7 +688,7 @@ READ_PHASE:                                  ; xref: c0A3C c039D
 ; GET_SLOT_FLAGS: A = SLOT_FLAGS[SLOT_IDX].  GET_FLAGS_A: A = SLOT_FLAGS[A].
 GET_SLOT_FLAGS:                              ; xref: c024D c08F4 c0522
 04E1  3A 11 6F   LDA SLOT_IDX
-GET_FLAGS_A:                                 ; xref: c0F71 c0F89 c0FBF c0E3A c16CC c04F4 c029A c02CF c0F1C c0F26 c0F42 c0FB3 c0EFD
+GET_FLAGS_A:                                 ; xref: c0F71 c0F89 c0FBF c0E3A c16CC c181E c04F4 c029A c02CF c0F1C c0F26 c0F42 c0FB3 c0EFD
 04E4  21 04 6F   LXI H,SLOT_FLAGS
 04E7  85         ADD L
 04E8  6F         MOV L,A
@@ -697,6 +699,7 @@ GET_FLAGS_A:                                 ; xref: c0F71 c0F89 c0FBF c0E3A c16
 ; Slot 0 = REC_MASTER; otherwise REC_SEC + 25 * (flags & 3).
 GET_SLOT_REC:                                ; xref: c0528
 04EB  3A 11 6F   LDA SLOT_IDX
+SUB_04EE:                                    ; xref: c1810 c1852
 04EE  21 24 6F   LXI H,REC_MASTER
 04F1  FE 00      CPI 00H
 04F3  C8         RZ
@@ -718,7 +721,7 @@ REC_INDEX_LOOP:                              ; xref: j0508
 0508  C3 05 05   JMP REC_INDEX_LOOP
 
 ; MUL9_INDEX: A = (HL + 9*A). Patched: the original x10 body survives at OLD_MUL10.
-MUL9_INDEX:                                  ; xref: c1062 c102E c09F5 c17E7
+MUL9_INDEX:                                  ; xref: c1062 c102E c09F5 c1CAD c1C57 c17E7 c182C c1E3F
 050B  C5         PUSH B
 050C  47         MOV B,A
 050D  07         RLC
@@ -729,7 +732,7 @@ MUL9_INDEX:                                  ; xref: c1062 c102E c09F5 c17E7
 0512  C3 1B 05   JMP MUL9_INDEX_2
 
 ; OLD_MUL10: dead code left by an in-place patch (PUSH B / RLC / MOV C,A / RLC / RLC / ADD C).
-OLD_MUL10:                                   ; xref: c0922 c0A28
+OLD_MUL10:                                   ; xref: c0922 c0A28 c1B1F c1B36 c1B54 c1BB0 c1BC7 c1BEB c1CB5 c1801 c1E2F
 0515  C5 07 4F 07 07 81  DB   0C5H,07H,4FH,07H,07H,81H; |..O...|
 MUL9_INDEX_2:                                ; xref: j0512
 051B  4F         MOV C,A
@@ -1130,7 +1133,7 @@ CALC_TD_EXIT:                                ; xref: j0772
 
 ; BCD_ADD4: (BC) += (HL), 4 packed-BCD bytes, LS byte first.
 ; PTR_TO_MSB: HL += DE-1, BC += DE-1 (point both at the MS byte).
-BCD_ADD4:                                    ; xref: c10BA j0704 c0DA1 j0EC4 c0933 c0939 c0CD1 c0CF8 c0942
+BCD_ADD4:                                    ; xref: c10BA j0704 c0DA1 j0EC4 c0933 c0939 c0CD1 c0CF8 j1F7A c0942
 0782  11 04 00   LXI D,0004H                 ; DE = 4 bytes
 0785  CD 94 07   CALL PTR_TO_MSB
 0788  AF         XRA A
@@ -1158,7 +1161,7 @@ PTR_TO_MSB:                                  ; xref: c0785 c07A2
 079E  C9         RET
 
 ; BCD_SUB4: (BC) -= (HL), 4 packed-BCD bytes, ten's-complement subtract.
-BCD_SUB4:                                    ; xref: c1088 c109E j0707 j0DAD j0EA9 c0CE2
+BCD_SUB4:                                    ; xref: c1088 c109E j0707 j0DAD j0EA9 c0CE2 j1F7D
 079F  11 04 00   LXI D,0004H                 ; DE = 4 bytes
 07A2  CD 94 07   CALL PTR_TO_MSB
 07A5  D5         PUSH D
@@ -1182,7 +1185,7 @@ BCD_SUB4_LOOP:                               ; xref: j07B8
 07B8  C3 AA 07   JMP BCD_SUB4_LOOP
 
 ; COPY4: copy 4 bytes (HL) -> (BC).  COPY_E: copy E bytes.
-COPY4:                                       ; xref: c107B c0740 c077B c075E c076A c0146 c015A c0DBA j002E c0374
+COPY4:                                       ; xref: c107B c0740 c077B c075E c076A c0146 c015A c0DBA j1F2D j002E c0374
 07BB  1E 04      MVI E,04H
 COPY_E:                                      ; xref: j07C2 c0F95 j0530
 07BD  7E         MOV A,M
@@ -1504,7 +1507,7 @@ L_09B1:                                      ; xref: j09AC
 09C6  36 99      MVI M,99H
 09C8  23         INX H
 09C9  36 80      MVI M,80H
-L_09CB:                                      ; xref: j0972 j09BD
+L_09CB:                                      ; xref: j0972 j09BD j1E98
 09CB  C1         POP B
 09CC  3A A1 6F   LDA CUR_REC
 09CF  E6 80      ANI 80H
@@ -2964,7 +2967,7 @@ PV_SCALE:                                    ; xref: j13B3 j13C5
 ; DISP_REFRESH: write the 8279 display RAM (cmd 90H = write, auto-inc, addr 0).
 ; 7 bytes: 3 pairs interleaving high nibbles of 7034..7036 with 7037..7039, then 703A.
 ; Never reached from the dumped halves; called from the missing half.
-DISP_REFRESH:                                
+DISP_REFRESH:                                ; xref: j1CF0
 13E7  3E 90      MVI A,90H
 13E9  32 01 D0   STA KDC_CMD
 13EC  01 37 70   LXI B,M_7037
@@ -3513,5 +3516,1034 @@ RPT_FORMAT:                                  ; xref: j17D0
 17F8  21 1F 6F   LXI H,GRI_BCD_HI
 17FB  C3 04 18   JMP X_1804
 RPT_ITEM_OFS:                                ; xref: j17F5
-17FE  21 56 FF   LXI H,0FF56H                ; operand high byte is at 1800 in the undumped half: real value unknown (dump shows 0FFH)
-1801  FF ...     ; unprogrammed (0FFH) through 1FFF -- 2047 bytes not present in dump
+17FE  21 56 70   LXI H,7056H                 ; operand high byte is at 1800 in the undumped half: real value unknown (dump shows 0FFH)
+1801  CD 15 05   CALL OLD_MUL10
+X_1804:                                      ; xref: j17FB
+1804  CD 85 18   CALL SUB_1885
+1807  CD 78 18   CALL X_1878
+180A  CD 78 18   CALL X_1878
+180D  3A D0 70   LDA RPT_STATE
+1810  CD EE 04   CALL SUB_04EE
+1813  7E         MOV A,M
+1814  E6 20      ANI 20H                     ; ' '
+1816  FE 00      CPI 00H
+1818  CA 36 18   JZ L_1836
+181B  3A D0 70   LDA RPT_STATE
+181E  CD E4 04   CALL GET_FLAGS_A
+1821  E6 20      ANI 20H                     ; ' '
+1823  CA 36 18   JZ L_1836
+1826  3A D0 70   LDA RPT_STATE
+1829  21 F4 6F   LXI H,M_6FF4
+182C  CD 0B 05   CALL MUL9_INDEX
+182F  FE 00      CPI 00H
+1831  3E 42      MVI A,42H                   ; 'B'
+1833  C2 38 18   JNZ L_1838
+L_1836:                                      ; xref: j1818 j1823
+1836  3E 20      MVI A,20H                   ; ' '
+L_1838:                                      ; xref: j1833
+1838  CD 6D 18   CALL SUB_186D
+183B  3A D0 70   LDA RPT_STATE
+183E  4F         MOV C,A
+183F  06 00      MVI B,00H
+1841  21 04 6F   LXI H,SLOT_FLAGS
+1844  09         DAD B
+1845  7E         MOV A,M
+1846  E6 20      ANI 20H                     ; ' '
+1848  FE 20      CPI 20H                     ; ' '
+184A  3E 4C      MVI A,4CH                   ; 'L'
+184C  C2 6D 18   JNZ SUB_186D
+184F  3A D0 70   LDA RPT_STATE
+1852  CD EE 04   CALL SUB_04EE
+1855  7E         MOV A,M
+1856  E6 20      ANI 20H                     ; ' '
+1858  FE 00      CPI 00H
+185A  3E 55      MVI A,55H                   ; 'U'
+185C  CA 6D 18   JZ SUB_186D
+185F  3A 24 6F   LDA REC_MASTER
+1862  E6 20      ANI 20H                     ; ' '
+1864  FE 00      CPI 00H
+1866  3E 4D      MVI A,4DH                   ; 'M'
+1868  CA 6D 18   JZ SUB_186D
+186B  3E 20      MVI A,20H                   ; ' '
+SUB_186D:                                    ; xref: c1838 j184C j185C j1868 c187C c1880 c1887 c188F c1894 j1898 c189D c18A5 c1942 c1947 c1953 c197D j1981 j1987
+186D  E5         PUSH H
+186E  2A D1 70   LHLD PRTBUF_PTR
+1871  77         MOV M,A
+1872  23         INX H
+1873  22 D1 70   SHLD PRTBUF_PTR
+1876  E1         POP H
+1877  C9         RET
+X_1878:                                      ; xref: c17ED c1807 c180A
+1878  7E         MOV A,M
+1879  CD AA 18   CALL SUB_18AA
+187C  CD 6D 18   CALL SUB_186D
+187F  78         MOV A,B
+1880  CD 6D 18   CALL SUB_186D
+1883  2B         DCX H
+1884  C9         RET
+SUB_1885:                                    ; xref: c1804
+1885  3E 20      MVI A,20H                   ; ' '
+1887  CD 6D 18   CALL SUB_186D
+188A  7E         MOV A,M
+188B  2B         DCX H
+188C  CD AA 18   CALL SUB_18AA
+188F  CD 6D 18   CALL SUB_186D
+1892  3E 2E      MVI A,2EH                   ; '.'
+1894  CD 6D 18   CALL SUB_186D
+1897  78         MOV A,B
+1898  C3 6D 18   JMP SUB_186D
+X_189B:                                      ; xref: c17EA
+189B  3E 20      MVI A,20H                   ; ' '
+189D  CD 6D 18   CALL SUB_186D
+18A0  7E         MOV A,M
+18A1  CD AA 18   CALL SUB_18AA
+18A4  78         MOV A,B
+18A5  CD 6D 18   CALL SUB_186D
+18A8  2B         DCX H
+18A9  C9         RET
+SUB_18AA:                                    ; xref: c1879 c188C c18A1 c197A c1984
+18AA  4F         MOV C,A
+18AB  0F         RRC
+18AC  0F         RRC
+18AD  0F         RRC
+18AE  0F         RRC
+18AF  CD B4 18   CALL SUB_18B4
+18B2  47         MOV B,A
+18B3  79         MOV A,C
+SUB_18B4:                                    ; xref: c18AF
+18B4  E6 0F      ANI 0FH
+18B6  FE 0A      CPI 0AH
+18B8  FA BD 18   JM L_18BD
+18BB  C6 07      ADI 07H
+L_18BD:                                      ; xref: j18B8
+18BD  C6 30      ADI 30H                     ; '0'
+18BF  C9         RET
+X_18C0:                                      ; xref: c0488
+18C0  3A 3D 70   LDA TICK_BCD
+18C3  FE 00      CPI 00H
+18C5  C2 FE 18   JNZ L_18FE
+18C8  3A 4F 70   LDA VAR_704F
+18CB  3C         INR A
+18CC  27         DAA
+18CD  FE 60      CPI 60H                     ; '`'
+18CF  32 4F 70   STA VAR_704F
+18D2  C2 FE 18   JNZ L_18FE
+18D5  3E 00      MVI A,00H
+18D7  32 4F 70   STA VAR_704F
+18DA  3A CD 70   LDA SW_LO
+18DD  3C         INR A
+18DE  27         DAA
+18DF  FE 60      CPI 60H                     ; '`'
+18E1  32 CD 70   STA SW_LO
+18E4  C2 FE 18   JNZ L_18FE
+18E7  3E 00      MVI A,00H
+18E9  32 CD 70   STA SW_LO
+18EC  3A CC 70   LDA SW_HI
+18EF  3C         INR A
+18F0  27         DAA
+18F1  FE 24      CPI 24H                     ; '$'
+18F3  32 CC 70   STA SW_HI
+18F6  C2 FE 18   JNZ L_18FE
+18F9  3E 00      MVI A,00H
+18FB  32 CC 70   STA SW_HI
+L_18FE:                                      ; xref: j18C5 j18D2 j18E4 j18F6
+18FE  3A BF 70   LDA STATUS_BITS
+1901  07         RLC
+1902  D8         RC
+1903  3A BD 70   LDA VAR_70BD
+1906  3C         INR A
+1907  3C         INR A
+1908  27         DAA
+1909  32 BD 70   STA VAR_70BD
+190C  FE 00      CPI 00H
+190E  C0         RNZ
+190F  3A BE 70   LDA VAR_70BE
+1912  3C         INR A
+1913  27         DAA
+1914  FE 60      CPI 60H                     ; '`'
+1916  32 BE 70   STA VAR_70BE
+1919  C0         RNZ
+191A  3E 00      MVI A,00H
+191C  32 BE 70   STA VAR_70BE
+191F  3A 50 70   LDA VAR_7050
+1922  3C         INR A
+1923  27         DAA
+1924  FE 60      CPI 60H                     ; '`'
+1926  32 50 70   STA VAR_7050
+1929  C0         RNZ
+192A  3E 00      MVI A,00H
+192C  32 50 70   STA VAR_7050
+192F  3A 51 70   LDA VAR_7051
+1932  3C         INR A
+1933  27         DAA
+1934  FE 24      CPI 24H                     ; '$'
+1936  32 51 70   STA VAR_7051
+1939  C0         RNZ
+193A  3E 00      MVI A,00H
+193C  32 51 70   STA VAR_7051
+193F  C9         RET
+X_1940:                                      ; xref: j17B1
+1940  3E 0A      MVI A,0AH
+1942  CD 6D 18   CALL SUB_186D
+1945  3E 0D      MVI A,0DH
+1947  CD 6D 18   CALL SUB_186D
+194A  3A 3C 70   LDA BTN_STATE
+194D  07         RLC
+194E  07         RLC
+194F  E6 03      ANI 03H
+1951  F6 30      ORI 30H                     ; '0'
+1953  CD 6D 18   CALL SUB_186D
+1956  3A C8 70   LDA SW_D1
+1959  CD 84 19   CALL SUB_1984
+195C  3A C6 6F   LDA SEL_B
+195F  CD 84 19   CALL SUB_1984
+1962  3A C5 6F   LDA SEL_A
+1965  CD 84 19   CALL SUB_1984
+1968  3A 4F 70   LDA VAR_704F
+196B  CD 7A 19   CALL SUB_197A
+196E  3A CD 70   LDA SW_LO
+1971  CD 7A 19   CALL SUB_197A
+1974  3A CC 70   LDA SW_HI
+1977  C3 7A 19   JMP SUB_197A
+SUB_197A:                                    ; xref: c196B c1971 j1977
+197A  CD AA 18   CALL SUB_18AA
+197D  CD 6D 18   CALL SUB_186D
+1980  78         MOV A,B
+1981  C3 6D 18   JMP SUB_186D
+SUB_1984:                                    ; xref: c1959 c195F c1965
+1984  CD AA 18   CALL SUB_18AA
+1987  C3 6D 18   JMP SUB_186D
+D_198A:                                      ; refs: lxi19BE
+198A  AA AB BB AA AB BB  DB   0AAH,0ABH,0BBH,0AAH,0ABH,0BBH; |......|
+X_1990:                                      ; xref: c1435
+1990  06 01      MVI B,01H
+1992  C3 B8 19   JMP L_19B8
+X_1995:                                      ; xref: c144A
+1995  06 02      MVI B,02H
+1997  C3 B8 19   JMP L_19B8
+X_199A:                                      ; xref: c145C c1467
+199A  06 03      MVI B,03H
+199C  C3 B8 19   JMP L_19B8
+X_199F:                                      ; xref: c147B
+199F  06 04      MVI B,04H
+19A1  C3 B8 19   JMP L_19B8
+X_19A4:                                      ; xref: c148C
+19A4  06 05      MVI B,05H
+19A6  C3 B8 19   JMP L_19B8
+X_19A9:                                      ; xref: c14A5
+19A9  06 06      MVI B,06H
+19AB  C3 B8 19   JMP L_19B8
+19AE  06 07 C3 B8 19 06 08 C3  DB   06H,07H,0C3H,0B8H,19H,06H,08H,0C3H; |........|
+19B6  B8 19      DB   0B8H,19H               ; |..|
+L_19B8:                                      ; xref: j1992 j1997 j199C j19A1 j19A6 j19AB
+19B8  C5         PUSH B
+19B9  1E 06      MVI E,06H
+19BB  21 34 70   LXI H,M_7034
+19BE  01 8A 19   LXI B,D_198A
+L_19C1:                                      ; xref: j19C6
+19C1  0A         LDAX B
+19C2  77         MOV M,A
+19C3  03         INX B
+19C4  23         INX H
+19C5  1D         DCR E
+19C6  C2 C1 19   JNZ L_19C1
+19C9  C1         POP B
+19CA  AF         XRA A
+19CB  78         MOV A,B
+19CC  27         DAA
+19CD  32 38 70   STA M_7038
+19D0  AF         XRA A
+19D1  78         MOV A,B
+19D2  27         DAA
+19D3  32 35 70   STA M_7035
+19D6  21 34 70   LXI H,M_7034
+19D9  01 37 70   LXI B,M_7037
+19DC  3E 33      MVI A,33H                   ; '3'
+19DE  32 B7 70   STA M_70B7
+19E1  32 B8 70   STA M_70B8
+19E4  C3 EA 1C   JMP L_1CEA
+X_19E7:                                      ; xref: c14D6
+19E7  3A CB 70   LDA SW_D4
+19EA  FE 0B      CPI 0BH
+19EC  CA 23 1A   JZ L_1A23
+19EF  3A BB 70   LDA M_70BB
+19F2  FE 19      CPI 19H
+19F4  CA 0C 1A   JZ L_1A0C
+19F7  3C         INR A
+19F8  32 BB 70   STA M_70BB
+L_19FB:                                      ; xref: j1A95
+19FB  3E 00      MVI A,00H
+19FD  32 B7 70   STA M_70B7
+1A00  32 B8 70   STA M_70B8
+L_1A03:                                      ; xref: j1A20
+1A03  21 05 00   LXI H,D_0005
+1A06  01 05 00   LXI B,D_0005
+1A09  C3 EA 1C   JMP L_1CEA
+L_1A0C:                                      ; xref: j19F4
+1A0C  3A BC 70   LDA M_70BC
+1A0F  FE 19      CPI 19H
+1A11  CA 23 1A   JZ L_1A23
+1A14  3C         INR A
+1A15  32 BC 70   STA M_70BC
+1A18  3E 3F      MVI A,3FH                   ; '?'
+1A1A  32 B7 70   STA M_70B7
+1A1D  32 B8 70   STA M_70B8
+1A20  C3 03 1A   JMP L_1A03
+L_1A23:                                      ; xref: j19EC j1A11
+1A23  3A C9 70   LDA SW_D2
+1A26  FE 0B      CPI 0BH
+1A28  C2 51 1A   JNZ L_1A51
+1A2B  3E 00      MVI A,00H
+1A2D  32 B7 70   STA M_70B7
+1A30  32 B8 70   STA M_70B8
+1A33  3A 31 00   LDA ORPHAN_0031
+1A36  32 34 70   STA M_7034
+1A39  3E FF      MVI A,0FFH
+1A3B  32 35 70   STA M_7035
+1A3E  3A 4D 1A   LDA D_1A4D
+1A41  32 36 70   STA M_7036
+1A44  21 34 70   LXI H,M_7034
+1A47  01 4E 1A   LXI B,D_1A4E
+1A4A  C3 EA 1C   JMP L_1CEA
+D_1A4D:                                      ; refs: r1A3E
+1A4D  30         DB   30H                    ; |0|
+D_1A4E:                                      ; refs: lxi1A47
+1A4E  11 FF 78   DB   11H,0FFH,78H           ; |..x|
+L_1A51:                                      ; xref: j1A28
+1A51  FE 0A      CPI 0AH
+1A53  CA 5E 1A   JZ L_1A5E
+1A56  3A CA 70   LDA SW_D3
+1A59  FE 0A      CPI 0AH
+1A5B  C2 D5 1A   JNZ L_1AD5
+L_1A5E:                                      ; xref: j1A53
+1A5E  3E 00      MVI A,00H
+1A60  32 B7 70   STA M_70B7
+1A63  32 B8 70   STA M_70B8
+1A66  3A C5 6F   LDA SEL_A
+1A69  32 34 70   STA M_7034
+1A6C  3A C6 6F   LDA SEL_B
+1A6F  32 35 70   STA M_7035
+1A72  3A C8 70   LDA SW_D1
+1A75  32 36 70   STA M_7036
+1A78  3A C9 70   LDA SW_D2
+1A7B  32 37 70   STA M_7037
+1A7E  3A CA 70   LDA SW_D3
+1A81  32 38 70   STA M_7038
+1A84  3A CB 70   LDA SW_D4
+1A87  32 39 70   STA M_7039
+1A8A  21 34 70   LXI H,M_7034
+1A8D  01 37 70   LXI B,M_7037
+1A90  3A 3C 70   LDA BTN_STATE
+1A93  E6 80      ANI 80H
+1A95  C2 FB 19   JNZ L_19FB
+1A98  3A C4 6F   LDA BUTTONS
+1A9B  E6 40      ANI 40H                     ; '@'
+1A9D  CA A3 1A   JZ L_1AA3
+1AA0  21 05 00   LXI H,D_0005
+L_1AA3:                                      ; xref: j1A9D
+1AA3  3A C4 6F   LDA BUTTONS
+1AA6  E6 80      ANI 80H
+1AA8  CA AE 1A   JZ L_1AAE
+1AAB  01 05 00   LXI B,D_0005
+L_1AAE:                                      ; xref: j1AA8
+1AAE  C3 EA 1C   JMP L_1CEA
+L_1AB1:                                      ; xref: j1ADA
+1AB1  3A 04 6F   LDA SLOT_FLAGS
+1AB4  07         RLC
+1AB5  07         RLC
+1AB6  DA CA 1A   JC L_1ACA
+1AB9  3E 43      MVI A,43H                   ; 'C'
+1ABB  32 B7 70   STA M_70B7
+1ABE  32 B8 70   STA M_70B8
+1AC1  21 1C 6F   LXI H,GRI_BCD
+1AC4  01 1C 6F   LXI B,GRI_BCD
+1AC7  C3 EA 1C   JMP L_1CEA
+L_1ACA:                                      ; xref: j1AB6
+1ACA  3E 00      MVI A,00H
+1ACC  32 B7 70   STA M_70B7
+1ACF  32 B8 70   STA M_70B8
+1AD2  C3 14 1B   JMP L_1B14
+L_1AD5:                                      ; xref: j1A5B
+1AD5  3A C6 6F   LDA SEL_B
+1AD8  FE 0C      CPI 0CH
+1ADA  C2 B1 1A   JNZ L_1AB1
+1ADD  3E 00      MVI A,00H
+1ADF  32 B7 70   STA M_70B7
+1AE2  3E 40      MVI A,40H                   ; '@'
+1AE4  32 B8 70   STA M_70B8
+1AE7  3A CC 70   LDA SW_HI
+1AEA  32 34 70   STA M_7034
+1AED  3A CD 70   LDA SW_LO
+1AF0  32 35 70   STA M_7035
+1AF3  3A 4F 70   LDA VAR_704F
+1AF6  32 36 70   STA M_7036
+1AF9  3A BE 70   LDA VAR_70BE
+1AFC  32 39 70   STA M_7039
+1AFF  3A 50 70   LDA VAR_7050
+1B02  32 38 70   STA M_7038
+1B05  3A 51 70   LDA VAR_7051
+1B08  32 37 70   STA M_7037
+1B0B  21 34 70   LXI H,M_7034
+1B0E  01 37 70   LXI B,M_7037
+1B11  C3 EA 1C   JMP L_1CEA
+L_1B14:                                      ; xref: j1AD2
+1B14  3A C5 6F   LDA SEL_A
+1B17  FE 0A      CPI 0AH
+1B19  F2 C5 1C   JP L_1CC5
+1B1C  21 53 70   LXI H,M_7053
+1B1F  CD 15 05   CALL OLD_MUL10
+1B22  32 B7 70   STA M_70B7
+1B25  23         INX H
+1B26  7E         MOV A,M
+1B27  FE 00      CPI 00H
+1B29  C2 9F 1B   JNZ L_1B9F
+1B2C  3A C5 6F   LDA SEL_A
+1B2F  3D         DCR A
+1B30  CA 48 1B   JZ L_1B48
+1B33  21 53 70   LXI H,M_7053
+1B36  CD 15 05   CALL OLD_MUL10
+1B39  F6 80      ORI 80H
+1B3B  32 B7 70   STA M_70B7
+1B3E  23         INX H
+1B3F  3A C5 6F   LDA SEL_A
+1B42  CD 3F 1C   CALL SUB_1C3F
+1B45  D2 9F 1B   JNC L_1B9F
+L_1B48:                                      ; xref: j1B30
+1B48  3A C5 6F   LDA SEL_A
+1B4B  3C         INR A
+1B4C  FE 0A      CPI 0AH
+1B4E  CA 6C 1B   JZ L_1B6C
+1B51  21 53 70   LXI H,M_7053
+1B54  CD 15 05   CALL OLD_MUL10
+1B57  F6 80      ORI 80H
+1B59  32 B7 70   STA M_70B7
+1B5C  23         INX H
+1B5D  7E         MOV A,M
+1B5E  FE 00      CPI 00H
+1B60  CA 6C 1B   JZ L_1B6C
+1B63  3A C5 6F   LDA SEL_A
+1B66  CD 3F 1C   CALL SUB_1C3F
+1B69  D2 9F 1B   JNC L_1B9F
+L_1B6C:                                      ; xref: j1B4E j1B60
+1B6C  3E 77      MVI A,77H                   ; 'w'
+1B6E  32 B7 70   STA M_70B7
+1B71  3A C5 6F   LDA SEL_A
+1B74  32 35 70   STA M_7035
+1B77  FE 0A      CPI 0AH
+1B79  DA 7E 1B   JC L_1B7E
+1B7C  3E 00      MVI A,00H
+L_1B7E:                                      ; xref: j1B79
+1B7E  4F         MOV C,A
+1B7F  06 00      MVI B,00H
+1B81  21 04 6F   LXI H,SLOT_FLAGS
+1B84  09         DAD B
+1B85  7E         MOV A,M
+1B86  E6 C0      ANI 0C0H
+1B88  FE 80      CPI 80H
+1B8A  3A C5 6F   LDA SEL_A
+1B8D  C2 9C 1B   JNZ L_1B9C
+1B90  E6 0F      ANI 0FH
+1B92  F6 50      ORI 50H                     ; 'P'
+1B94  32 35 70   STA M_7035
+1B97  3E F7      MVI A,0F7H
+1B99  32 B7 70   STA M_70B7
+L_1B9C:                                      ; xref: j1B8D
+1B9C  21 34 70   LXI H,M_7034
+L_1B9F:                                      ; xref: j1B29 j1B45 j1B69
+1B9F  E5         PUSH H
+1BA0  3A C6 6F   LDA SEL_B
+1BA3  FE 0A      CPI 0AH
+1BA5  CA 51 1C   JZ L_1C51
+1BA8  FE 0B      CPI 0BH
+1BAA  CA 65 1C   JZ L_1C65
+L_1BAD:                                      ; xref: j1CDB
+1BAD  21 53 70   LXI H,M_7053
+1BB0  CD 15 05   CALL OLD_MUL10
+1BB3  32 B8 70   STA M_70B8
+1BB6  23         INX H
+1BB7  7E         MOV A,M
+1BB8  FE 00      CPI 00H
+1BBA  C2 39 1C   JNZ L_1C39
+1BBD  3A C6 6F   LDA SEL_B
+1BC0  3D         DCR A
+1BC1  CA DF 1B   JZ L_1BDF
+1BC4  21 53 70   LXI H,M_7053
+1BC7  CD 15 05   CALL OLD_MUL10
+1BCA  F6 80      ORI 80H
+1BCC  32 B8 70   STA M_70B8
+1BCF  23         INX H
+1BD0  7E         MOV A,M
+1BD1  FE 00      CPI 00H
+1BD3  CA DF 1B   JZ L_1BDF
+1BD6  3A C6 6F   LDA SEL_B
+1BD9  CD 3F 1C   CALL SUB_1C3F
+1BDC  D2 39 1C   JNC L_1C39
+L_1BDF:                                      ; xref: j1BC1 j1BD3
+1BDF  3A C6 6F   LDA SEL_B
+1BE2  3C         INR A
+1BE3  FE 0A      CPI 0AH
+1BE5  CA 03 1C   JZ L_1C03
+1BE8  21 53 70   LXI H,M_7053
+1BEB  CD 15 05   CALL OLD_MUL10
+1BEE  F6 80      ORI 80H
+1BF0  32 B8 70   STA M_70B8
+1BF3  23         INX H
+1BF4  7E         MOV A,M
+1BF5  FE 00      CPI 00H
+1BF7  CA 03 1C   JZ L_1C03
+1BFA  3A C6 6F   LDA SEL_B
+1BFD  CD 3F 1C   CALL SUB_1C3F
+1C00  D2 39 1C   JNC L_1C39
+L_1C03:                                      ; xref: j1BE5 j1BF7
+1C03  3E 77      MVI A,77H                   ; 'w'
+1C05  32 B8 70   STA M_70B8
+1C08  3A C6 6F   LDA SEL_B
+1C0B  FE 0A      CPI 0AH
+1C0D  DA 12 1C   JC L_1C12
+1C10  3E 00      MVI A,00H
+L_1C12:                                      ; xref: j1C0D
+1C12  4F         MOV C,A
+1C13  06 00      MVI B,00H
+1C15  21 04 6F   LXI H,SLOT_FLAGS
+1C18  09         DAD B
+1C19  7E         MOV A,M
+1C1A  E6 C0      ANI 0C0H
+1C1C  FE 80      CPI 80H
+1C1E  3A C6 6F   LDA SEL_B
+1C21  32 38 70   STA M_7038
+1C24  C2 33 1C   JNZ L_1C33
+1C27  E6 0F      ANI 0FH
+1C29  F6 50      ORI 50H                     ; 'P'
+1C2B  32 38 70   STA M_7038
+1C2E  3E F7      MVI A,0F7H
+1C30  32 B8 70   STA M_70B8
+L_1C33:                                      ; xref: j1C24
+1C33  01 37 70   LXI B,M_7037
+1C36  C3 3B 1C   JMP L_1C3B
+L_1C39:                                      ; xref: j1BBA j1BDC j1C00
+1C39  44         MOV B,H
+1C3A  4D         MOV C,L
+L_1C3B:                                      ; xref: j1C36
+1C3B  E1         POP H
+1C3C  C3 EA 1C   JMP L_1CEA
+SUB_1C3F:                                    ; xref: c1B42 c1B66 c1BD9 c1BFD
+1C3F  07         RLC
+1C40  07         RLC
+1C41  07         RLC
+1C42  07         RLC
+1C43  E6 F0      ANI 0F0H
+1C45  D6 09      SUI 09H
+1C47  BE         CMP M
+1C48  D2 4F 1C   JNC L_1C4F
+1C4B  C6 1B      ADI 1BH
+1C4D  BE         CMP M
+1C4E  D0         RNC
+L_1C4F:                                      ; xref: j1C48
+1C4F  37         STC
+1C50  C9         RET
+L_1C51:                                      ; xref: j1BA5
+1C51  3A C5 6F   LDA SEL_A
+1C54  21 EF 6F   LXI H,M_6FEF
+1C57  CD 0B 05   CALL MUL9_INDEX
+1C5A  44         MOV B,H
+1C5B  4D         MOV C,L
+1C5C  3E 40      MVI A,40H                   ; '@'
+1C5E  32 B8 70   STA M_70B8
+1C61  E1         POP H
+1C62  C3 EA 1C   JMP L_1CEA
+L_1C65:                                      ; xref: j1BAA j1CD8
+1C65  E1         POP H
+1C66  3A B9 70   LDA M_70B9
+1C69  5F         MOV E,A
+1C6A  3A 3D 70   LDA TICK_BCD
+1C6D  FE 00      CPI 00H
+1C6F  C2 A9 1C   JNZ L_1CA9
+1C72  3A 4F 70   LDA VAR_704F
+1C75  E6 0F      ANI 0FH
+1C77  C2 A9 1C   JNZ L_1CA9
+1C7A  3A B9 70   LDA M_70B9
+1C7D  32 BA 70   STA M_70BA
+L_1C80:                                      ; xref: j1CA6
+1C80  3A B9 70   LDA M_70B9
+1C83  3C         INR A
+1C84  32 B9 70   STA M_70B9
+1C87  FE 0A      CPI 0AH
+1C89  C2 91 1C   JNZ L_1C91
+1C8C  3E 00      MVI A,00H
+1C8E  32 B9 70   STA M_70B9
+L_1C91:                                      ; xref: j1C89
+1C91  4F         MOV C,A
+1C92  5F         MOV E,A
+1C93  06 00      MVI B,00H
+1C95  21 04 6F   LXI H,SLOT_FLAGS
+1C98  09         DAD B
+1C99  7E         MOV A,M
+1C9A  E6 C0      ANI 0C0H
+1C9C  FE C0      CPI 0C0H
+1C9E  CA A9 1C   JZ L_1CA9
+1CA1  3A BA 70   LDA M_70BA
+1CA4  BB         CMP E
+1CA5  C8         RZ
+1CA6  C3 80 1C   JMP L_1C80
+L_1CA9:                                      ; xref: j1C6F j1C77 j1C9E
+1CA9  7B         MOV A,E
+1CAA  21 EF 6F   LXI H,M_6FEF
+1CAD  CD 0B 05   CALL MUL9_INDEX
+1CB0  E5         PUSH H
+1CB1  7B         MOV A,E
+1CB2  21 53 70   LXI H,M_7053
+1CB5  CD 15 05   CALL OLD_MUL10
+1CB8  32 B7 70   STA M_70B7
+1CBB  3E 40      MVI A,40H                   ; '@'
+1CBD  32 B8 70   STA M_70B8
+1CC0  23         INX H
+1CC1  C1         POP B
+1CC2  C3 EA 1C   JMP L_1CEA
+L_1CC5:                                      ; xref: j1B19
+1CC5  21 53 70   LXI H,M_7053
+1CC8  7E         MOV A,M
+1CC9  32 B7 70   STA M_70B7
+1CCC  23         INX H
+1CCD  E5         PUSH H
+1CCE  3A C6 6F   LDA SEL_B
+1CD1  FE 0A      CPI 0AH
+1CD3  CA DE 1C   JZ L_1CDE
+1CD6  FE 0B      CPI 0BH
+1CD8  CA 65 1C   JZ L_1C65
+1CDB  C3 AD 1B   JMP L_1BAD
+L_1CDE:                                      ; xref: j1CD3
+1CDE  01 EF 6F   LXI B,M_6FEF
+1CE1  3E 40      MVI A,40H                   ; '@'
+1CE3  32 B8 70   STA M_70B8
+1CE6  E1         POP H
+1CE7  C3 EA 1C   JMP L_1CEA
+L_1CEA:                                      ; xref: j1A09 j1A4A j1AAE j1B11 j1AC7 j1C3C j1CC2 j1C62 j1CE7 j19E4
+1CEA  CD F3 1C   CALL SUB_1CF3
+1CED  CD 10 1D   CALL SUB_1D10
+1CF0  C3 E7 13   JMP DISP_REFRESH
+SUB_1CF3:                                    ; xref: c1CEA
+1CF3  1E 03      MVI E,03H
+1CF5  E5         PUSH H
+1CF6  21 37 70   LXI H,M_7037
+L_1CF9:                                      ; xref: j1CFE
+1CF9  0A         LDAX B
+1CFA  77         MOV M,A
+1CFB  23         INX H
+1CFC  03         INX B
+1CFD  1D         DCR E
+1CFE  C2 F9 1C   JNZ L_1CF9
+1D01  1E 03      MVI E,03H
+1D03  E1         POP H
+1D04  01 34 70   LXI B,M_7034
+L_1D07:                                      ; xref: j1D0C
+1D07  7E         MOV A,M
+1D08  02         STAX B
+1D09  23         INX H
+1D0A  03         INX B
+1D0B  1D         DCR E
+1D0C  C2 07 1D   JNZ L_1D07
+1D0F  C9         RET
+SUB_1D10:                                    ; xref: c1CED
+1D10  21 34 70   LXI H,M_7034
+1D13  3A B7 70   LDA M_70B7
+1D16  CD 45 1D   CALL SUB_1D45
+1D19  21 37 70   LXI H,M_7037
+1D1C  3A B8 70   LDA M_70B8
+1D1F  CD 45 1D   CALL SUB_1D45
+1D22  3A 3C 70   LDA BTN_STATE
+1D25  07         RLC
+1D26  D2 3A 1D   JNC L_1D3A
+1D29  3A 3D 70   LDA TICK_BCD
+1D2C  E6 40      ANI 40H                     ; '@'
+1D2E  C2 3A 1D   JNZ L_1D3A
+1D31  3A 3A 70   LDA M_703A
+1D34  E6 0F      ANI 0FH
+1D36  32 3A 70   STA M_703A
+1D39  C9         RET
+L_1D3A:                                      ; xref: j1D26 j1D2E
+1D3A  3A 3A 70   LDA M_703A
+1D3D  E6 0F      ANI 0FH
+1D3F  F6 10      ORI 10H
+1D41  32 3A 70   STA M_703A
+1D44  C9         RET
+SUB_1D45:                                    ; xref: c1D16 c1D1F
+1D45  F5         PUSH PSW
+1D46  E6 80      ANI 80H
+1D48  CA 66 1D   JZ L_1D66
+1D4B  3A 4F 70   LDA VAR_704F
+1D4E  E6 01      ANI 01H
+1D50  CA 66 1D   JZ L_1D66
+1D53  3A 3D 70   LDA TICK_BCD
+1D56  E6 40      ANI 40H                     ; '@'
+1D58  CA 66 1D   JZ L_1D66
+1D5B  1E 03      MVI E,03H
+L_1D5D:                                      ; xref: j1D61
+1D5D  36 FF      MVI M,0FFH
+1D5F  23         INX H
+1D60  1D         DCR E
+1D61  C2 5D 1D   JNZ L_1D5D
+L_1D64:                                      ; xref: j1D72 j1DA2 j1DAE j1DBA
+1D64  F1         POP PSW
+1D65  C9         RET
+L_1D66:                                      ; xref: j1D48 j1D50 j1D58
+1D66  F1         POP PSW
+1D67  F5         PUSH PSW
+1D68  E6 40      ANI 40H                     ; '@'
+1D6A  C2 92 1D   JNZ L_1D92
+1D6D  3A 3D 70   LDA TICK_BCD
+1D70  E6 40      ANI 40H                     ; '@'
+1D72  CA 64 1D   JZ L_1D64
+L_1D75:                                      ; xref: j1D98
+1D75  F1         POP PSW
+1D76  1E 03      MVI E,03H
+L_1D78:                                      ; xref: j1D8E
+1D78  0F         RRC
+1D79  D2 82 1D   JNC L_1D82
+1D7C  47         MOV B,A
+1D7D  7E         MOV A,M
+1D7E  F6 F0      ORI 0F0H
+1D80  77         MOV M,A
+1D81  78         MOV A,B
+L_1D82:                                      ; xref: j1D79
+1D82  0F         RRC
+1D83  D2 8C 1D   JNC L_1D8C
+1D86  47         MOV B,A
+1D87  7E         MOV A,M
+1D88  F6 0F      ORI 0FH
+1D8A  77         MOV M,A
+1D8B  78         MOV A,B
+L_1D8C:                                      ; xref: j1D83
+1D8C  23         INX H
+1D8D  1D         DCR E
+1D8E  C2 78 1D   JNZ L_1D78
+1D91  C9         RET
+L_1D92:                                      ; xref: j1D6A
+1D92  F1         POP PSW
+1D93  F5         PUSH PSW
+1D94  E6 7F      ANI 7FH
+1D96  FE 40      CPI 40H                     ; '@'
+1D98  C2 75 1D   JNZ L_1D75
+1D9B  1E 03      MVI E,03H
+L_1D9D:                                      ; xref: j1DB7
+1D9D  7E         MOV A,M
+1D9E  E6 F0      ANI 0F0H
+1DA0  FE 00      CPI 00H
+1DA2  C2 64 1D   JNZ L_1D64
+1DA5  7E         MOV A,M
+1DA6  F6 F0      ORI 0F0H
+1DA8  77         MOV M,A
+1DA9  7E         MOV A,M
+1DAA  E6 0F      ANI 0FH
+1DAC  FE 00      CPI 00H
+1DAE  C2 64 1D   JNZ L_1D64
+1DB1  7E         MOV A,M
+1DB2  F6 0F      ORI 0FH
+1DB4  77         MOV M,A
+1DB5  23         INX H
+1DB6  1D         DCR E
+1DB7  C2 9D 1D   JNZ L_1D9D
+1DBA  C3 64 1D   JMP L_1D64
+X_1DBD:                                      ; xref: c011A c012A c16C3
+1DBD  47         MOV B,A
+1DBE  3A C0 70   LDA M_70C0
+1DC1  FE 00      CPI 00H
+1DC3  CA F0 1D   JZ L_1DF0
+1DC6  3A C1 70   LDA M_70C1
+1DC9  FE 00      CPI 00H
+1DCB  CA F7 1D   JZ L_1DF7
+1DCE  3A C2 70   LDA M_70C2
+1DD1  FE 00      CPI 00H
+1DD3  CA FE 1D   JZ L_1DFE
+1DD6  3A C0 70   LDA M_70C0
+1DD9  4F         MOV C,A
+1DDA  3A C1 70   LDA M_70C1
+1DDD  32 C0 70   STA M_70C0
+1DE0  3A C2 70   LDA M_70C2
+1DE3  32 C1 70   STA M_70C1
+1DE6  78         MOV A,B
+1DE7  32 C2 70   STA M_70C2
+1DEA  79         MOV A,C
+1DEB  37         STC
+1DEC  C9         RET
+L_1DED:                                      ; xref: j1E02 j1DFB j1DF4
+1DED  37         STC
+1DEE  3F         CMC
+1DEF  C9         RET
+L_1DF0:                                      ; xref: j1DC3
+1DF0  78         MOV A,B
+1DF1  32 C0 70   STA M_70C0
+1DF4  C3 ED 1D   JMP L_1DED
+L_1DF7:                                      ; xref: j1DCB
+1DF7  78         MOV A,B
+1DF8  32 C1 70   STA M_70C1
+1DFB  C3 ED 1D   JMP L_1DED
+L_1DFE:                                      ; xref: j1DD3
+1DFE  78         MOV A,B
+1DFF  32 C2 70   STA M_70C2
+1E02  C3 ED 1D   JMP L_1DED
+X_1E05:                                      ; xref: c020F c16D4 c03E2
+1E05  3A C0 70   LDA M_70C0
+1E08  4F         MOV C,A
+1E09  3A C1 70   LDA M_70C1
+1E0C  32 C0 70   STA M_70C0
+1E0F  3A C2 70   LDA M_70C2
+1E12  32 C1 70   STA M_70C1
+1E15  3E 00      MVI A,00H
+1E17  32 C2 70   STA M_70C2
+1E1A  79         MOV A,C
+1E1B  C9         RET
+1E1C  3A 11 6F 57 C3 2B 1E  DB   3AH,11H,6FH,57H,0C3H,2BH,1EH; |:.oW.+.|
+SUB_1E23:                                    ; xref: c0918
+1E23  3A 11 6F   LDA SLOT_IDX
+1E26  57         MOV D,A
+1E27  79         MOV A,C
+1E28  32 11 6F   STA SLOT_IDX
+1E2B  7A         MOV A,D
+1E2C  21 53 70   LXI H,M_7053
+1E2F  CD 15 05   CALL OLD_MUL10
+1E32  1E 0A      MVI E,0AH
+L_1E34:                                      ; xref: j1E38
+1E34  36 00      MVI M,00H
+1E36  23         INX H
+1E37  1D         DCR E
+1E38  C2 34 1E   JNZ L_1E34
+1E3B  7A         MOV A,D
+1E3C  21 EE 6F   LXI H,SLOTREC_CNT
+1E3F  CD 0B 05   CALL MUL9_INDEX
+1E42  1E 08      MVI E,08H
+L_1E44:                                      ; xref: j1E48
+1E44  36 00      MVI M,00H
+1E46  23         INX H
+1E47  1D         DCR E
+1E48  C2 44 1E   JNZ L_1E44
+1E4B  C9         RET
+X_1E4C:                                      ; xref: c00BC refs: lxi1E5B
+1E4C  CD 4F 1E   CALL SUB_1E4F
+SUB_1E4F:                                    ; xref: c1E4C
+1E4F  CD 52 1E   CALL SUB_1E52
+SUB_1E52:                                    ; xref: c1E4F
+1E52  CD 55 1E   CALL SUB_1E55
+SUB_1E55:                                    ; xref: c1E52
+1E55  3E E0      MVI A,0E0H
+1E57  32 01 D0   STA KDC_CMD
+1E5A  AF         XRA A
+1E5B  21 4C 1E   LXI H,X_1E4C
+L_1E5E:                                      ; xref: j1E62 j1E67
+1E5E  AE         XRA M
+1E5F  2B         DCX H
+1E60  24         INR H
+1E61  25         DCR H
+1E62  C2 5E 1E   JNZ L_1E5E
+1E65  2C         INR L
+1E66  2D         DCR L
+1E67  C2 5E 1E   JNZ L_1E5E
+1E6A  FE 9A      CPI 9AH
+1E6C  C9         RET
+1E6D  C4 AE 19 C3 6D 1E  DB   0C4H,0AEH,19H,0C3H,6DH,1EH; |....m.|
+L_1E73:                                      ; xref: j098E
+1E73  36 00      MVI M,00H
+1E75  2B         DCX H
+1E76  36 00      MVI M,00H
+1E78  2B         DCX H
+1E79  36 00      MVI M,00H
+1E7B  2B         DCX H
+1E7C  36 00      MVI M,00H
+1E7E  CD 9B 1E   CALL SUB_1E9B
+1E81  0F         RRC
+1E82  2B         DCX H
+1E83  DA 8F 1E   JC L_1E8F
+1E86  AF         XRA A
+1E87  7E         MOV A,M
+1E88  C6 01      ADI 01H
+1E8A  27         DAA
+1E8B  77         MOV M,A
+1E8C  C3 98 1E   JMP L_1E98
+L_1E8F:                                      ; xref: j1E83
+1E8F  AF         XRA A
+1E90  37         STC
+1E91  3E 98      MVI A,98H
+1E93  CE 00      ACI 00H
+1E95  86         ADD M
+1E96  27         DAA
+1E97  77         MOV M,A
+L_1E98:                                      ; xref: j1E8C
+1E98  C3 CB 09   JMP L_09CB
+SUB_1E9B:                                    ; xref: c1E7E
+1E9B  3A C7 70   LDA M_70C7
+1E9E  47         MOV B,A
+1E9F  07         RLC
+1EA0  07         RLC
+1EA1  07         RLC
+1EA2  A8         XRA B
+1EA3  07         RLC
+1EA4  3F         CMC
+1EA5  17         RAL
+1EA6  32 C7 70   STA M_70C7
+1EA9  C9         RET
+SUB_1EAA:                                    ; xref: c1F42 c1F6B
+1EAA  16 04      MVI D,04H
+L_1EAC:                                      ; xref: j1EB5
+1EAC  37         STC
+1EAD  3F         CMC
+1EAE  7C         MOV A,H
+1EAF  1F         RAR
+1EB0  67         MOV H,A
+1EB1  7D         MOV A,L
+1EB2  1F         RAR
+1EB3  6F         MOV L,A
+1EB4  15         DCR D
+1EB5  C2 AC 1E   JNZ L_1EAC
+1EB8  D0         RNC
+1EB9  23         INX H
+1EBA  C9         RET
+SUB_1EBB:                                    ; xref: c1F38
+1EBB  16 04      MVI D,04H
+L_1EBD:                                      ; xref: j1EC7
+1EBD  7B         MOV A,E
+1EBE  17         RAL
+1EBF  5F         MOV E,A
+1EC0  7D         MOV A,L
+1EC1  17         RAL
+1EC2  6F         MOV L,A
+1EC3  7C         MOV A,H
+1EC4  17         RAL
+1EC5  67         MOV H,A
+1EC6  15         DCR D
+1EC7  C2 BD 1E   JNZ L_1EBD
+1ECA  7B         MOV A,E
+1ECB  07         RLC
+1ECC  D0         RNC
+1ECD  23         INX H
+1ECE  C9         RET
+SUB_1ECF:                                    ; xref: c1F35 c1F3F c1F49
+1ECF  0A         LDAX B
+1ED0  67         MOV H,A
+1ED1  03         INX B
+1ED2  0A         LDAX B
+1ED3  6F         MOV L,A
+1ED4  03         INX B
+1ED5  0A         LDAX B
+1ED6  5F         MOV E,A
+1ED7  03         INX B
+1ED8  C9         RET
+SUB_1ED9:                                    ; xref: c1F5A
+1ED9  37         STC
+1EDA  3E 99      MVI A,99H
+1EDC  CE 00      ACI 00H
+1EDE  95         SUB L
+1EDF  C6 00      ADI 00H
+1EE1  27         DAA
+1EE2  6F         MOV L,A
+1EE3  3E 99      MVI A,99H
+1EE5  CE 00      ACI 00H
+1EE7  94         SUB H
+1EE8  C6 00      ADI 00H
+1EEA  27         DAA
+1EEB  67         MOV H,A
+1EEC  C9         RET
+SUB_1EED:                                    ; xref: c1F61
+1EED  37         STC
+1EEE  3E 99      MVI A,99H
+1EF0  CE 00      ACI 00H
+1EF2  93         SUB E
+1EF3  85         ADD L
+1EF4  27         DAA
+1EF5  6F         MOV L,A
+1EF6  3E 99      MVI A,99H
+1EF8  CE 00      ACI 00H
+1EFA  92         SUB D
+1EFB  84         ADD H
+1EFC  27         DAA
+1EFD  67         MOV H,A
+1EFE  07         RLC
+1EFF  C9         RET
+L_1F00:                                      ; xref: j1F67
+1F00  E3         XTHL
+1F01  AF         XRA A
+1F02  7D         MOV A,L
+1F03  81         ADD C
+1F04  27         DAA
+1F05  6F         MOV L,A
+1F06  7C         MOV A,H
+1F07  88         ADC B
+1F08  27         DAA
+1F09  67         MOV H,A
+1F0A  E3         XTHL
+1F0B  C3 61 1F   JMP L_1F61
+SUB_1F0E:                                    ; xref: c1F6E
+1F0E  7D         MOV A,L
+1F0F  6C         MOV L,H
+1F10  67         MOV H,A
+1F11  00         NOP
+1F12  00         NOP
+1F13  00         NOP
+1F14  22 EB 6F   SHLD BCD_TMP_2
+1F17  21 E9 6F   LXI H,BCD_TMP
+1F1A  36 00      MVI M,00H
+1F1C  23         INX H
+1F1D  36 00      MVI M,00H
+1F1F  C9         RET
+SUB_1F20:                                    ; xref: c097D
+1F20  3A 11 6F   LDA SLOT_IDX
+1F23  FE 00      CPI 00H
+1F25  C2 30 1F   JNZ L_1F30
+1F28  C5         PUSH B
+1F29  E1         POP H
+1F2A  01 D4 70   LXI B,M_70D4
+1F2D  C3 BB 07   JMP COPY4
+L_1F30:                                      ; xref: j1F25
+1F30  C5         PUSH B
+1F31  21 00 00   LXI H,RESET
+1F34  E5         PUSH H
+1F35  CD CF 1E   CALL SUB_1ECF
+1F38  CD BB 1E   CALL SUB_1EBB
+1F3B  E5         PUSH H
+1F3C  01 1D 6F   LXI B,GRI_VAL
+1F3F  CD CF 1E   CALL SUB_1ECF
+1F42  CD AA 1E   CALL SUB_1EAA
+1F45  E5         PUSH H
+1F46  01 D6 70   LXI B,M_70D6
+1F49  CD CF 1E   CALL SUB_1ECF
+1F4C  7C         MOV A,H
+1F4D  07         RLC
+1F4E  3E 01      MVI A,01H
+1F50  32 D3 70   STA M_70D3
+1F53  D2 5D 1F   JNC L_1F5D
+1F56  AF         XRA A
+1F57  32 D3 70   STA M_70D3
+1F5A  CD D9 1E   CALL SUB_1ED9
+L_1F5D:                                      ; xref: j1F53
+1F5D  E5         PUSH H
+1F5E  C1         POP B
+1F5F  D1         POP D
+1F60  E1         POP H
+L_1F61:                                      ; xref: j1F0B
+1F61  CD ED 1E   CALL SUB_1EED
+1F64  DA 6A 1F   JC L_1F6A
+1F67  C3 00 1F   JMP L_1F00
+L_1F6A:                                      ; xref: j1F64
+1F6A  E1         POP H
+1F6B  CD AA 1E   CALL SUB_1EAA
+1F6E  CD 0E 1F   CALL SUB_1F0E
+1F71  C1         POP B
+1F72  21 E9 6F   LXI H,BCD_TMP
+1F75  3A D3 70   LDA M_70D3
+1F78  FE 00      CPI 00H
+1F7A  CA 82 07   JZ BCD_ADD4
+1F7D  C3 9F 07   JMP BCD_SUB4
+1F80  6F CA 85 0F EB C1 D5 E5  DB   6FH,0CAH,85H,0FH,0EBH,0C1H,0D5H,0E5H; |o.......|
+1F88  78 CD E4 04 7E F6 08 77  DB   78H,0CDH,0E4H,04H,7EH,0F6H,08H,77H; |x...~..w|
+1F90  E1 C1 E5 1E 05 CD BD 07  DB   0E1H,0C1H,0E5H,1EH,05H,0CDH,0BDH,07H; |........|
+1F98  E1 06 05 C3 0F 08 78 2A  DB   0E1H,06H,05H,0C3H,0FH,08H,78H,2AH; |......x*|
+1FA0  36 6F 11 9C FF 19 E6 08  DB   36H,6FH,11H,9CH,0FFH,19H,0E6H,08H; |6o......|
+1FA8  CA 22 10 7C 07 DA BC 0F  DB   0CAH,22H,10H,7CH,07H,0DAH,0BCH,0FH; |.".|....|
+1FB0  3A 02 6F CD E4 04 07 07  DB   3AH,02H,6FH,0CDH,0E4H,04H,07H,07H; |:.o.....|
+1FB8  DA 54 0F C9 3E 01 F5 CD  DB   0DAH,54H,0FH,0C9H,3EH,01H,0F5H,0CDH; |.T..>...|
+1FC0  E4 04 47 07 07 D2 18 10  DB   0E4H,04H,47H,07H,07H,0D2H,18H,10H; |..G.....|
+1FC8  07 07 DA 18 10 78 CD F7  DB   07H,07H,0DAH,18H,10H,78H,0CDH,0F7H; |.....x..|
+1FD0  04 7E E6 80 C2 18 10 F1  DB   04H,7EH,0E6H,80H,0C2H,18H,10H,0F1H; |.~......|
+1FD8  47 3A 02 6F B8 C2 F7 0F  DB   47H,3AH,02H,6FH,0B8H,0C2H,0F7H,0FH; |G:.o....|
+1FE0  3A 00 6F FE 02 78 C2 19  DB   3AH,00H,6FH,0FEH,02H,78H,0C2H,19H; |:.o..x..|
+1FE8  10 7E F6 82 77 11 18 00  DB   10H,7EH,0F6H,82H,77H,11H,18H,00H; |.~..w...|
+1FF0  19 36 00 2B 36 00 C9 F5  DB   19H,36H,00H,2BH,36H,00H,0C9H,0F5H; |.6.+6...|
+1FF8  E5 C5 78 07 4F 07 07 81  DB   0E5H,0C5H,78H,07H,4FH,07H,07H,81H; |..x.O...|

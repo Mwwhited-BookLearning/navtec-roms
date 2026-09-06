@@ -7,9 +7,15 @@ tracking, packed-BCD time-difference arithmetic, a two-row digit display driven
 by an 8279, thumbwheel GRI entry, and a serial port with a multi-drop protocol,
 a memory monitor and a strip-chart plot mode.
 
-**Status:** the dumps contain only the lower 2 KB of each 4 KB device. The
-upper halves are referenced by the code and must be re-read before the firmware
-can be rebuilt completely. See [docs/rom-status.md](docs/rom-status.md).
+**Status:** both EPROMs are now fully recovered (they're Intel 8332 masked ROMs,
+not generic 2732s - see [originals/README.md](originals/README.md) for the
+read procedure). The disassembly gap closed from ~4 KB to essentially the
+full 8 KB image; only small scattered data-table regions remain unclassified.
+See [docs/rom-status.md](docs/rom-status.md) for the full story and
+[docs/PROGRESS.md](docs/PROGRESS.md) for a session handoff summary and
+what's next (verifying the exact-rebuild against the assembler, filling in
+the small remaining data regions, and the physical-board cross-check notes in
+[docs/hardware.md](docs/hardware.md)).
 
 ## Layout
 
