@@ -1,0 +1,2344 @@
+
+; ---- ORG 0000 ----
+
+; Reset vector. Interrupts off, jump to INIT.
+RESET:                                       ; refs: lxi068E
+0000  F3         DI
+0001  C3 72 00   JMP INIT
+
+; Table of six 4-byte packed-BCD constants (little-endian, LS byte first).
+; BCD_K_00080980 and BCD_K_00000110 are passed to X_0EC1 (missing half).
+BCD_CONST_TBL:                               
+0004  08 88 88 88  DB   08H,88H,88H,88H        ; |....|
+0008  00 00 02 00  DB   00H,00H,02H,00H        ; |....|
+000C  00 03 00 00  DB   00H,03H,00H,00H        ; |....|
+0010  06 00 00 01  DB   06H,00H,00H,01H        ; |....|
+BCD_K_00080980:                              ; refs: lxi0149
+0014  00 08 09 80  DB   00H,08H,09H,80H        ; |....|
+BCD_K_00000110:                              ; refs: lxi034A
+0018  00 00 01 10  DB   00H,00H,01H,10H        ; |....|
+
+; PULSE_PB2: pulse bit 2 of 8155#2 port B.
+; PULSE_PB:  pulse the bits set in A on 8155#2 port B (XOR twice = toggle out and back).
+; The 8155 output port latch is readable, so XRA M / MOV M,A works on the port.
+PULSE_PB2:                                   ; xref: c005E c007A c0333
+001C  3E 04      MVI A,04H
+PULSE_PB:                                    ; xref: c0045 c0066 c00C1 c04B8 c033B
+001E  21 02 F0   LXI H,PIO2_PB
+0021  F5         PUSH PSW
+0022  AE         XRA M
+0023  77         MOV M,A
+0024  F1         POP PSW
+0025  AE         XRA M
+0026  77         MOV M,A
+0027  C9         RET
+
+; CPY_GRI_TO_TOA: copy the 4-byte GRI_BCD into CUR_TOA (HL=GRI_BCD, BC=CUR_TOA).
+; CPY4_TO_TOA:    copy 4 bytes from (HL) into CUR_TOA.
+CPY_GRI_TO_TOA:                              ; xref: c012D c0191 c01D3
+0028  21 1C 6F   LXI H,GRI_BCD
+CPY4_TO_TOA:                                 ; xref: c0303 c03DC c0360
+002B  01 A5 6F   LXI B,CUR_TOA
+002E  C3 BB 07   JMP COPY4
+
+; Three orphan bytes (never reached).
+ORPHAN_0031:                                 
+0031  30 18 3A   DB   30H,18H,3AH            ; |0.:|
+
+; RST 6.5 interrupt: receiver sample-ready strobe.
+; Entered only from the EI/NOP/DI window inside WAIT_SAMPLE, so the stack holds
+; [ret into WAIT_SAMPLE][ret to WAIT_SAMPLE's caller]. The trailing POP B / RET discards
+; the first and returns to the main-loop caller with A = B = PIO2_PC rotated left twice.
+; Sets PIO1_PC bit 0 (busy) and acknowledges the receiver with a pulse on PIO2_PB bit 5.
+RST65_ISR:                                   
+0034  F3         DI
+0035  3A 03 E0   LDA PIO1_PC
+0038  F6 01      ORI 01H
+003A  32 03 E0   STA PIO1_PC
+003D  3A 03 F0   LDA PIO2_PC
+0040  07         RLC
+0041  07         RLC
+0042  47         MOV B,A
+0043  3E 20      MVI A,20H                   ; ' '
+0045  CD 1E 00   CALL PULSE_PB
+0048  3A A1 6F   LDA CUR_REC
+004B  0F         RRC
+004C  78         MOV A,B
+004D  DA 70 00   JC ISR_EXIT
+0050  3A 15 6F   LDA SAMPLE_CNT
+0053  3C         INR A
+0054  21 0E 6F   LXI H,WIN_END
+0057  BE         CMP M
+0058  78         MOV A,B
+0059  C2 70 00   JNZ ISR_EXIT
+005C  F5         PUSH PSW
+005D  D5         PUSH D
+005E  CD 1C 00   CALL PULSE_PB2
+0061  CD 1D 0E   CALL X_0E1D
+0064  3E 20      MVI A,20H                   ; ' '
+0066  CD 1E 00   CALL PULSE_PB
+0069  3E 01      MVI A,01H
+006B  32 17 6F   STA SYNC_FLAG
+006E  D1         POP D
+006F  F1         POP PSW
+ISR_EXIT:                                    ; xref: j004D j0059
+0070  C1         POP B
+0071  C9         RET
+
+; INIT: cold start. Program the 8251 USART (mode 0DAH = async x16, 7 data, odd parity,
+; 2 stop; command 37H = TxEN DTR RxE ER RTS), set SP, program both 8155s and the 8279,
+; SIM 1DH = enable RST 6.5 only, clear RAM 6F00-70FB, read the front-panel switches,
+; derive SLOT_COUNT from the GRI and fall into the acquisition sequence.
+INIT:                                        ; xref: j0001
+0072  3E DA      MVI A,0DAH
+0074  32 01 C0   STA USART_CTRL              ; 8251 mode: async x16, 7 data bits, odd parity, 2 stop bits
+0077  31 00 71   LXI SP,STACK_TOP
+007A  CD 1C 00   CALL PULSE_PB2
+007D  3E CD      MVI A,0CDH
+007F  32 01 D0   STA KDC_CMD                 ; 8279: clear display and FIFO (CD=110 CA=1)
+0082  3E D0      MVI A,0D0H
+0084  32 04 E0   STA PIO1_TMRLO              ; 8155#1 timer = 07D0H (2000), square wave
+0087  3E 47      MVI A,47H                   ; 'G'
+0089  32 05 E0   STA PIO1_TMRHI
+008C  3E CF      MVI A,0CFH
+008E  32 00 E0   STA PIO1_CMD                ; 8155#1: PA out, PB out, PC out, start timer
+0091  3E 82      MVI A,82H
+0093  32 04 F0   STA PIO2_TMRLO              ; 8155#2 timer = 0082H (130) -> 1200 baud x16
+0096  3E 40      MVI A,40H                   ; '@'
+0098  32 05 F0   STA PIO2_TMRHI
+009B  3E C3      MVI A,0C3H
+009D  32 00 F0   STA PIO2_CMD                ; 8155#2: PA out, PB out, PC input, start timer
+00A0  3E 8E      MVI A,8EH
+00A2  32 02 F0   STA PIO2_PB                 ; 8155#2 port B idle pattern 8EH
+00A5  3E 37      MVI A,37H                   ; '7'
+00A7  32 01 C0   STA USART_CTRL              ; 8251 command: TxEN DTR RxE ER RTS
+00AA  3E 1D      MVI A,1DH
+00AC  30         SIM                         ; SIM 1DH: mask 5.5 & 7.5, enable 6.5, reset 7.5 latch
+00AD  3E 04      MVI A,04H
+00AF  32 01 D0   STA KDC_CMD                 ; 8279 mode: 8x8 display, encoded scan sensor matrix
+00B2  3E 26      MVI A,26H                   ; '&'
+00B4  32 01 D0   STA KDC_CMD                 ; 8279 clock prescaler = 6
+00B7  3E 90      MVI A,90H
+00B9  32 01 D0   STA KDC_CMD                 ; 8279: write display RAM, auto-increment, addr 0
+00BC  CD 4C 1E   CALL X_1E4C
+00BF  3E 20      MVI A,20H                   ; ' '
+00C1  CD 1E 00   CALL PULSE_PB
+00C4  06 00      MVI B,00H
+00C6  21 00 6F   LXI H,RAM1_BASE
+00C9  CD 0F 08   CALL FILL_ZERO              ; clear 6F00-6FFF
+00CC  06 FC      MVI B,0FCH
+00CE  21 00 70   LXI H,RAM2_BASE
+00D1  CD 0F 08   CALL FILL_ZERO              ; clear 7000-70FB (keeps return address at 70FE)
+00D4  3E 1B      MVI A,1BH
+00D6  32 D9 6F   STA VAR_6FD9
+00D9  3E 30      MVI A,30H                   ; '0'
+00DB  32 DE 70   STA UNIT_ID
+00DE  21 3E 70   LXI H,PRTBUF
+00E1  22 D1 70   SHLD PRTBUF_PTR
+00E4  3E FF      MVI A,0FFH
+00E6  32 CB 6F   STA VAR_6FCB
+00E9  CD 1F 14   CALL READ_SWITCHES          ; read thumbwheels: SEL_A, SEL_B, GRI
+00EC  2A CC 6F   LHLD GRI_SW
+00EF  22 1D 6F   SHLD GRI_VAL
+00F2  21 1C 6F   LXI H,GRI_BCD
+00F5  CD 61 05   CALL TOA_TO_BIN
+00F8  D6 28      SUI 28H                     ; A = GRI-derived value - 40
+00FA  1E 04      MVI E,04H
+INIT_DIV10:                                  ; xref: j00FF
+00FC  1C         INR E
+00FD  D6 0A      SUI 0AH
+00FF  F2 FC 00   JP INIT_DIV10
+0102  7B         MOV A,E
+0103  32 14 6F   STA SLOT_COUNT              ; SLOT_COUNT = 4 + (A-40)/10 + 1
+0106  47         MOV B,A
+0107  21 02 6F   LXI H,FIRST_SLOT
+010A  36 01      MVI M,01H
+010C  EB         XCHG
+010D  2A C5 6F   LHLD SEL_A
+0110  7D         MOV A,L                     ; L = SEL_A, H = SEL_B
+0111  B8         CMP B
+0112  F2 1F 01   JP INIT_CHK_SELB
+0115  32 02 6F   STA FIRST_SLOT
+0118  C5         PUSH B
+0119  E5         PUSH H
+011A  CD BD 1D   CALL X_1DBD
+011D  E1         POP H
+011E  C1         POP B
+INIT_CHK_SELB:                               ; xref: j0112
+011F  3A C6 6F   LDA SEL_B
+0122  B8         CMP B
+0123  F2 2D 01   JP ACQ_START
+0126  BD         CMP L
+0127  CA 2D 01   JZ ACQ_START
+012A  CD BD 1D   CALL X_1DBD
+
+; ACQ_START: (re)start master acquisition. Reached again whenever tracking is lost.
+ACQ_START:                                   ; xref: j0123 j0127 j01FC j0202
+012D  CD 28 00   CALL CPY_GRI_TO_TOA
+0130  21 A5 6F   LXI H,CUR_TOA
+0133  CD 61 05   CALL TOA_TO_BIN
+0136  D6 05      SUI 05H
+0138  32 0E 6F   STA WIN_END
+013B  3E 0E      MVI A,0EH
+013D  CD B3 0D   CALL X_0DB3
+0140  21 A1 6F   LXI H,CUR_REC
+0143  01 24 6F   LXI B,REC_MASTER
+0146  CD BB 07   CALL COPY4
+0149  21 14 00   LXI H,BCD_K_00080980
+014C  CD C1 0E   CALL X_0EC1
+014F  3E 0E      MVI A,0EH
+0151  CD B3 0D   CALL X_0DB3
+0154  21 A1 6F   LXI H,CUR_REC
+0157  01 3D 6F   LXI B,REC_SEC
+015A  CD BB 07   CALL COPY4
+SEARCH_RESTART:                              ; xref: j01AD
+015D  CD 7A 05   CALL RESET_PULSES
+0160  01 24 6F   LXI B,REC_MASTER
+
+; SEARCH_LOOP: search for the master phase code, alternating REC_MASTER / REC_SEC targets.
+SEARCH_LOOP:                                 ; xref: j018B
+0163  CD E6 0D   CALL X_0DE6
+0166  CD 9B 04   CALL WAIT_EPOCH
+0169  CD 59 04   CALL WAIT_SAMPLE
+016C  AF         XRA A
+016D  32 15 6F   STA SAMPLE_CNT
+0170  CD D9 0E   CALL X_0ED9
+0173  CD AF 05   CALL FIRST_SAMPLE
+0176  37         STC
+0177  CD C2 05   CALL MATCH_PULSES
+017A  D2 8E 01   JNC SEARCH_VERIFY
+017D  3A A9 6F   LDA CUR_NPULSE
+0180  FE 00      CPI 00H
+0182  01 24 6F   LXI B,REC_MASTER
+0185  C2 8B 01   JNZ SEARCH_NEXT
+0188  01 3D 6F   LXI B,REC_SEC
+SEARCH_NEXT:                                 ; xref: j0185
+018B  C3 63 01   JMP SEARCH_LOOP
+SEARCH_VERIFY:                               ; xref: j017A
+018E  CD 65 06   CALL SAMPLE_TO_BCD
+0191  CD 28 00   CALL CPY_GRI_TO_TOA
+0194  21 D1 6F   LXI H,BCD_DELTA_2
+0197  CD C1 0E   CALL X_0EC1
+019A  3E 0F      MVI A,0FH
+019C  CD 79 0D   CALL X_0D79
+019F  CD 9B 04   CALL WAIT_EPOCH
+01A2  CD 59 04   CALL WAIT_SAMPLE
+01A5  CD AE 04   CALL SHIFT_IN16
+01A8  EE CA      XRI 0CAH                    ; compare shift-in byte with master phase code A (CA)
+01AA  CA B0 01   JZ MASTER_FOUND
+01AD  C3 5D 01   JMP SEARCH_RESTART
+
+; MASTER_FOUND: master locked. Slot 0 flags = C8H, then 20 settle passes (SETTLE_CNT).
+MASTER_FOUND:                                ; xref: j01AA
+01B0  3E C8      MVI A,0C8H                  ; slot 0 flags = C8H
+01B2  32 04 6F   STA SLOT_FLAGS
+01B5  CD 84 05   CALL CLEAR_PULSES
+01B8  3E 01      MVI A,01H
+01BA  32 B7 6F   STA CUR_MODE
+01BD  21 03 04   LXI H,0403H                 ; VAR_6FE7 = 03, VAR_6FE7+1 = 04
+01C0  22 E7 6F   SHLD VAR_6FE7
+01C3  3E 04      MVI A,04H
+01C5  32 E6 6F   STA VAR_6FE6
+01C8  3E 14      MVI A,14H                   ; 20 settle passes
+01CA  32 54 6F   STA SETTLE_CNT
+01CD  2A 1D 6F   LHLD GRI_VAL
+01D0  22 19 6F   SHLD GRI_TMP_VAL
+01D3  CD 28 00   CALL CPY_GRI_TO_TOA
+01D6  3E 0F      MVI A,0FH
+01D8  CD B3 0D   CALL X_0DB3
+01DB  01 24 6F   LXI B,REC_MASTER
+01DE  CD 3F 05   CALL LOAD_REC_HL
+
+; SETTLE_LOOP: 20 iterations accumulating signal quality (QUAL_LO/QUAL_HI).
+SETTLE_LOOP:                                 ; xref: j01F4
+01E1  CD E3 0D   CALL X_0DE3
+01E4  CD 9B 04   CALL WAIT_EPOCH
+01E7  CD 17 08   CALL X_0817
+01EA  CD 12 04   CALL QUAL_UPDATE
+01ED  CD D9 0E   CALL X_0ED9
+01F0  21 54 6F   LXI H,SETTLE_CNT
+01F3  35         DCR M
+01F4  C2 E1 01   JNZ SETTLE_LOOP
+01F7  3A 04 6F   LDA SLOT_FLAGS
+01FA  E6 20      ANI 20H                     ; ' '
+01FC  CA 2D 01   JZ ACQ_START
+01FF  CD 45 04   CALL QUAL_CHECK
+0202  DA 2D 01   JC ACQ_START
+0205  3E 03      MVI A,03H
+0207  32 3A 6F   STA REC_MASTER_16
+020A  3E 10      MVI A,10H
+020C  32 E7 6F   STA VAR_6FE7
+020F  CD 05 1E   CALL X_1E05
+0212  CD 23 0F   CALL X_0F23
+0215  01 24 6F   LXI B,REC_MASTER
+0218  CD E6 0D   CALL X_0DE6
+
+; TRACK_LOOP: steady-state tracking loop, one pass per GRI epoch.
+TRACK_LOOP:                                  ; xref: j024A
+021B  CD 9B 04   CALL WAIT_EPOCH
+021E  CD EE 0E   CALL X_0EEE
+0221  CD D9 0E   CALL X_0ED9
+0224  3A C1 6F   LDA DISP_MODE
+0227  FE 01      CPI 01H
+0229  CA 37 02   JZ TRACK_DISP1
+022C  FE 02      CPI 02H
+022E  C2 3A 02   JNZ TRACK_UPDATE
+0231  CD 08 0F   CALL X_0F08
+0234  C3 3A 02   JMP TRACK_UPDATE
+TRACK_DISP1:                                 ; xref: j0229
+0237  CD 31 0F   CALL X_0F31
+TRACK_UPDATE:                                ; xref: j022E j0234
+023A  CD 17 08   CALL X_0817
+
+; TRACK_NEXT_SLOT: advance SLOT_IDX (wraps at SLOT_COUNT); skip slots without bit 7.
+TRACK_NEXT_SLOT:                             ; xref: j0255 j025F j02B3 j02ED j031A
+023D  21 11 6F   LXI H,SLOT_IDX
+0240  34         INR M
+0241  3A 14 6F   LDA SLOT_COUNT
+0244  BE         CMP M
+0245  C2 4D 02   JNZ TRACK_SLOT_CHK
+0248  36 00      MVI M,00H
+024A  C3 1B 02   JMP TRACK_LOOP
+TRACK_SLOT_CHK:                              ; xref: j0245
+024D  CD E1 04   CALL GET_SLOT_FLAGS
+0250  47         MOV B,A
+0251  07         RLC
+0252  DA 58 02   JC TRACK_SLOT_BIT6
+0255  C3 3D 02   JMP TRACK_NEXT_SLOT
+TRACK_SLOT_BIT6:                             ; xref: j0252
+0258  07         RLC
+0259  D2 62 02   JNC SLOT_PROCESS
+025C  CD A9 08   CALL X_08A9
+025F  C3 3D 02   JMP TRACK_NEXT_SLOT
+
+; SLOT_PROCESS: load slot record into CUR_REC and dispatch on TRACK_STATE:
+;   bit7 -> SLOT_TRACKING, bit6 -> SLOT_ACQUIRE, else initial window search.
+SLOT_PROCESS:                                ; xref: j0259
+0262  CD 22 05   CALL LOAD_CUR_REC
+0265  21 13 6F   LXI H,TRACK_STATE
+0268  7E         MOV A,M
+0269  07         RLC
+026A  DA 1D 03   JC SLOT_TRACKING
+026D  07         RLC
+026E  DA 93 03   JC SLOT_ACQUIRE
+0271  36 01      MVI M,01H
+0273  3A 01 6F   LDA ACQ_COUNT
+0276  FE 00      CPI 00H
+0278  CC 1A 0E   CZ X_0E1A
+027B  3E 64      MVI A,64H                   ; 'd'
+027D  32 DD 6F   STA MISS_LIMIT
+0280  3A 11 6F   LDA SLOT_IDX
+0283  F5         PUSH PSW
+0284  57         MOV D,A
+0285  0E 0A      MVI C,0AH
+0287  CD C6 07   CALL MUL8                   ; BC = SLOT_IDX * 10
+028A  3E 10      MVI A,10H
+028C  81         ADD C
+028D  32 0E 6F   STA WIN_END
+0290  79         MOV A,C
+0291  32 A9 6F   STA CUR_NPULSE
+0294  F1         POP PSW
+0295  F5         PUSH PSW
+0296  3D         DCR A
+0297  CA AA 02   JZ SLOT_CHK_NEXT
+029A  CD E4 04   CALL GET_FLAGS_A
+029D  07         RLC
+029E  D2 AA 02   JNC SLOT_CHK_NEXT
+02A1  1F         RAR
+02A2  CD 5E 05   CALL SEC_TOA_TO_BIN
+02A5  C6 0A      ADI 0AH
+02A7  32 A9 6F   STA CUR_NPULSE
+SLOT_CHK_NEXT:                               ; xref: j0297 j029E
+02AA  F1         POP PSW
+02AB  3C         INR A
+02AC  21 14 6F   LXI H,SLOT_COUNT
+02AF  BE         CMP M
+02B0  C2 C9 02   JNZ SLOT_CHK_NEXT2
+02B3  C3 3D 02   JMP TRACK_NEXT_SLOT
+SLOT_USE_GRI:                                ; xref: j02CB
+02B6  21 1C 6F   LXI H,GRI_BCD
+02B9  CD 61 05   CALL TOA_TO_BIN
+02BC  D6 04      SUI 04H
+02BE  32 0E 6F   STA WIN_END
+02C1  3E 82      MVI A,82H
+02C3  32 DD 6F   STA MISS_LIMIT
+02C6  C3 DF 02   JMP SLOT_WIN_CALC
+SLOT_CHK_NEXT2:                              ; xref: j02B0
+02C9  3C         INR A
+02CA  BE         CMP M
+02CB  CA B6 02   JZ SLOT_USE_GRI
+02CE  3D         DCR A
+02CF  CD E4 04   CALL GET_FLAGS_A
+02D2  07         RLC
+02D3  D2 DF 02   JNC SLOT_WIN_CALC
+02D6  1F         RAR
+02D7  CD 5E 05   CALL SEC_TOA_TO_BIN
+02DA  D6 04      SUI 04H
+02DC  32 0E 6F   STA WIN_END
+SLOT_WIN_CALC:                               ; xref: j02D3 j02C6
+02DF  3A A9 6F   LDA CUR_NPULSE
+02E2  47         MOV B,A
+02E3  21 0E 6F   LXI H,WIN_END
+02E6  96         SUB M
+02E7  2F         CMA
+02E8  3C         INR A
+02E9  3C         INR A
+02EA  77         MOV M,A
+02EB  FE 09      CPI 09H
+02ED  FA 3D 02   JM TRACK_NEXT_SLOT
+02F0  78         MOV A,B
+02F1  CD 76 05   CALL BCD_INC_STORE
+02F4  32 DF 6F   STA PULSE_BCD
+02F7  CD 53 05   CALL COUNT_TRACKED
+02FA  21 BA 6F   LXI H,CUR_FLAGS
+02FD  7E         MOV A,M
+02FE  B0         ORA B
+02FF  77         MOV M,A
+0300  21 D1 6F   LXI H,BCD_DELTA_2
+0303  CD 2B 00   CALL CPY4_TO_TOA
+0306  AF         XRA A
+0307  32 DA 6F   STA MISS_CNT
+030A  CD 7A 05   CALL RESET_PULSES
+030D  3E 80      MVI A,80H
+030F  32 13 6F   STA TRACK_STATE
+SLOT_DONE_06:                                ; xref: j0363
+0312  3E 06      MVI A,06H
+SLOT_DONE:                                   ; xref: j0390
+0314  32 A1 6F   STA CUR_REC
+SLOT_SAVE_NEXT:                              ; xref: j03C3 j03C8
+0317  CD 75 08   CALL SAVE_CUR_REC
+031A  C3 3D 02   JMP TRACK_NEXT_SLOT
+
+; SLOT_TRACKING: state 80H. Verify the pulse group; count misses (MISS_CNT / MISS_LIMIT).
+SLOT_TRACKING:                               ; xref: j026A
+031D  CD 59 04   CALL WAIT_SAMPLE
+0320  CD 2D 0E   CALL X_0E2D
+0323  CD AF 05   CALL FIRST_SAMPLE
+0326  37         STC
+0327  3F         CMC
+0328  CD C2 05   CALL MATCH_PULSES
+032B  F5         PUSH PSW
+032C  3A 17 6F   LDA SYNC_FLAG
+032F  0F         RRC
+0330  DA 3E 03   JC SLOT_TRK_RESULT
+0333  CD 1C 00   CALL PULSE_PB2
+0336  CD 1D 0E   CALL X_0E1D
+0339  3E 20      MVI A,20H                   ; ' '
+033B  CD 1E 00   CALL PULSE_PB
+SLOT_TRK_RESULT:                             ; xref: j0330
+033E  F1         POP PSW
+033F  D2 66 03   JNC SLOT_TRK_LOST
+0342  3A A9 6F   LDA CUR_NPULSE
+0345  FE 00      CPI 00H
+0347  C2 63 03   JNZ SLOT_TRK_END
+SLOT_TRK_MISS:                               ; xref: j03DF
+034A  21 18 00   LXI H,BCD_K_00000110
+034D  CD C1 0E   CALL X_0EC1
+0350  21 DA 6F   LXI H,MISS_CNT
+0353  34         INR M
+0354  3A DD 6F   LDA MISS_LIMIT
+0357  BE         CMP M
+0358  C2 63 03   JNZ SLOT_TRK_END
+035B  AF         XRA A
+035C  77         MOV M,A
+035D  21 DE 6F   LXI H,TOA_ALT
+0360  CD 2B 00   CALL CPY4_TO_TOA
+SLOT_TRK_END:                                ; xref: j0358 j0347
+0363  C3 12 03   JMP SLOT_DONE_06
+SLOT_TRK_LOST:                               ; xref: j033F
+0366  3E 40      MVI A,40H                   ; '@'
+0368  32 13 6F   STA TRACK_STATE
+036B  CD 84 05   CALL CLEAR_PULSES
+036E  01 D5 6F   LXI B,TOA_SAVE
+0371  21 A5 6F   LXI H,CUR_TOA
+0374  CD BB 07   CALL COPY4
+0377  3A A6 6F   LDA CUR_TOA_1
+037A  CD D9 07   CALL BCD_TO_BIN
+037D  D6 09      SUI 09H
+037F  21 15 6F   LXI H,SAMPLE_CNT
+0382  86         ADD M
+0383  CD EF 07   CALL BIN_TO_BCD
+0386  32 A6 6F   STA CUR_TOA_1
+SLOT_MODE3:                                  ; xref: j040F
+0389  3E 03      MVI A,03H
+038B  32 B7 6F   STA CUR_MODE
+038E  3E 07      MVI A,07H
+0390  C3 14 03   JMP SLOT_DONE
+
+; SLOT_ACQUIRE: state 40H. Read the phase code, accumulate pulse counts, decide lock (state 80H).
+SLOT_ACQUIRE:                                ; xref: j026E
+0393  AF         XRA A
+0394  32 15 6F   STA SAMPLE_CNT
+0397  CD 59 04   CALL WAIT_SAMPLE
+039A  CD 1A 0E   CALL X_0E1A
+039D  CD D1 04   CALL READ_PHASE
+03A0  3A BF 6F   LDA PHASE_CODE
+03A3  21 A9 6F   LXI H,CUR_NPULSE
+03A6  CD 71 06   CALL COUNT_BITS4
+03A9  F5         PUSH PSW
+03AA  78         MOV A,B
+03AB  86         ADD M
+03AC  77         MOV M,A
+03AD  F1         POP PSW
+03AE  23         INX H
+03AF  CD 71 06   CALL COUNT_BITS4
+03B2  78         MOV A,B
+03B3  86         ADD M
+03B4  77         MOV M,A
+03B5  23         INX H
+03B6  34         INR M
+03B7  7E         MOV A,M
+03B8  FE 04      CPI 04H
+03BA  C2 C6 03   JNZ SLOT_ACQ_CHK8
+03BD  CD 7F 06   CALL CHK_NPULSE
+03C0  DA D1 03   JC SLOT_ACQ_FAIL
+03C3  C3 17 03   JMP SLOT_SAVE_NEXT
+SLOT_ACQ_CHK8:                               ; xref: j03BA
+03C6  FE 08      CPI 08H
+03C8  C2 17 03   JNZ SLOT_SAVE_NEXT
+03CB  CD 7F 06   CALL CHK_NPULSE
+03CE  D2 E2 03   JNC SLOT_ACQ_OK
+SLOT_ACQ_FAIL:                               ; xref: j03C0
+03D1  3E 80      MVI A,80H
+03D3  32 13 6F   STA TRACK_STATE
+03D6  CD 7A 05   CALL RESET_PULSES
+03D9  21 D5 6F   LXI H,TOA_SAVE
+03DC  CD 2B 00   CALL CPY4_TO_TOA
+03DF  C3 4A 03   JMP SLOT_TRK_MISS
+SLOT_ACQ_OK:                                 ; xref: j03CE
+03E2  CD 05 1E   CALL X_1E05
+03E5  32 03 6F   STA SLOT_RESULT
+03E8  21 01 6F   LXI H,ACQ_COUNT
+03EB  34         INR M
+03EC  7E         MOV A,M
+03ED  FE 01      CPI 01H
+03EF  C2 F8 03   JNZ SLOT_ACQ_FLAGS
+03F2  3A 11 6F   LDA SLOT_IDX
+03F5  32 02 6F   STA FIRST_SLOT
+SLOT_ACQ_FLAGS:                              ; xref: j03EF
+03F8  3A BA 6F   LDA CUR_FLAGS
+03FB  F5         PUSH PSW
+03FC  CD 45 05   CALL BIT_OF_STA
+03FF  B6         ORA M
+0400  77         MOV M,A
+0401  F1         POP PSW
+0402  F6 C0      ORI 0C0H
+0404  32 BA 6F   STA CUR_FLAGS
+0407  3E 01      MVI A,01H
+0409  32 DC 6F   STA NEW_DATA
+040C  CD 84 05   CALL CLEAR_PULSES
+040F  C3 89 03   JMP SLOT_MODE3
+
+; QUAL_UPDATE: count zero bits in each nibble of PHASE_CODE into QUAL_LO/QUAL_HI (saturate at 40H).
+QUAL_UPDATE:                                 ; xref: c01EA
+0412  3A BF 6F   LDA PHASE_CODE
+0415  2F         CMA
+0416  2A D8 70   LHLD QUAL_LO
+0419  1E 04      MVI E,04H
+QUAL_LO_LOOP:                                ; xref: j0421
+041B  0F         RRC
+041C  D2 20 04   JNC QUAL_LO_NEXT
+041F  2C         INR L
+QUAL_LO_NEXT:                                ; xref: j041C
+0420  1D         DCR E
+0421  C2 1B 04   JNZ QUAL_LO_LOOP
+0424  F5         PUSH PSW
+0425  7D         MOV A,L
+0426  FE 40      CPI 40H                     ; '@'
+0428  DA 2D 04   JC QUAL_HI_START
+042B  2E 40      MVI L,40H                   ; '@'
+QUAL_HI_START:                               ; xref: j0428
+042D  F1         POP PSW
+042E  1E 04      MVI E,04H
+QUAL_HI_LOOP:                                ; xref: j0436
+0430  0F         RRC
+0431  D2 35 04   JNC QUAL_HI_NEXT
+0434  24         INR H
+QUAL_HI_NEXT:                                ; xref: j0431
+0435  1D         DCR E
+0436  C2 30 04   JNZ QUAL_HI_LOOP
+0439  7C         MOV A,H
+043A  FE 40      CPI 40H                     ; '@'
+043C  DA 41 04   JC QUAL_STORE
+043F  26 40      MVI H,40H                   ; '@'
+QUAL_STORE:                                  ; xref: j043C
+0441  22 D8 70   SHLD QUAL_LO
+0444  C9         RET
+
+; QUAL_CHECK: carry set if either QUAL counter < 28H (poor signal).
+QUAL_CHECK:                                  ; xref: c01FF
+0445  2A D8 70   LHLD QUAL_LO
+0448  7D         MOV A,L
+0449  FE 28      CPI 28H                     ; '('
+044B  DA 57 04   JC QUAL_BAD
+044E  7C         MOV A,H
+044F  FE 28      CPI 28H                     ; '('
+0451  DA 57 04   JC QUAL_BAD
+0454  37         STC
+0455  3F         CMC
+0456  C9         RET
+QUAL_BAD:                                    ; xref: j044B j0451
+0457  37         STC
+0458  C9         RET
+
+; WAIT_SAMPLE: idle/background loop. Opens a one-instruction interrupt window (EI NOP DI);
+; when RST 6.5 fires the ISR returns directly to WAIT_SAMPLE's caller (see RST65_ISR).
+; Between windows: optional expansion ROM hook at 2000H (signature 0A5H), serial receive,
+; serial transmit, and, if RST 7.5 latched (RIM bit 6), the periodic tick tasks.
+WAIT_SAMPLE:                                 ; xref: c0169 c01A2 c0397 j0498 c031D c05FE c05AF c049B
+0459  FB         EI                          ; one-instruction window for RST 6.5
+045A  00         NOP
+045B  F3         DI
+045C  F5         PUSH PSW
+045D  D5         PUSH D
+045E  3A 00 20   LDA EXTROM_SIG              ; expansion ROM present if 2000H = 0A5H
+0461  FE A5      CPI 0A5H
+0463  CC 01 20   CZ EXTROM_ENTRY
+0466  CD DF 10   CALL SERIAL_POLL
+0469  CD E0 16   CALL TX_SERVICE
+046C  20         RIM
+046D  E6 40      ANI 40H                     ; RIM bit 6 = RST 7.5 pending
+046F  CA 8E 04   JZ WAIT_SAMPLE_END
+0472  3A 03 E0   LDA PIO1_PC
+0475  F6 01      ORI 01H                     ; PIO1 PC0 = busy
+0477  32 03 E0   STA PIO1_PC
+047A  3E 10      MVI A,10H
+047C  30         SIM                         ; SIM 10H: reset RST 7.5 latch
+047D  3A DA 70   LDA TICK_HOOK
+0480  FE 00      CPI 00H
+0482  C4 DB 10   CNZ CALL_TICK_HOOK
+0485  CD 23 17   CALL REPORT_TASK
+0488  CD C0 18   CALL X_18C0
+048B  CD C9 14   CALL TICK_TASK
+WAIT_SAMPLE_END:                             ; xref: j046F
+048E  D1         POP D
+048F  F1         POP PSW
+0490  3A 03 E0   LDA PIO1_PC
+0493  E6 FE      ANI 0FEH                    ; PIO1 PC0 = idle
+0495  32 03 E0   STA PIO1_PC
+0498  C3 59 04   JMP WAIT_SAMPLE
+
+; WAIT_EPOCH: wait for a sample whose status (PIO2_PC bit 2, seen as bit 4 after RLC RLC) is set.
+WAIT_EPOCH:                                  ; xref: c0166 c019F c01E4 c021B j04A2
+049B  CD 59 04   CALL WAIT_SAMPLE
+049E  47         MOV B,A
+049F  E6 10      ANI 10H                     ; bit 4 = PIO2_PC bit 2 (epoch flag)
+04A1  78         MOV A,B
+04A2  CA 9B 04   JZ WAIT_EPOCH
+04A5  3A 03 E0   LDA PIO1_PC
+04A8  F6 01      ORI 01H
+04AA  32 03 E0   STA PIO1_PC
+04AD  C9         RET
+
+; SHIFT_IN16: clock 8 bits out of the receiver shift register via PIO2_PB bit 4.
+; PIO2_PC bit 4 -> B (phase-code stream), bit 3 -> C (second stream). Returns A = B.
+SHIFT_IN16:                                  ; xref: c01A5 c04D1 c05B7
+04AE  16 08      MVI D,08H
+04B0  3A 03 F0   LDA PIO2_PC
+04B3  C3 BE 04   JMP SHIFT_IN_BIT
+SHIFT_IN_CLK:                                ; xref: j04CC
+04B6  3E 10      MVI A,10H                   ; clock pulse on PIO2_PB bit 4
+04B8  CD 1E 00   CALL PULSE_PB
+04BB  3A 03 F0   LDA PIO2_PC
+SHIFT_IN_BIT:                                ; xref: j04B3
+04BE  07         RLC
+04BF  07         RLC
+04C0  07         RLC
+04C1  07         RLC
+04C2  F5         PUSH PSW
+04C3  78         MOV A,B
+04C4  17         RAL
+04C5  47         MOV B,A
+04C6  F1         POP PSW
+04C7  07         RLC
+04C8  79         MOV A,C
+04C9  17         RAL
+04CA  4F         MOV C,A
+04CB  15         DCR D
+04CC  C2 B6 04   JNZ SHIFT_IN_CLK
+04CF  78         MOV A,B
+04D0  C9         RET
+
+; READ_PHASE: SHIFT_IN16 then XOR with PHASE_REF -> PHASE_CODE (2 bytes).
+READ_PHASE:                                  ; xref: c039D
+04D1  CD AE 04   CALL SHIFT_IN16
+04D4  21 BB 6F   LXI H,PHASE_REF
+04D7  11 BF 6F   LXI D,PHASE_CODE
+04DA  AE         XRA M
+04DB  12         STAX D
+04DC  79         MOV A,C
+04DD  AE         XRA M
+04DE  13         INX D
+04DF  12         STAX D
+04E0  C9         RET
+
+; GET_SLOT_FLAGS: A = SLOT_FLAGS[SLOT_IDX].  GET_FLAGS_A: A = SLOT_FLAGS[A].
+GET_SLOT_FLAGS:                              ; xref: c024D c0522
+04E1  3A 11 6F   LDA SLOT_IDX
+GET_FLAGS_A:                                 ; xref: c029A c02CF c16CC c04F4
+04E4  21 04 6F   LXI H,SLOT_FLAGS
+04E7  85         ADD L
+04E8  6F         MOV L,A
+04E9  7E         MOV A,M
+04EA  C9         RET
+
+; GET_SLOT_REC: HL -> 25-byte station record for SLOT_IDX.
+; Slot 0 = REC_MASTER; otherwise REC_SEC + 25 * (flags & 3).
+GET_SLOT_REC:                                ; xref: c0528
+04EB  3A 11 6F   LDA SLOT_IDX
+04EE  21 24 6F   LXI H,REC_MASTER
+04F1  FE 00      CPI 00H
+04F3  C8         RZ
+04F4  CD E4 04   CALL GET_FLAGS_A
+04F7  21 3D 6F   LXI H,REC_SEC
+04FA  C3 00 05   JMP REC_INDEX
+
+; GET_SEC_TOA: HL -> REC_SEC_TOA + 25 * (A & 3).
+GET_SEC_TOA:                                 ; xref: c055E
+04FD  21 41 6F   LXI H,REC_SEC_TOA
+REC_INDEX:                                   ; xref: j04FA
+0500  E6 03      ANI 03H
+0502  11 19 00   LXI D,0019H                 ; record stride 25
+REC_INDEX_LOOP:                              ; xref: j0508
+0505  3D         DCR A
+0506  F8         RM
+0507  19         DAD D
+0508  C3 05 05   JMP REC_INDEX_LOOP
+
+; MUL9_INDEX: A = (HL + 9*A). Patched: the original x10 body survives at OLD_MUL10.
+MUL9_INDEX:                                  ; xref: c1062 c102E c17E7
+050B  C5         PUSH B
+050C  47         MOV B,A
+050D  07         RLC
+050E  80         ADD B
+050F  47         MOV B,A
+0510  07         RLC
+0511  80         ADD B
+0512  C3 1B 05   JMP MUL9_INDEX_2
+
+; OLD_MUL10: dead code left by an in-place patch (PUSH B / RLC / MOV C,A / RLC / RLC / ADD C).
+OLD_MUL10:                                   
+0515  C5 07 4F 07 07 81  DB   0C5H,07H,4FH,07H,07H,81H; |..O...|
+MUL9_INDEX_2:                                ; xref: j0512
+051B  4F         MOV C,A
+051C  06 00      MVI B,00H
+051E  09         DAD B
+051F  7E         MOV A,M
+0520  C1         POP B
+0521  C9         RET
+
+; LOAD_CUR_REC: CUR_FLAGS = slot flags; copy the slot's 25-byte record into CUR_REC.
+LOAD_CUR_REC:                                ; xref: c0262
+0522  CD E1 04   CALL GET_SLOT_FLAGS
+0525  32 BA 6F   STA CUR_FLAGS
+0528  CD EB 04   CALL GET_SLOT_REC
+052B  01 A1 6F   LXI B,CUR_REC
+COPY25_TO_CUR:                               ; xref: j0542
+052E  1E 19      MVI E,19H
+0530  C3 BD 07   JMP COPY_E                  ; copy 25 bytes
+
+; OLD_LOAD_REC: dead code left by an in-place patch (copied in the opposite direction).
+OLD_LOAD_REC:                                
+0533  CD E1 04 3A BA 6F  DB   0CDH,0E1H,04H,3AH,0BAH,6FH; |...:.o|
+0539  77 CD EB 04 44 4D  DB   77H,0CDH,0EBH,04H,44H,4DH; |w...DM|
+LOAD_REC_HL:                                 ; xref: c01DE
+053F  21 A1 6F   LXI H,CUR_REC
+0542  C3 2E 05   JMP COPY25_TO_CUR
+
+; BIT_OF_STA: A = 1 << (A & 3), HL = TRACK_MASK.
+BIT_OF_STA:                                  ; xref: c03FC
+0545  21 0F 6F   LXI H,TRACK_MASK
+0548  E6 03      ANI 03H
+054A  47         MOV B,A
+054B  3E 01      MVI A,01H
+BIT_OF_LOOP:                                 ; xref: j0550
+054D  05         DCR B
+054E  F8         RM
+054F  07         RLC
+0550  C3 4D 05   JMP BIT_OF_LOOP
+
+; COUNT_TRACKED: B = number of set bits in TRACK_MASK.
+COUNT_TRACKED:                               ; xref: c02F7
+0553  06 00      MVI B,00H
+0555  3A 0F 6F   LDA TRACK_MASK
+COUNT_TRK_LOOP:                              ; xref: j055B
+0558  0F         RRC
+0559  D0         RNC
+055A  04         INR B
+055B  C3 58 05   JMP COUNT_TRK_LOOP
+
+; SEC_TOA_TO_BIN / TOA_TO_BIN: A = bin(HL[1]) + (HL[2] >= 60H BCD ? 1 : 0).
+SEC_TOA_TO_BIN:                              ; xref: c02A2 c02D7
+055E  CD FD 04   CALL GET_SEC_TOA
+TOA_TO_BIN:                                  ; xref: c00F5 c0133 c02B9
+0561  06 00      MVI B,00H
+0563  23         INX H
+0564  23         INX H
+0565  7E         MOV A,M
+0566  1F         RAR
+0567  D6 30      SUI 30H                     ; '0'
+0569  FA 6D 05   JM TOA_TO_BIN_2
+056C  04         INR B
+TOA_TO_BIN_2:                                ; xref: j0569
+056D  2B         DCX H
+056E  7E         MOV A,M
+056F  C5         PUSH B
+0570  CD D9 07   CALL BCD_TO_BIN
+0573  C1         POP B
+0574  80         ADD B
+0575  C9         RET
+BCD_INC_STORE:                               ; xref: c02F1
+0576  3C         INR A
+0577  C3 6A 06   JMP BIN_TO_DELTA
+
+; RESET_PULSES: clear pulse list and reset CUR_PULSE_PTR to CUR_PULSES.
+RESET_PULSES:                                ; xref: c015D c030A c03D6 c065C
+057A  CD 84 05   CALL CLEAR_PULSES
+057D  21 AA 6F   LXI H,CUR_PULSES
+0580  22 AF 6F   SHLD CUR_PULSE_PTR
+0583  C9         RET
+
+; CLEAR_PULSES: zero 17 bytes from CUR_NPULSE (falls into FILL_ZERO in the missing half).
+CLEAR_PULSES:                                ; xref: c01B5 c057A c040C c036B
+0584  06 11      MVI B,11H
+0586  21 A9 6F   LXI H,CUR_NPULSE
+0589  C3 0F 08   JMP FILL_ZERO
+
+; ORPHAN_058C: dead code from a patch, followed by the Loran-C phase-code table
+; (CA F9 = master A / secondary A, 9F AC = master B / secondary B, each preceded by 21H LXI-skip).
+ORPHAN_058C:                                 
+058C  21 04 6F 7E 07 3F 1F 77  DB   21H,04H,6FH,7EH,07H,3FH,1FH,77H; |!.o~.?.w|
+PHASE_CODE_TBL:                              
+0594  07 21 CA   DB   07H,21H,0CAH           ; |.!.|
+0597  F9 D8 21   DB   0F9H,0D8H,21H          ; |..!|
+059A  9F AC C9   DB   9FH,0ACH,0C9H          ; |...|
+
+; PHASE_MISMATCH: B = popcount(PHASE_REF XOR B) = number of phase-code bit errors.
+PHASE_MISMATCH:                              ; xref: c05E2 c061E
+059D  3A BB 6F   LDA PHASE_REF
+05A0  A8         XRA B
+05A1  0E 08      MVI C,08H
+05A3  06 00      MVI B,00H
+PM_LOOP:                                     ; xref: j05AB
+05A5  07         RLC
+05A6  D2 AA 05   JNC PM_NEXT
+05A9  04         INR B
+PM_NEXT:                                     ; xref: j05A6
+05AA  0D         DCR C
+05AB  C2 A5 05   JNZ PM_LOOP
+05AE  C9         RET
+
+; FIRST_SAMPLE: wait one sample, SAMPLE_CNT = 8, read shift register, SAMPLE_LO = C.
+FIRST_SAMPLE:                                ; xref: c0173 c0323
+05AF  CD 59 04   CALL WAIT_SAMPLE
+05B2  3E 08      MVI A,08H
+05B4  32 15 6F   STA SAMPLE_CNT
+05B7  CD AE 04   CALL SHIFT_IN16
+05BA  21 16 6F   LXI H,SAMPLE_LO
+05BD  71         MOV M,C
+05BE  23         INX H
+05BF  36 00      MVI M,00H
+05C1  C9         RET
+
+; MATCH_PULSES: walk samples until WIN_END, matching the master phase code
+; (0CAH on 'A' GRIs, 09FH on 'B' GRIs) and building the pulse-position list.
+; Entry carry flag selects exact compare (CY=1) or 1-bit-tolerant compare (CY=0).
+MATCH_PULSES:                                ; xref: c0177 c0328
+05C2  F5         PUSH PSW
+05C3  3A 16 6F   LDA SAMPLE_LO
+05C6  21 A9 6F   LXI H,CUR_NPULSE
+05C9  5E         MOV E,M
+05CA  C3 D6 05   JMP MP_TEST
+MP_NEXT_SAMPLE:                              ; xref: j0601
+05CD  21 15 6F   LXI H,SAMPLE_CNT
+05D0  34         INR M
+05D1  23         INX H
+05D2  07         RLC
+05D3  7E         MOV A,M
+05D4  17         RAL
+05D5  77         MOV M,A
+MP_TEST:                                     ; xref: j05CA
+05D6  47         MOV B,A
+05D7  7B         MOV A,E
+05D8  FE 00      CPI 00H
+05DA  C2 19 06   JNZ MP_HAVE_PULSES
+05DD  F1         POP PSW
+05DE  F5         PUSH PSW
+05DF  DA EE 05   JC MP_MASTER_A
+05E2  CD 9D 05   CALL PHASE_MISMATCH
+05E5  78         MOV A,B
+05E6  FE 02      CPI 02H
+05E8  DA 07 06   JC MP_ADD_PULSE
+05EB  C3 F4 05   JMP MP_CHK_END
+MP_MASTER_A:                                 ; xref: j05DF
+05EE  3E CA      MVI A,0CAH                  ; master phase code, GRI A
+05F0  A8         XRA B
+05F1  CA 07 06   JZ MP_ADD_PULSE
+MP_CHK_END:                                  ; xref: j05EB j0616
+05F4  3A 15 6F   LDA SAMPLE_CNT
+05F7  21 0E 6F   LXI H,WIN_END
+05FA  BE         CMP M
+05FB  CA 04 06   JZ MP_DONE_C
+MP_WAIT:                                     ; xref: j0659
+05FE  CD 59 04   CALL WAIT_SAMPLE
+0601  C3 CD 05   JMP MP_NEXT_SAMPLE
+MP_DONE_C:                                   ; xref: j05FB j065F
+0604  F1         POP PSW
+0605  37         STC
+0606  C9         RET
+MP_ADD_PULSE:                                ; xref: j05E8 j05F1
+0607  2A AF 6F   LHLD CUR_PULSE_PTR
+060A  3A 15 6F   LDA SAMPLE_CNT
+060D  77         MOV M,A
+060E  23         INX H
+060F  22 AF 6F   SHLD CUR_PULSE_PTR
+0612  21 A9 6F   LXI H,CUR_NPULSE
+0615  34         INR M
+0616  C3 F4 05   JMP MP_CHK_END
+MP_HAVE_PULSES:                              ; xref: j05DA
+0619  F1         POP PSW
+061A  F5         PUSH PSW
+061B  DA 24 06   JC MP_MASTER_B
+061E  CD 9D 05   CALL PHASE_MISMATCH
+0621  C3 28 06   JMP MP_FIND
+MP_MASTER_B:                                 ; xref: j061B
+0624  3E 9F      MVI A,9FH                   ; master phase code, GRI B
+0626  A8         XRA B
+0627  47         MOV B,A
+MP_FIND:                                     ; xref: j0621
+0628  3A 15 6F   LDA SAMPLE_CNT
+062B  4F         MOV C,A
+062C  21 AA 6F   LXI H,CUR_PULSES
+062F  16 05      MVI D,05H
+MP_FIND_LOOP:                                ; xref: j0638
+0631  79         MOV A,C
+0632  BE         CMP M
+0633  CA 3E 06   JZ MP_FOUND
+0636  23         INX H
+0637  15         DCR D
+0638  C2 31 06   JNZ MP_FIND_LOOP
+063B  C3 4F 06   JMP MP_CHK_END2
+MP_FOUND:                                    ; xref: j0633
+063E  78         MOV A,B
+063F  FE 00      CPI 00H
+0641  CA 62 06   JZ MP_DONE_NC
+0644  F1         POP PSW
+0645  F5         PUSH PSW
+0646  DA 4F 06   JC MP_CHK_END2
+0649  78         MOV A,B
+064A  FE 02      CPI 02H
+064C  DA 62 06   JC MP_DONE_NC
+MP_CHK_END2:                                 ; xref: j063B j0646
+064F  3A 15 6F   LDA SAMPLE_CNT
+0652  21 0E 6F   LXI H,WIN_END
+0655  BE         CMP M
+0656  CA 5C 06   JZ MP_WINDOW_END
+0659  C3 FE 05   JMP MP_WAIT
+MP_WINDOW_END:                               ; xref: j0656
+065C  CD 7A 05   CALL RESET_PULSES
+065F  C3 04 06   JMP MP_DONE_C
+MP_DONE_NC:                                  ; xref: j0641 j064C
+0662  F1         POP PSW
+0663  AF         XRA A
+0664  C9         RET
+
+; SAMPLE_TO_BCD: BCD_DELTA_3 = BCD(SAMPLE_CNT - 9).  BIN_TO_DELTA: BCD_DELTA_3 = BCD(A).
+SAMPLE_TO_BCD:                               ; xref: c018E
+0665  3A 15 6F   LDA SAMPLE_CNT
+0668  D6 09      SUI 09H
+BIN_TO_DELTA:                                ; xref: j0577
+066A  CD EF 07   CALL BIN_TO_BCD
+066D  32 D2 6F   STA BCD_DELTA_3
+0670  C9         RET
+
+; COUNT_BITS4: B = popcount of low 4 bits of A.
+COUNT_BITS4:                                 ; xref: c03A6 c03AF
+0671  0E 04      MVI C,04H
+0673  06 00      MVI B,00H
+CB4_LOOP:                                    ; xref: j067B
+0675  0F         RRC
+0676  D2 7A 06   JNC CB4_NEXT
+0679  04         INR B
+CB4_NEXT:                                    ; xref: j0676
+067A  0D         DCR C
+067B  C2 75 06   JNZ CB4_LOOP
+067E  C9         RET
+
+; CHK_NPULSE: carry if CUR_NPULSE bytes >= 6, else zero them.
+CHK_NPULSE:                                  ; xref: c03BD c03CB
+067F  2A A9 6F   LHLD CUR_NPULSE
+0682  7D         MOV A,L
+0683  D6 06      SUI 06H
+0685  F2 96 06   JP CHK_NPULSE_OK
+0688  7C         MOV A,H
+0689  D6 06      SUI 06H
+068B  F2 96 06   JP CHK_NPULSE_OK
+068E  21 00 00   LXI H,RESET
+0691  AF         XRA A
+0692  22 A9 6F   SHLD CUR_NPULSE
+0695  C9         RET
+CHK_NPULSE_OK:                               ; xref: j0685 j068B
+0696  37         STC
+0697  C9         RET
+
+; ADJ_PULSES: pulse-position adjustment; computes a signed 16-bit offset (NEG_HL for
+; negative) and adds/subtracts BCD_DELTA into BCD_ACC with BCD_ADD4 / BCD_SUB4.
+ADJ_PULSES:                                  ; xref: c074F c0761
+0698  2A AB 6F   LHLD CUR_PULSES_1
+069B  3A A1 6F   LDA CUR_REC
+069E  E6 02      ANI 02H
+06A0  CA BE 06   JZ ADJ_OFFSET
+06A3  11 AA 6F   LXI D,CUR_PULSES
+06A6  1A         LDAX D
+06A7  47         MOV B,A
+06A8  07         RLC
+06A9  78         MOV A,B
+06AA  D2 B4 06   JNC ADJ_SUB16
+06AD  C6 10      ADI 10H
+06AF  12         STAX D
+06B0  2B         DCX H
+06B1  C3 BB 06   JMP ADJ_STORE
+ADJ_SUB16:                                   ; xref: j06AA
+06B4  D6 10      SUI 10H
+06B6  FA BE 06   JM ADJ_OFFSET
+06B9  12         STAX D
+06BA  23         INX H
+ADJ_STORE:                                   ; xref: j06B1
+06BB  22 AB 6F   SHLD CUR_PULSES_1
+ADJ_OFFSET:                                  ; xref: j06A0 j06B6
+06BE  EB         XCHG
+06BF  2A AD 6F   LHLD CUR_PULSES_3
+06C2  19         DAD D
+06C3  7C         MOV A,H
+06C4  07         RLC
+06C5  1E 00      MVI E,00H
+06C7  DC 21 07   CC NEG_HL
+06CA  E5         PUSH H
+06CB  D5         PUSH D
+06CC  16 04      MVI D,04H
+ADJ_SHL4:                                    ; xref: j06D5
+06CE  7D         MOV A,L
+06CF  07         RLC
+06D0  6F         MOV L,A
+06D1  7C         MOV A,H
+06D2  17         RAL
+06D3  67         MOV H,A
+06D4  15         DCR D
+06D5  C2 CE 06   JNZ ADJ_SHL4
+06D8  83         ADD E
+06D9  07         RLC
+06DA  CD EF 07   CALL BIN_TO_BCD
+06DD  32 D2 6F   STA BCD_DELTA_3
+06E0  FE 00      CPI 00H
+06E2  CA 0A 07   JZ ADJ_ZERO
+06E5  D1         POP D
+06E6  E1         POP H
+06E7  26 00      MVI H,00H
+06E9  7D         MOV A,L
+06EA  E6 0F      ANI 0FH
+06EC  6F         MOV L,A
+06ED  7B         MOV A,E
+06EE  0F         RRC
+06EF  F5         PUSH PSW
+06F0  D2 FA 06   JNC ADJ_APPLY
+06F3  11 F0 FF   LXI D,0FFF0H                ; DE = -16
+06F6  19         DAD D
+06F7  CD 21 07   CALL NEG_HL
+ADJ_APPLY:                                   ; xref: j06F0
+06FA  22 AD 6F   SHLD CUR_PULSES_3
+06FD  21 CF 6F   LXI H,BCD_DELTA
+0700  01 20 6F   LXI B,BCD_ACC
+0703  F1         POP PSW
+0704  D2 82 07   JNC BCD_ADD4
+0707  C3 9F 07   JMP BCD_SUB4
+ADJ_ZERO:                                    ; xref: j06E2
+070A  D1         POP D
+070B  E1         POP H
+070C  22 AD 6F   SHLD CUR_PULSES_3
+070F  3A BA 6F   LDA CUR_FLAGS
+0712  E6 08      ANI 08H
+0714  C8         RZ
+0715  3A E2 6F   LDA VAR_6FE2
+0718  0F         RRC
+0719  0F         RRC
+071A  D0         RNC
+071B  21 23 6F   LXI H,BCD_ACC_HI
+071E  36 02      MVI M,02H
+0720  C9         RET
+
+; NEG_HL: HL = -HL, E = E + 1 (sign flag).
+NEG_HL:                                      ; xref: c06C7 c06F7
+0721  7C         MOV A,H
+0722  2F         CMA
+0723  67         MOV H,A
+0724  7D         MOV A,L
+0725  2F         CMA
+0726  6F         MOV L,A
+0727  23         INX H
+0728  1C         INR E
+0729  C9         RET
+
+; CALC_TD: form the time difference: copy TOA (or GRI) to BCD_ACC, adjust, store to CUR_TOA.
+CALC_TD:                                     
+072A  3A BA 6F   LDA CUR_FLAGS
+072D  E6 08      ANI 08H
+072F  C2 58 07   JNZ CALC_TD_GRI
+0732  3A 11 6F   LDA SLOT_IDX
+0735  FE 00      CPI 00H
+0737  CA 75 07   JZ CALC_TD_TMP
+073A  21 A5 6F   LXI H,CUR_TOA
+073D  01 20 6F   LXI B,BCD_ACC
+0740  CD BB 07   CALL COPY4
+0743  2A AB 6F   LHLD CUR_PULSES_1
+0746  01 01 00   LXI B,0001H                 ; BC = 1
+0749  CD 8D 0B   CALL X_0B8D
+074C  22 AB 6F   SHLD CUR_PULSES_1
+074F  CD 98 06   CALL ADJ_PULSES
+0752  21 20 6F   LXI H,BCD_ACC
+0755  C3 78 07   JMP CALC_TD_STORE
+CALC_TD_GRI:                                 ; xref: j072F
+0758  21 1C 6F   LXI H,GRI_BCD
+075B  01 20 6F   LXI B,BCD_ACC
+075E  CD BB 07   CALL COPY4
+0761  CD 98 06   CALL ADJ_PULSES
+0764  21 20 6F   LXI H,BCD_ACC
+0767  01 18 6F   LXI B,GRI_TMP
+076A  CD BB 07   CALL COPY4
+076D  3A 11 6F   LDA SLOT_IDX
+0770  FE 00      CPI 00H
+0772  C2 7E 07   JNZ CALC_TD_EXIT
+CALC_TD_TMP:                                 ; xref: j0737
+0775  21 18 6F   LXI H,GRI_TMP
+CALC_TD_STORE:                               ; xref: j0755
+0778  01 A5 6F   LXI B,CUR_TOA
+077B  CD BB 07   CALL COPY4
+CALC_TD_EXIT:                                ; xref: j0772
+077E  21 E3 6F   LXI H,VAR_6FE3
+0781  C9         RET
+
+; BCD_ADD4: (BC) += (HL), 4 packed-BCD bytes, LS byte first.
+; PTR_TO_MSB: HL += DE-1, BC += DE-1 (point both at the MS byte).
+BCD_ADD4:                                    ; xref: c10BA j0704
+0782  11 04 00   LXI D,0004H                 ; DE = 4 bytes
+0785  CD 94 07   CALL PTR_TO_MSB
+0788  AF         XRA A
+BCD_ADD4_LOOP:                               ; xref: j0791
+0789  0A         LDAX B
+078A  8E         ADC M
+078B  27         DAA
+078C  02         STAX B
+078D  1D         DCR E
+078E  C8         RZ
+078F  0B         DCX B
+0790  2B         DCX H
+0791  C3 89 07   JMP BCD_ADD4_LOOP
+PTR_TO_MSB:                                  ; xref: c0785 c07A2
+0794  19         DAD D
+0795  2B         DCX H
+0796  E5         PUSH H
+0797  60         MOV H,B
+0798  69         MOV L,C
+0799  19         DAD D
+079A  2B         DCX H
+079B  44         MOV B,H
+079C  4D         MOV C,L
+079D  E1         POP H
+079E  C9         RET
+
+; BCD_SUB4: (BC) -= (HL), 4 packed-BCD bytes, ten's-complement subtract.
+BCD_SUB4:                                    ; xref: c1088 c109E j0707
+079F  11 04 00   LXI D,0004H                 ; DE = 4 bytes
+07A2  CD 94 07   CALL PTR_TO_MSB
+07A5  D5         PUSH D
+07A6  C5         PUSH B
+07A7  D1         POP D
+07A8  C1         POP B
+07A9  37         STC
+BCD_SUB4_LOOP:                               ; xref: j07B8
+07AA  3E 99      MVI A,99H
+07AC  CE 00      ACI 00H
+07AE  96         SUB M
+07AF  EB         XCHG
+07B0  86         ADD M
+07B1  27         DAA
+07B2  77         MOV M,A
+07B3  EB         XCHG
+07B4  0D         DCR C
+07B5  C8         RZ
+07B6  1B         DCX D
+07B7  2B         DCX H
+07B8  C3 AA 07   JMP BCD_SUB4_LOOP
+
+; COPY4: copy 4 bytes (HL) -> (BC).  COPY_E: copy E bytes.
+COPY4:                                       ; xref: c107B c0740 c077B c075E c076A c0146 c015A j002E c0374
+07BB  1E 04      MVI E,04H
+COPY_E:                                      ; xref: j07C2 j0530
+07BD  7E         MOV A,M
+07BE  02         STAX B
+07BF  23         INX H
+07C0  03         INX B
+07C1  1D         DCR E
+07C2  C2 BD 07   JNZ COPY_E
+07C5  C9         RET
+
+; MUL8: BC = C * D (shift-add, 8x8 -> 16).
+MUL8:                                        ; xref: c0287
+07C6  06 00      MVI B,00H
+07C8  1E 09      MVI E,09H
+MUL8_LOOP:                                   ; xref: j07D6
+07CA  79         MOV A,C
+07CB  1F         RAR
+07CC  4F         MOV C,A
+07CD  1D         DCR E
+07CE  C8         RZ
+07CF  78         MOV A,B
+07D0  D2 D4 07   JNC MUL8_SHIFT
+07D3  82         ADD D
+MUL8_SHIFT:                                  ; xref: j07D0
+07D4  1F         RAR
+07D5  47         MOV B,A
+07D6  C3 CA 07   JMP MUL8_LOOP
+
+; BCD_TO_BIN: A = binary value of packed-BCD byte A (uses HI_NIBBLE in the missing half).
+BCD_TO_BIN:                                  ; xref: c0570 c037A
+07D9  47         MOV B,A
+07DA  CD 08 08   CALL HI_NIBBLE
+07DD  5F         MOV E,A
+07DE  AF         XRA A
+07DF  16 0A      MVI D,0AH
+B2B_LOOP:                                    ; xref: j07E6
+07E1  1D         DCR E
+07E2  FA E9 07   JM B2B_DONE
+07E5  82         ADD D
+07E6  C3 E1 07   JMP B2B_LOOP
+B2B_DONE:                                    ; xref: j07E2
+07E9  4F         MOV C,A
+07EA  3E 0F      MVI A,0FH
+07EC  A0         ANA B
+07ED  81         ADD C
+07EE  C9         RET
+
+; BIN_TO_BCD: A = packed BCD of binary A (0..99). Continues at 0800 in the missing half:
+; RLC RLC RLC / ADD H / RET.
+BIN_TO_BCD:                                  ; xref: c06DA c066A c0383
+07EF  1E 00      MVI E,00H
+07F1  16 0A      MVI D,0AH
+B2D_LOOP:                                    ; xref: j07F8
+07F3  92         SUB D
+07F4  DA FB 07   JC B2D_DONE
+07F7  1C         INR E
+07F8  C3 F3 07   JMP B2D_LOOP
+B2D_DONE:                                    ; xref: j07F4
+07FB  82         ADD D
+07FC  67         MOV H,A
+07FD  AF         XRA A
+07FE  7B         MOV A,E
+07FF  07         RLC
+0800  FF ...     ; unprogrammed (0FFH) through 0FFF -- 2048 bytes not present in dump
+
+; ---- ORG 1000 ----
+
+; SLOTTBL_CHK: tail of a routine from the missing half (entered from 0FFxH):
+; test SLOT_TBL[A]; clean up stack and continue at X_0FE9 or SLOT_INC_CHK.
+SLOTTBL_CHK:                                 
+1000  4F         MOV C,A
+1001  06 00      MVI B,00H
+1003  21 54 70   LXI H,SLOT_TBL
+1006  09         DAD B
+1007  7E         MOV A,M
+1008  FE 00      CPI 00H
+100A  C1         POP B
+100B  E1         POP H
+100C  CA 13 10   JZ SLOTTBL_ZERO
+100F  F1         POP PSW
+1010  C3 E9 0F   JMP X_0FE9
+SLOTTBL_ZERO:                                ; xref: j100C
+1013  F1         POP PSW
+1014  78         MOV A,B
+1015  C3 19 10   JMP SLOT_INC_CHK
+1018  F1         DB   0F1H                   ; |.|
+SLOT_INC_CHK:                                ; xref: j1015
+1019  3C         INR A
+101A  21 14 6F   LXI H,SLOT_COUNT
+101D  BE         CMP M
+101E  C2 BE 0F   JNZ X_0FBE
+1021  C9         RET
+CHK_H_NEG:                                   
+1022  7C         MOV A,H
+1023  07         RLC
+1024  DA 6A 0F   JC X_0F6A
+1027  C9         RET
+
+; SLOTREC_PHASE: update the 9-byte per-slot record from PHASE_CODE_HI.
+SLOTREC_PHASE:                               
+1028  3A 11 6F   LDA SLOT_IDX
+102B  21 F3 6F   LXI H,SLOTREC_5
+102E  CD 0B 05   CALL MUL9_INDEX
+1031  4E         MOV C,M
+1032  3A C0 6F   LDA PHASE_CODE_HI
+1035  EE 3F      XRI 3FH                     ; '?'
+1037  0D         DCR C
+1038  0D         DCR C
+1039  0D         DCR C
+103A  1E 03      MVI E,03H
+SRP_LOOP:                                    ; xref: j1043
+103C  07         RLC
+103D  D2 42 10   JNC SRP_NEXT
+1040  0C         INR C
+1041  0C         INR C
+SRP_NEXT:                                    ; xref: j103D
+1042  1D         DCR E
+1043  C2 3C 10   JNZ SRP_LOOP
+1046  79         MOV A,C
+1047  C6 08      ADI 08H
+1049  07         RLC
+104A  3E 00      MVI A,00H
+104C  1F         RAR
+104D  23         INX H
+104E  77         MOV M,A
+104F  2B         DCX H
+1050  79         MOV A,C
+1051  07         RLC
+1052  D2 5A 10   JNC SRP_STORE
+1055  79         MOV A,C
+1056  C6 10      ADI 10H
+1058  07         RLC
+1059  D0         RNC
+SRP_STORE:                                   ; xref: j1052
+105A  71         MOV M,C
+105B  C9         RET
+
+; SLOTREC_UPDATE: bump the per-slot counter, subtract BCD_TMP / 0400H, add popcount, etc.
+SLOTREC_UPDATE:                              
+105C  3A 11 6F   LDA SLOT_IDX
+105F  21 EE 6F   LXI H,SLOTREC_CNT
+1062  CD 0B 05   CALL MUL9_INDEX
+1065  23         INX H
+1066  E5         PUSH H
+1067  2B         DCX H
+1068  34         INR M
+1069  7E         MOV A,M
+106A  FE 02      CPI 02H
+106C  CA 76 10   JZ SRU_SUB
+106F  FE 05      CPI 05H
+1071  C2 8B 10   JNZ SRU_SUB4
+1074  36 00      MVI M,00H
+SRU_SUB:                                     ; xref: j106C
+1076  E1         POP H
+1077  E5         PUSH H
+1078  01 EA 6F   LXI B,M_6FEA
+107B  CD BB 07   CALL COPY4
+107E  21 E9 6F   LXI H,BCD_TMP
+1081  36 00      MVI M,00H
+1083  C1         POP B
+1084  C5         PUSH B
+1085  21 E9 6F   LXI H,BCD_TMP
+1088  CD 9F 07   CALL BCD_SUB4
+SRU_SUB4:                                    ; xref: j1071
+108B  01 00 04   LXI B,0400H                 ; B = 4 bytes (C ignored)
+108E  21 E9 6F   LXI H,BCD_TMP
+1091  CD 0F 08   CALL FILL_ZERO
+1094  21 EB 6F   LXI H,BCD_TMP_2
+1097  36 04      MVI M,04H
+1099  C1         POP B
+109A  C5         PUSH B
+109B  21 E9 6F   LXI H,BCD_TMP
+109E  CD 9F 07   CALL BCD_SUB4
+10A1  21 EB 6F   LXI H,BCD_TMP_2
+10A4  36 00      MVI M,00H
+10A6  3A C0 6F   LDA PHASE_CODE_HI
+10A9  2F         CMA
+10AA  1E 08      MVI E,08H
+SRU_CNT_LOOP:                                ; xref: j10B2
+10AC  0F         RRC
+10AD  D2 B1 10   JNC SRU_CNT_NEXT
+10B0  34         INR M
+SRU_CNT_NEXT:                                ; xref: j10AD
+10B1  1D         DCR E
+10B2  C2 AC 10   JNZ SRU_CNT_LOOP
+10B5  C1         POP B
+10B6  C5         PUSH B
+10B7  21 E9 6F   LXI H,BCD_TMP
+10BA  CD 82 07   CALL BCD_ADD4
+10BD  C1         POP B
+10BE  0A         LDAX B
+10BF  FE 00      CPI 00H
+10C1  CA CE 10   JZ SRU_ZERO
+10C4  60         MOV H,B
+10C5  69         MOV L,C
+10C6  C5         PUSH B
+10C7  06 04      MVI B,04H
+10C9  CD 0F 08   CALL FILL_ZERO
+10CC  C1         POP B
+10CD  C9         RET
+SRU_ZERO:                                    ; xref: j10C1
+10CE  03         INX B
+10CF  0A         LDAX B
+10D0  E6 F0      ANI 0F0H
+10D2  C8         RZ
+10D3  3E 10      MVI A,10H
+10D5  02         STAX B
+10D6  03         INX B
+10D7  3E 00      MVI A,00H
+10D9  02         STAX B
+10DA  C9         RET
+
+; CALL_TICK_HOOK: jump through TICK_HOOK (set by the missing half or the monitor).
+CALL_TICK_HOOK:                              ; xref: c0482
+10DB  2A DA 70   LHLD TICK_HOOK
+10DE  E9         PCHL
+
+; SERIAL_POLL: 8251 receive state machine (RX_STATE / PROTO_STATE). See docs/serial-protocol.md.
+; Also runs PLOT_OUT when OUT_MODE = 2.
+SERIAL_POLL:                                 ; xref: c0466 j1102 j120D j1246 j1253 j1260 j126D j128F j12DC j12EB j1320 j134E
+10DF  3A DC 70   LDA OUT_MODE
+10E2  FE 02      CPI 02H
+10E4  CC 58 13   CZ PLOT_OUT
+10E7  3A E0 70   LDA RX_STATE
+10EA  FE 00      CPI 00H
+10EC  C2 05 11   JNZ RX_STATE_N
+10EF  3A 01 C0   LDA USART_CTRL
+10F2  1F         RAR                         ; RxRDY?
+10F3  1F         RAR
+10F4  D0         RNC
+10F5  3A 00 C0   LDA USART_DATA
+10F8  32 E1 70   STA RX_CHAR
+10FB  3A E0 70   LDA RX_STATE
+10FE  3C         INR A
+10FF  32 E0 70   STA RX_STATE
+1102  C3 DF 10   JMP SERIAL_POLL
+RX_STATE_N:                                  ; xref: j10EC
+1105  3A 01 C0   LDA USART_CTRL
+1108  1F         RAR                         ; TxRDY?
+1109  D0         RNC
+110A  3A 03 E0   LDA PIO1_PC
+110D  F6 01      ORI 01H
+110F  32 03 E0   STA PIO1_PC
+1112  3A E0 70   LDA RX_STATE
+1115  3C         INR A
+1116  32 E0 70   STA RX_STATE
+1119  FE 02      CPI 02H
+111B  C2 92 12   JNZ TX_STATE_N
+111E  3A E1 70   LDA RX_CHAR
+1121  FE 12      CPI 12H                     ; DC2: reset protocol
+1123  C2 31 11   JNZ RX_CMD_14
+1126  3E 00      MVI A,00H
+1128  32 DD 70   STA PROTO_STATE
+112B  32 DC 70   STA OUT_MODE
+112E  C3 E4 11   JMP RX_DONE
+RX_CMD_14:                                   ; xref: j1123
+1131  FE 14      CPI 14H                     ; DC4: OUT_MODE = 1
+1133  C2 3E 11   JNZ RX_CMD_07
+1136  3E 01      MVI A,01H
+1138  32 DC 70   STA OUT_MODE
+113B  C3 E4 11   JMP RX_DONE
+RX_CMD_07:                                   ; xref: j1133
+113E  FE 07      CPI 07H                     ; BEL: reset print buffer, PROTO_STATE = 1
+1140  C2 56 11   JNZ RX_CMD_05
+1143  21 3E 70   LXI H,PRTBUF
+1146  22 D1 70   SHLD PRTBUF_PTR
+1149  3E 00      MVI A,00H
+114B  32 DC 70   STA OUT_MODE
+114E  3E 01      MVI A,01H
+1150  32 DD 70   STA PROTO_STATE
+1153  C3 E4 11   JMP RX_DONE
+RX_CMD_05:                                   ; xref: j1140
+1156  FE 05      CPI 05H                     ; ENQ: PROTO_STATE = 2
+1158  C2 63 11   JNZ RX_PROTO_4
+115B  3E 02      MVI A,02H
+115D  32 DD 70   STA PROTO_STATE
+1160  C3 E4 11   JMP RX_DONE
+RX_PROTO_4:                                  ; xref: j1158
+1163  3A DD 70   LDA PROTO_STATE
+1166  FE 04      CPI 04H
+1168  C2 90 11   JNZ RX_PROTO_5
+116B  3A E1 70   LDA RX_CHAR
+116E  FE 41      CPI 41H                     ; 'A'
+1170  C2 7B 11   JNZ RX_PROTO_4B
+1173  3E 05      MVI A,05H
+1175  32 DD 70   STA PROTO_STATE
+1178  C3 E4 11   JMP RX_DONE
+RX_PROTO_4B:                                 ; xref: j1170
+117B  FE 2C      CPI 2CH                     ; ','
+117D  C2 88 11   JNZ RX_PROTO_RESET
+1180  3E 06      MVI A,06H
+1182  32 DD 70   STA PROTO_STATE
+1185  C3 E4 11   JMP RX_DONE
+RX_PROTO_RESET:                              ; xref: j117D
+1188  3E 00      MVI A,00H
+118A  32 DD 70   STA PROTO_STATE
+118D  C3 E4 11   JMP RX_DONE
+RX_PROTO_5:                                  ; xref: j1168
+1190  3A DD 70   LDA PROTO_STATE
+1193  FE 05      CPI 05H
+1195  C2 B2 11   JNZ RX_PROTO_6
+1198  3A E1 70   LDA RX_CHAR
+119B  21 DE 70   LXI H,UNIT_ID
+119E  BE         CMP M
+119F  C2 AA 11   JNZ RX_PROTO_SET1
+11A2  3E 02      MVI A,02H
+11A4  32 DD 70   STA PROTO_STATE
+11A7  C3 E4 11   JMP RX_DONE
+RX_PROTO_SET1:                               ; xref: j119F j11C1
+11AA  3E 01      MVI A,01H
+11AC  32 DD 70   STA PROTO_STATE
+11AF  C3 E4 11   JMP RX_DONE
+RX_PROTO_6:                                  ; xref: j1195
+11B2  3A DD 70   LDA PROTO_STATE
+11B5  FE 06      CPI 06H
+11B7  C2 CC 11   JNZ RX_CHK_ESC
+11BA  3A E1 70   LDA RX_CHAR
+11BD  21 DE 70   LXI H,UNIT_ID
+11C0  BE         CMP M
+11C1  C2 AA 11   JNZ RX_PROTO_SET1
+11C4  3E 03      MVI A,03H
+11C6  32 DD 70   STA PROTO_STATE
+11C9  C3 E4 11   JMP RX_DONE
+RX_CHK_ESC:                                  ; xref: j11B7
+11CC  3A E1 70   LDA RX_CHAR
+11CF  FE 1B      CPI 1BH                     ; ESC: PROTO_STATE = 4
+11D1  C2 DC 11   JNZ RX_CHK_MON
+11D4  3E 04      MVI A,04H
+11D6  32 DD 70   STA PROTO_STATE
+11D9  C3 E4 11   JMP RX_DONE
+RX_CHK_MON:                                  ; xref: j11D1
+11DC  3A DD 70   LDA PROTO_STATE
+11DF  FE 03      CPI 03H
+11E1  CA EA 11   JZ MON_CMD
+RX_DONE:                                     ; xref: j112E j113B j1153 j1160 j1178 j1185 j118D j11A7 j11AF j11C9 j11D9
+11E4  3E 00      MVI A,00H
+11E6  32 E0 70   STA RX_STATE
+11E9  C9         RET
+
+; MON_CMD: memory monitor commands, active when PROTO_STATE = 3. Char is echoed first.
+;   ' ' deposit MON_WORD low byte at (MON_PTR), advance   R back up one address
+;   S set MON_PTR = MON_WORD   G call MON_WORD   M dump memory   K/P/O output mode 1/2/0
+;   0-9 A-F shift hex digit into MON_WORD
+MON_CMD:                                     ; xref: j11E1
+11EA  3A E1 70   LDA RX_CHAR
+11ED  32 00 C0   STA USART_DATA              ; echo command char
+11F0  FE 20      CPI 20H                     ; ' '
+11F2  C2 10 12   JNZ MON_CMD_R
+11F5  3A E6 70   LDA MON_DIGIT_FLAG
+11F8  FE 00      CPI 00H
+11FA  2A E2 70   LHLD MON_PTR
+11FD  CA 04 12   JZ MON_ADVANCE
+1200  3A E4 70   LDA MON_WORD
+1203  77         MOV M,A
+MON_ADVANCE:                                 ; xref: j11FD
+1204  23         INX H
+1205  22 E2 70   SHLD MON_PTR
+MON_CLR_DIGIT:                               ; xref: j121C j122A j1235
+1208  3E 00      MVI A,00H
+120A  32 E6 70   STA MON_DIGIT_FLAG
+120D  C3 DF 10   JMP SERIAL_POLL
+MON_CMD_R:                                   ; xref: j11F2
+1210  FE 52      CPI 52H                     ; 'R'
+1212  C2 1F 12   JNZ MON_CMD_S
+1215  2A E2 70   LHLD MON_PTR
+1218  2B         DCX H
+1219  22 E2 70   SHLD MON_PTR
+121C  C3 08 12   JMP MON_CLR_DIGIT
+MON_CMD_S:                                   ; xref: j1212
+121F  FE 53      CPI 53H                     ; 'S'
+1221  C2 2D 12   JNZ MON_CMD_G
+1224  2A E4 70   LHLD MON_WORD
+1227  22 E2 70   SHLD MON_PTR
+122A  C3 08 12   JMP MON_CLR_DIGIT
+MON_CMD_G:                                   ; xref: j1221
+122D  FE 47      CPI 47H                     ; 'G'
+122F  C2 3C 12   JNZ MON_CMD_K
+1232  CD 38 12   CALL MON_GO
+1235  C3 08 12   JMP MON_CLR_DIGIT
+MON_GO:                                      ; xref: c1232
+1238  2A E4 70   LHLD MON_WORD
+123B  E9         PCHL
+MON_CMD_K:                                   ; xref: j122F
+123C  FE 4B      CPI 4BH                     ; 'K'
+123E  C2 49 12   JNZ MON_CMD_P
+1241  3E 01      MVI A,01H
+1243  32 DC 70   STA OUT_MODE
+1246  C3 DF 10   JMP SERIAL_POLL
+MON_CMD_P:                                   ; xref: j123E
+1249  FE 50      CPI 50H                     ; 'P'
+124B  C2 56 12   JNZ MON_CMD_M
+124E  3E 02      MVI A,02H
+1250  32 DC 70   STA OUT_MODE
+1253  C3 DF 10   JMP SERIAL_POLL
+MON_CMD_M:                                   ; xref: j124B
+1256  FE 4D      CPI 4DH                     ; 'M'
+1258  C2 63 12   JNZ MON_CMD_O
+125B  3E 0C      MVI A,0CH
+125D  32 E0 70   STA RX_STATE
+1260  C3 DF 10   JMP SERIAL_POLL
+MON_CMD_O:                                   ; xref: j1258
+1263  FE 4F      CPI 4FH                     ; 'O'
+1265  C2 70 12   JNZ MON_HEX_DIGIT
+1268  3E 00      MVI A,00H
+126A  32 DC 70   STA OUT_MODE
+126D  C3 DF 10   JMP SERIAL_POLL
+MON_HEX_DIGIT:                               ; xref: j1265
+1270  FE 3A      CPI 3AH                     ; ':'
+1272  FA 77 12   JM MON_HEX_SHIFT
+1275  C6 09      ADI 09H
+MON_HEX_SHIFT:                               ; xref: j1272
+1277  E6 0F      ANI 0FH
+1279  2A E4 70   LHLD MON_WORD
+127C  29         DAD H
+127D  29         DAD H
+127E  29         DAD H
+127F  29         DAD H
+1280  B5         ORA L
+1281  6F         MOV L,A
+1282  22 E4 70   SHLD MON_WORD
+1285  3E 00      MVI A,00H
+1287  32 E0 70   STA RX_STATE
+128A  3E 01      MVI A,01H
+128C  32 E6 70   STA MON_DIGIT_FLAG
+128F  C3 DF 10   JMP SERIAL_POLL
+TX_STATE_N:                                  ; xref: j111B
+1292  FE 03      CPI 03H
+1294  CA D4 12   JZ TX_CR                    ; state 3: send CR
+1297  FE 04      CPI 04H
+1299  CA D7 12   JZ TX_LF                    ; state 4: send LF
+129C  FE 05      CPI 05H
+129E  CA 29 13   JZ TX_PTR_HI
+12A1  FE 06      CPI 06H
+12A3  CA 1A 13   JZ TX_ECHO                  ; state 6/8/B: echo char
+12A6  FE 07      CPI 07H
+12A8  CA 23 13   JZ TX_PTR_LO
+12AB  FE 08      CPI 08H
+12AD  CA 1A 13   JZ TX_ECHO
+12B0  FE 09      CPI 09H
+12B2  CA D1 12   JZ TX_SPACE                 ; state 9: send space
+12B5  FE 0A      CPI 0AH
+12B7  CA 51 13   JZ TX_MEM_BYTE
+12BA  FE 0B      CPI 0BH
+12BC  CA 1A 13   JZ TX_ECHO
+12BF  FE 0C      CPI 0CH
+12C1  C2 DF 12   JNZ TX_WAIT_TXRDY
+12C4  AF         XRA A
+12C5  32 E4 70   STA MON_WORD
+12C8  32 E5 70   STA MON_WORD_HI
+12CB  32 E0 70   STA RX_STATE
+
+; TX_DASH: send '-'. The three LXI H instructions are 21H skip-prefixes over
+; MVI A,' ' / MVI A,0DH / MVI A,0AH so that entries at 12D1/12D4/12D7 send those chars.
+TX_DASH:                                     ; xref: j1300
+12CE  3E 2D      MVI A,2DH                   ; '-'
+TX_SPACE:                                    ; = 12D1, inside the next instruction (entered by jumping past the 21H prefix)
+12D0  21 3E 20   LXI H,203EH                 ; 21H skip prefix: MVI A,' ' at 12D1
+TX_CR:                                       ; = 12D4, inside the next instruction (entered by jumping past the 21H prefix)
+12D3  21 3E 0D   LXI H,0D3EH                 ; 21H skip prefix: MVI A,0DH at 12D4
+TX_LF:                                       ; = 12D7, inside the next instruction (entered by jumping past the 21H prefix)
+12D6  21 3E 0A   LXI H,0A3EH                 ; 21H skip prefix: MVI A,0AH at 12D7
+12D9  32 00 C0   STA USART_DATA
+12DC  C3 DF 10   JMP SERIAL_POLL
+TX_WAIT_TXRDY:                               ; xref: j12C1
+12DF  3A 01 C0   LDA USART_CTRL
+12E2  1F         RAR
+12E3  1F         RAR
+12E4  D2 EE 12   JNC TX_DUMP_STATE
+12E7  AF         XRA A
+12E8  32 E0 70   STA RX_STATE
+12EB  C3 DF 10   JMP SERIAL_POLL
+TX_DUMP_STATE:                               ; xref: j12E4
+12EE  3A E0 70   LDA RX_STATE
+12F1  FE 0D      CPI 0DH
+12F3  CA 03 13   JZ TX_DUMP_BYTE
+12F6  FE 0E      CPI 0EH
+12F8  CA 1A 13   JZ TX_ECHO
+12FB  3E 0C      MVI A,0CH
+12FD  32 E0 70   STA RX_STATE
+1300  C3 CE 12   JMP TX_DASH
+TX_DUMP_BYTE:                                ; xref: j12F3
+1303  2A E4 70   LHLD MON_WORD
+1306  3A E7 70   LDA MON_LAST
+1309  BE         CMP M
+130A  CA 14 13   JZ TX_DUMP_SAME
+130D  7E         MOV A,M
+130E  32 E7 70   STA MON_LAST
+1311  C3 2C 13   JMP TX_HEX_BYTE
+TX_DUMP_SAME:                                ; xref: j130A
+1314  3E 0C      MVI A,0CH
+1316  32 E0 70   STA RX_STATE
+1319  C9         RET
+TX_ECHO:                                     ; xref: j12A3 j12AD j12BC j12F8
+131A  3A E1 70   LDA RX_CHAR
+131D  32 00 C0   STA USART_DATA
+1320  C3 DF 10   JMP SERIAL_POLL
+TX_PTR_LO:                                   ; xref: j12A8
+1323  3A E2 70   LDA MON_PTR
+1326  C3 2C 13   JMP TX_HEX_BYTE
+TX_PTR_HI:                                   ; xref: j129E
+1329  3A E3 70   LDA MON_PTR_HI
+TX_HEX_BYTE:                                 ; xref: j1311 j1355 j1326
+132C  F5         PUSH PSW
+132D  1F         RAR
+132E  1F         RAR
+132F  1F         RAR
+1330  1F         RAR
+1331  E6 0F      ANI 0FH
+1333  FE 0A      CPI 0AH
+1335  FA 3A 13   JM TX_HEX_HI
+1338  C6 07      ADI 07H
+TX_HEX_HI:                                   ; xref: j1335
+133A  C6 30      ADI 30H                     ; '0'
+133C  32 00 C0   STA USART_DATA
+133F  F1         POP PSW
+1340  E6 0F      ANI 0FH
+1342  FE 0A      CPI 0AH
+1344  FA 49 13   JM TX_HEX_LO
+1347  C6 07      ADI 07H
+TX_HEX_LO:                                   ; xref: j1344
+1349  C6 30      ADI 30H                     ; '0'
+134B  32 E1 70   STA RX_CHAR
+134E  C3 DF 10   JMP SERIAL_POLL
+TX_MEM_BYTE:                                 ; xref: j12B7
+1351  2A E2 70   LHLD MON_PTR
+1354  7E         MOV A,M
+1355  C3 2C 13   JMP TX_HEX_BYTE
+
+; PLOT_OUT: strip-chart output mode. Emits CR, LF then 80 columns with ' ' / '!' / '"' / '#'
+; marking the two values from PLOT_VALUES.
+PLOT_OUT:                                    ; xref: c10E4
+1358  3A 01 C0   LDA USART_CTRL
+135B  0F         RRC
+135C  D0         RNC
+135D  3A 03 E0   LDA PIO1_PC
+1360  B1         ORA C
+1361  32 03 E0   STA PIO1_PC
+1364  3A CF 70   LDA PLOT_COL
+1367  FE 50      CPI 50H                     ; 'P'
+1369  16 0D      MVI D,0DH
+136B  CA A2 13   JZ PLOT_SEND
+136E  3A CF 70   LDA PLOT_COL
+1371  FE 51      CPI 51H                     ; 'Q'
+1373  C2 88 13   JNZ PLOT_COLUMN
+1376  3E 00      MVI A,00H
+1378  32 CF 70   STA PLOT_COL
+137B  CD AB 13   CALL PLOT_VALUES
+137E  60         MOV H,B
+137F  69         MOV L,C
+1380  22 E8 70   SHLD PLOT_BASE
+1383  16 0A      MVI D,0AH
+1385  C3 A2 13   JMP PLOT_SEND
+PLOT_COLUMN:                                 ; xref: j1373
+1388  2A E8 70   LHLD PLOT_BASE
+138B  44         MOV B,H
+138C  4D         MOV C,L
+138D  16 20      MVI D,20H                   ; ' '
+138F  3A CF 70   LDA PLOT_COL
+1392  B8         CMP B
+1393  C2 9A 13   JNZ PLOT_CHK_C
+1396  7A         MOV A,D
+1397  F6 01      ORI 01H
+1399  57         MOV D,A
+PLOT_CHK_C:                                  ; xref: j1393
+139A  B9         CMP C
+139B  C2 A2 13   JNZ PLOT_SEND
+139E  7A         MOV A,D
+139F  F6 02      ORI 02H
+13A1  57         MOV D,A
+PLOT_SEND:                                   ; xref: j136B j1385 j139B
+13A2  21 CF 70   LXI H,PLOT_COL
+13A5  34         INR M
+13A6  7A         MOV A,D
+13A7  32 00 C0   STA USART_DATA
+13AA  C9         RET
+PLOT_VALUES:                                 ; xref: c137B
+13AB  3A C5 6F   LDA SEL_A
+13AE  21 38 6F   LXI H,REC_MASTER_14
+13B1  FE 0A      CPI 0AH
+13B3  D2 CC 13   JNC PV_SCALE
+13B6  21 04 6F   LXI H,SLOT_FLAGS
+13B9  85         ADD L
+13BA  6F         MOV L,A
+13BB  7E         MOV A,M
+13BC  21 51 6F   LXI H,REC_SEC_14
+PV_INDEX:                                    ; xref: j13C9
+13BF  E6 03      ANI 03H
+13C1  11 19 00   LXI D,0019H                 ; record stride 25
+13C4  3D         DCR A
+13C5  FA CC 13   JM PV_SCALE
+13C8  19         DAD D
+13C9  C3 BF 13   JMP PV_INDEX
+PV_SCALE:                                    ; xref: j13B3 j13C5
+13CC  7E         MOV A,M
+13CD  0F         RRC
+13CE  0F         RRC
+13CF  C6 08      ADI 08H
+13D1  E6 3F      ANI 3FH                     ; '?'
+13D3  3C         INR A
+13D4  3C         INR A
+13D5  3C         INR A
+13D6  47         MOV B,A
+13D7  23         INX H
+13D8  23         INX H
+13D9  23         INX H
+13DA  7E         MOV A,M
+13DB  2F         CMA
+13DC  0F         RRC
+13DD  0F         RRC
+13DE  C6 08      ADI 08H
+13E0  E6 3F      ANI 3FH                     ; '?'
+13E2  3C         INR A
+13E3  3C         INR A
+13E4  3C         INR A
+13E5  4F         MOV C,A
+13E6  C9         RET
+
+; DISP_REFRESH: write the 8279 display RAM (cmd 90H = write, auto-inc, addr 0).
+; 7 bytes: 3 pairs interleaving high nibbles of 7034..7036 with 7037..7039, then 703A.
+; Never reached from the dumped halves; called from the missing half.
+DISP_REFRESH:                                
+13E7  3E 90      MVI A,90H
+13E9  32 01 D0   STA KDC_CMD
+13EC  01 37 70   LXI B,M_7037
+13EF  21 34 70   LXI H,M_7034
+13F2  1E 03      MVI E,03H
+DISP_LOOP:                                   ; xref: j1415
+13F4  7E         MOV A,M
+13F5  E6 F0      ANI 0F0H
+13F7  57         MOV D,A
+13F8  0A         LDAX B
+13F9  0F         RRC
+13FA  0F         RRC
+13FB  0F         RRC
+13FC  0F         RRC
+13FD  E6 0F      ANI 0FH
+13FF  B2         ORA D
+1400  32 00 D0   STA KDC_DATA
+1403  7E         MOV A,M
+1404  07         RLC
+1405  07         RLC
+1406  07         RLC
+1407  07         RLC
+1408  E6 F0      ANI 0F0H
+140A  57         MOV D,A
+140B  0A         LDAX B
+140C  E6 0F      ANI 0FH
+140E  B2         ORA D
+140F  32 00 D0   STA KDC_DATA
+1412  23         INX H
+1413  03         INX B
+1414  1D         DCR E
+1415  C2 F4 13   JNZ DISP_LOOP
+1418  3A 3A 70   LDA M_703A
+141B  32 00 D0   STA KDC_DATA
+141E  C9         RET
+
+; READ_SWITCHES: read the 6 thumbwheel rows via the 8279 sensor RAM (cmd 50H).
+; Rows 0,1 -> SEL_A/SEL_B (digit+1, must be 1..9); rows 2..5 -> GRI (first digit >= 4).
+; Invalid settings call the X_199x error handlers in the missing half and retry.
+READ_SWITCHES:                               ; xref: c00E9 j1438 j144D j145F j146A j147E j148F j14A8
+141F  3E E0      MVI A,0E0H
+1421  32 01 D0   STA KDC_CMD                 ; 8279: end interrupt
+1424  3E 50      MVI A,50H                   ; 'P'
+1426  32 01 D0   STA KDC_CMD                 ; 8279: read sensor RAM row 0, auto-inc
+1429  3A 00 D0   LDA KDC_DATA
+142C  CD B5 14   CALL SW_TO_DIGIT
+142F  3C         INR A
+1430  FE 0A      CPI 0AH
+1432  DA 3B 14   JC RSW_SELB
+1435  CD 90 19   CALL X_1990
+1438  C3 1F 14   JMP READ_SWITCHES
+RSW_SELB:                                    ; xref: j1432
+143B  32 C5 6F   STA SEL_A
+143E  3A 00 D0   LDA KDC_DATA
+1441  CD B5 14   CALL SW_TO_DIGIT
+1444  3C         INR A
+1445  FE 0A      CPI 0AH
+1447  DA 50 14   JC RSW_GRI1
+144A  CD 95 19   CALL X_1995
+144D  C3 1F 14   JMP READ_SWITCHES
+RSW_GRI1:                                    ; xref: j1447
+1450  32 C6 6F   STA SEL_B
+1453  3A 00 D0   LDA KDC_DATA
+1456  CD B5 14   CALL SW_TO_DIGIT
+1459  DA 62 14   JC RSW_GRI1_CHK
+145C  CD 9A 19   CALL X_199A
+145F  C3 1F 14   JMP READ_SWITCHES
+RSW_GRI1_CHK:                                ; xref: j1459
+1462  FE 04      CPI 04H
+1464  D2 6D 14   JNC RSW_GRI2                ; GRI first digit must be 4..9
+1467  CD 9A 19   CALL X_199A
+146A  C3 1F 14   JMP READ_SWITCHES
+RSW_GRI2:                                    ; xref: j1464
+146D  07         RLC
+146E  07         RLC
+146F  07         RLC
+1470  07         RLC
+1471  6F         MOV L,A
+1472  3A 00 D0   LDA KDC_DATA
+1475  CD B5 14   CALL SW_TO_DIGIT
+1478  DA 81 14   JC RSW_GRI3
+147B  CD 9F 19   CALL X_199F
+147E  C3 1F 14   JMP READ_SWITCHES
+RSW_GRI3:                                    ; xref: j1478
+1481  B5         ORA L
+1482  6F         MOV L,A
+1483  3A 00 D0   LDA KDC_DATA
+1486  CD B5 14   CALL SW_TO_DIGIT
+1489  DA 92 14   JC RSW_GRI4
+148C  CD A4 19   CALL X_19A4
+148F  C3 1F 14   JMP READ_SWITCHES
+RSW_GRI4:                                    ; xref: j1489
+1492  07         RLC
+1493  07         RLC
+1494  07         RLC
+1495  07         RLC
+1496  67         MOV H,A
+1497  3A 00 D0   LDA KDC_DATA
+149A  CD B5 14   CALL SW_TO_DIGIT
+149D  DA AD 14   JC RSW_STORE_GRI
+14A0  FE 0B      CPI 0BH
+14A2  CA AB 14   JZ RSW_GRI4_BLANK
+14A5  CD A9 19   CALL X_19A9
+14A8  C3 1F 14   JMP READ_SWITCHES
+RSW_GRI4_BLANK:                              ; xref: j14A2
+14AB  3E 00      MVI A,00H
+RSW_STORE_GRI:                               ; xref: j149D
+14AD  B4         ORA H
+14AE  67         MOV H,A
+14AF  22 CC 6F   SHLD GRI_SW
+14B2  C3 F0 14   JMP SCAN_SWITCHES
+
+; SW_TO_DIGIT: convert a sensor row byte to a digit. Rows are 9's-complement BCD on bits 0..5:
+; digit = 9 - (row & 3FH), valid (carry set) when row & 3FH <= 9. Otherwise returns
+; 0BH for the blank position (carry clear).
+SW_TO_DIGIT:                                 ; xref: c14F8 c1502 c150C c1515 c151E c1527 c142C c1441 c1456 c1475 c1486 c149A
+14B5  E6 3F      ANI 3FH                     ; '?'
+14B7  EE FF      XRI 0FFH
+14B9  C6 0A      ADI 0AH
+14BB  FE 0A      CPI 0AH
+14BD  D8         RC
+14BE  0F         RRC
+14BF  0F         RRC
+14C0  0F         RRC
+14C1  0F         RRC
+14C2  C6 0C      ADI 0CH
+14C4  E6 0F      ANI 0FH
+14C6  37         STC
+14C7  3F         CMC
+14C8  C9         RET
+
+; TICK_TASK: run once per RST 7.5 tick. TICK_BCD += 2 (BCD); every 20 ticks call X_19E7.
+; If RST 5.5 (8279 IRQ) is pending: send End-Interrupt (0E0H) and set KEY_CHANGED;
+; on a later tick with KEY_CHANGED set, rescan the switches.
+TICK_TASK:                                   ; xref: c048B
+14C9  3A 3D 70   LDA TICK_BCD
+14CC  3C         INR A
+14CD  3C         INR A
+14CE  EE 00      XRI 00H
+14D0  27         DAA
+14D1  32 3D 70   STA TICK_BCD
+14D4  E6 3F      ANI 3FH                     ; '?'
+14D6  CC E7 19   CZ X_19E7
+14D9  20         RIM
+14DA  E6 10      ANI 10H
+14DC  CA EA 14   JZ TICK_CHK_KEYS
+14DF  3E E0      MVI A,0E0H
+14E1  32 01 D0   STA KDC_CMD                 ; 8279: end interrupt (clear IRQ)
+14E4  3E 01      MVI A,01H
+14E6  32 3B 70   STA KEY_CHANGED
+14E9  C9         RET
+TICK_CHK_KEYS:                               ; xref: j14DC
+14EA  3A 3B 70   LDA KEY_CHANGED
+14ED  FE 00      CPI 00H
+14EF  C8         RZ
+
+; SCAN_SWITCHES: read sensor rows 0..5 and 6..7. Row 0/1 -> SEL_A/SEL_B, rows 2..5 -> SW_D1..4,
+; rows 6/7 bit 7/6 -> BTN_STATE / BUTTONS (push-button edges).
+; SEL_B = 0CH (blank) enters set-up: SW_D1..4 latched to SW_HI/SW_LO; SW_D1 = blank selects
+; a configuration item by SW_D2: 0-3 baud (110/300/1200/19200), 4-9 OPTIONS bits.
+SCAN_SWITCHES:                               ; xref: j14B2
+14F0  3E 50      MVI A,50H                   ; 'P'
+14F2  32 01 D0   STA KDC_CMD                 ; 8279: read sensor RAM row 0, auto-inc
+14F5  3A 00 D0   LDA KDC_DATA
+14F8  CD B5 14   CALL SW_TO_DIGIT
+14FB  3C         INR A
+14FC  32 C5 6F   STA SEL_A
+14FF  3A 00 D0   LDA KDC_DATA
+1502  CD B5 14   CALL SW_TO_DIGIT
+1505  3C         INR A
+1506  32 C6 6F   STA SEL_B
+1509  3A 00 D0   LDA KDC_DATA
+150C  CD B5 14   CALL SW_TO_DIGIT
+150F  32 C8 70   STA SW_D1
+1512  3A 00 D0   LDA KDC_DATA
+1515  CD B5 14   CALL SW_TO_DIGIT
+1518  32 C9 70   STA SW_D2
+151B  3A 00 D0   LDA KDC_DATA
+151E  CD B5 14   CALL SW_TO_DIGIT
+1521  32 CA 70   STA SW_D3
+1524  3A 00 D0   LDA KDC_DATA
+1527  CD B5 14   CALL SW_TO_DIGIT
+152A  32 CB 70   STA SW_D4
+152D  3E 00      MVI A,00H
+152F  32 3B 70   STA KEY_CHANGED
+1532  3E 56      MVI A,56H                   ; 'V'
+1534  32 01 D0   STA KDC_CMD                 ; 8279: read sensor RAM row 6, auto-inc
+1537  3A 00 D0   LDA KDC_DATA
+153A  47         MOV B,A
+153B  E6 80      ANI 80H
+153D  CA 48 15   JZ SCAN_BTN_ROW7
+1540  3A 3C 70   LDA BTN_STATE
+1543  EE 80      XRI 80H
+1545  32 3C 70   STA BTN_STATE
+SCAN_BTN_ROW7:                               ; xref: j153D
+1548  78         MOV A,B
+1549  E6 40      ANI 40H                     ; '@'
+154B  07         RLC
+154C  47         MOV B,A
+154D  3A 00 D0   LDA KDC_DATA
+1550  4F         MOV C,A
+1551  E6 80      ANI 80H
+1553  CA 5E 15   JZ SCAN_BTN_CLR
+1556  3A 3C 70   LDA BTN_STATE
+1559  F6 40      ORI 40H                     ; '@'
+155B  C3 63 15   JMP SCAN_BTN_STORE
+SCAN_BTN_CLR:                                ; xref: j1553
+155E  3A 3C 70   LDA BTN_STATE
+1561  E6 BF      ANI 0BFH
+SCAN_BTN_STORE:                              ; xref: j155B
+1563  32 3C 70   STA BTN_STATE
+1566  79         MOV A,C
+1567  E6 40      ANI 40H                     ; '@'
+1569  B0         ORA B
+156A  32 C4 6F   STA BUTTONS
+156D  3A C6 6F   LDA SEL_B
+1570  FE 0C      CPI 0CH                     ; SEL_B blank -> set-up mode
+1572  C2 F1 15   JNZ SCAN_NORMAL
+1575  3A 3C 70   LDA BTN_STATE
+1578  47         MOV B,A
+1579  E6 40      ANI 40H                     ; '@'
+157B  32 3C 70   STA BTN_STATE
+157E  78         MOV A,B
+157F  07         RLC
+1580  D2 CC 15   JNC SCAN_BTN_EDGES
+1583  3A CE 70   LDA SW_LATCHED
+1586  FE 00      CPI 00H
+1588  C2 BE 15   JNZ SCAN_CLR_STATS
+158B  3A C8 70   LDA SW_D1
+158E  07         RLC
+158F  07         RLC
+1590  07         RLC
+1591  07         RLC
+1592  E6 F0      ANI 0F0H
+1594  47         MOV B,A
+1595  3A C9 70   LDA SW_D2
+1598  E6 0F      ANI 0FH
+159A  B0         ORA B
+159B  32 CC 70   STA SW_HI
+159E  3A CA 70   LDA SW_D3
+15A1  07         RLC
+15A2  07         RLC
+15A3  07         RLC
+15A4  07         RLC
+15A5  E6 F0      ANI 0F0H
+15A7  47         MOV B,A
+15A8  3A CB 70   LDA SW_D4
+15AB  E6 0F      ANI 0FH
+15AD  B0         ORA B
+15AE  32 CD 70   STA SW_LO
+15B1  3E 00      MVI A,00H
+15B3  32 4F 70   STA VAR_704F
+15B6  3E 01      MVI A,01H
+15B8  32 CE 70   STA SW_LATCHED
+15BB  C3 CC 15   JMP SCAN_BTN_EDGES
+SCAN_CLR_STATS:                              ; xref: j1588
+15BE  3E 00      MVI A,00H
+15C0  32 BD 70   STA VAR_70BD
+15C3  32 BE 70   STA VAR_70BE
+15C6  32 50 70   STA VAR_7050
+15C9  32 51 70   STA VAR_7051
+SCAN_BTN_EDGES:                              ; xref: j1580 j15BB
+15CC  3A C4 6F   LDA BUTTONS
+15CF  47         MOV B,A
+15D0  3E 00      MVI A,00H
+15D2  32 C4 6F   STA BUTTONS
+15D5  78         MOV A,B
+15D6  07         RLC
+15D7  D2 E2 15   JNC SCAN_BTN_EDGE2
+15DA  3A BF 70   LDA STATUS_BITS
+15DD  F6 80      ORI 80H
+15DF  32 BF 70   STA STATUS_BITS
+SCAN_BTN_EDGE2:                              ; xref: j15D7
+15E2  78         MOV A,B
+15E3  07         RLC
+15E4  07         RLC
+15E5  D2 F0 15   JNC SCAN_DONE
+15E8  3A BF 70   LDA STATUS_BITS
+15EB  E6 7F      ANI 7FH
+15ED  32 BF 70   STA STATUS_BITS
+SCAN_DONE:                                   ; xref: j15E5
+15F0  C9         RET
+SCAN_NORMAL:                                 ; xref: j1572
+15F1  3A C4 6F   LDA BUTTONS
+15F4  FE 00      CPI 00H
+15F6  C8         RZ
+15F7  3A C6 6F   LDA SEL_B
+15FA  FE 0B      CPI 0BH
+15FC  C8         RZ
+15FD  3E 02      MVI A,02H
+15FF  32 CE 6F   STA RESTART_REQ
+1602  3A C4 6F   LDA BUTTONS
+1605  E6 40      ANI 40H                     ; '@'
+1607  C8         RZ
+1608  3A C8 70   LDA SW_D1
+160B  FE 0B      CPI 0BH                     ; SW_D1 blank -> configuration item
+160D  C2 BB 16   JNZ SCAN_SEL_CHK
+1610  3A CA 70   LDA SW_D3
+1613  07         RLC
+1614  07         RLC
+1615  07         RLC
+1616  07         RLC
+1617  E6 F0      ANI 0F0H
+1619  47         MOV B,A
+161A  3A CB 70   LDA SW_D4
+161D  B0         ORA B
+161E  32 DE 70   STA UNIT_ID
+1621  3A C9 70   LDA SW_D2
+1624  FE 00      CPI 00H
+1626  C2 37 16   JNZ CFG_BAUD_1
+1629  21 8A 45   LXI H,458AH                 ; timer 058AH (1418): 110 baud
+162C  22 04 F0   SHLD PIO2_TMRLO
+162F  3E C3      MVI A,0C3H
+1631  32 00 F0   STA PIO2_CMD
+1634  C3 BB 16   JMP SCAN_SEL_CHK
+CFG_BAUD_1:                                  ; xref: j1626
+1637  FE 01      CPI 01H
+1639  C2 4A 16   JNZ CFG_BAUD_2
+163C  21 08 42   LXI H,4208H                 ; timer 0208H (520): 300 baud
+163F  22 04 F0   SHLD PIO2_TMRLO
+1642  3E C3      MVI A,0C3H
+1644  32 00 F0   STA PIO2_CMD
+1647  C3 BB 16   JMP SCAN_SEL_CHK
+CFG_BAUD_2:                                  ; xref: j1639
+164A  FE 02      CPI 02H
+164C  C2 5D 16   JNZ CFG_BAUD_3
+164F  21 82 40   LXI H,4082H                 ; timer 0082H (130): 1200 baud
+1652  22 04 F0   SHLD PIO2_TMRLO
+1655  3E C3      MVI A,0C3H
+1657  32 00 F0   STA PIO2_CMD
+165A  C3 BB 16   JMP SCAN_SEL_CHK
+CFG_BAUD_3:                                  ; xref: j164C
+165D  FE 03      CPI 03H
+165F  C2 70 16   JNZ CFG_OPT_4
+1662  21 08 40   LXI H,4008H                 ; timer 0008H (8): 19200 baud
+1665  22 04 F0   SHLD PIO2_TMRLO
+1668  3E C3      MVI A,0C3H
+166A  32 00 F0   STA PIO2_CMD
+166D  C3 BB 16   JMP SCAN_SEL_CHK
+CFG_OPT_4:                                   ; xref: j165F
+1670  FE 04      CPI 04H
+1672  C2 7D 16   JNZ CFG_OPT_5
+1675  3E 00      MVI A,00H
+1677  32 DF 70   STA OPTIONS
+167A  C3 BB 16   JMP SCAN_SEL_CHK
+CFG_OPT_5:                                   ; xref: j1672
+167D  FE 05      CPI 05H
+167F  C2 8A 16   JNZ CFG_OPT_6
+1682  3E 81      MVI A,81H
+1684  32 DF 70   STA OPTIONS
+1687  C3 BB 16   JMP SCAN_SEL_CHK
+CFG_OPT_6:                                   ; xref: j167F
+168A  FE 06      CPI 06H
+168C  C2 97 16   JNZ CFG_OPT_7
+168F  3E 82      MVI A,82H
+1691  32 DF 70   STA OPTIONS
+1694  C3 BB 16   JMP SCAN_SEL_CHK
+CFG_OPT_7:                                   ; xref: j168C
+1697  FE 07      CPI 07H
+1699  C2 A4 16   JNZ CFG_OPT_8
+169C  3E 84      MVI A,84H
+169E  32 DF 70   STA OPTIONS
+16A1  C3 BB 16   JMP SCAN_SEL_CHK
+CFG_OPT_8:                                   ; xref: j1699
+16A4  FE 08      CPI 08H
+16A6  C2 B1 16   JNZ CFG_OPT_9
+16A9  3E 88      MVI A,88H
+16AB  32 DF 70   STA OPTIONS
+16AE  C3 BB 16   JMP SCAN_SEL_CHK
+CFG_OPT_9:                                   ; xref: j16A6
+16B1  FE 09      CPI 09H
+16B3  C2 BB 16   JNZ SCAN_SEL_CHK
+16B6  3E 80      MVI A,80H
+16B8  32 DF 70   STA OPTIONS
+SCAN_SEL_CHK:                                ; xref: j160D j1634 j1647 j165A j166D j167A j1687 j1694 j16A1 j16AE j16B3
+16BB  3A C5 6F   LDA SEL_A
+16BE  21 14 6F   LXI H,SLOT_COUNT
+16C1  BE         CMP M
+16C2  F0         RP
+16C3  CD BD 1D   CALL X_1DBD
+16C6  DA D7 16   JC SCAN_SEL_STORE
+16C9  3A 12 6F   LDA SLOT_IDX_B
+16CC  CD E4 04   CALL GET_FLAGS_A
+16CF  E6 C0      ANI 0C0H
+16D1  FE 80      CPI 80H
+16D3  C8         RZ
+16D4  CD 05 1E   CALL X_1E05
+SCAN_SEL_STORE:                              ; xref: j16C6
+16D7  32 03 6F   STA SLOT_RESULT
+16DA  3E 01      MVI A,01H
+16DC  32 DC 6F   STA NEW_DATA
+16DF  C9         RET
+
+; TX_SERVICE: when OUT_MODE = 0 and 8251 TxRDY, send next char from PRTBUF.
+TX_SERVICE:                                  ; xref: c0469
+16E0  3A DC 70   LDA OUT_MODE
+16E3  FE 00      CPI 00H
+16E5  C0         RNZ
+16E6  3A 01 C0   LDA USART_CTRL
+16E9  0F         RRC
+16EA  D0         RNC
+16EB  3A 4E 70   LDA TX_PENDING
+16EE  0F         RRC
+16EF  D8         RC
+16F0  3A 03 E0   LDA PIO1_PC
+16F3  F6 01      ORI 01H
+16F5  32 03 E0   STA PIO1_PC
+16F8  CD 08 17   CALL PRTBUF_GET
+16FB  D2 04 17   JNC TX_SEND
+16FE  3E 01      MVI A,01H
+1700  32 4E 70   STA TX_PENDING
+1703  C9         RET
+TX_SEND:                                     ; xref: j16FB
+1704  32 00 C0   STA USART_DATA
+1707  C9         RET
+
+; PRTBUF_GET: pull next char from the print buffer (PRTBUF_PTR walks down to PRTBUF).
+PRTBUF_GET:                                  ; xref: c16F8
+1708  2A D1 70   LHLD PRTBUF_PTR
+170B  11 3E 70   LXI D,PRTBUF
+170E  7A         MOV A,D
+170F  BC         CMP H
+1710  C2 1B 17   JNZ PRTBUF_POP
+1713  7B         MOV A,E
+1714  BD         CMP L
+1715  C2 1B 17   JNZ PRTBUF_POP
+1718  7E         MOV A,M
+1719  37         STC
+171A  C9         RET
+PRTBUF_POP:                                  ; xref: j1710 j1715
+171B  37         STC
+171C  3F         CMC
+171D  2B         DCX H
+171E  7E         MOV A,M
+171F  22 D1 70   SHLD PRTBUF_PTR
+1722  C9         RET
+
+; REPORT_TASK: sequence the periodic data report over the serial port (RPT_STATE 0..8,
+; 0FEH = idle, 0FFH = armed). Items are formatted by X_189B / X_1878 in the missing half.
+REPORT_TASK:                                 ; xref: c0485
+1723  3A D0 70   LDA RPT_STATE
+1726  FE FE      CPI 0FEH
+1728  C2 95 17   JNZ RPT_RUNNING
+172B  3A DD 70   LDA PROTO_STATE
+172E  FE 00      CPI 00H
+1730  CA 3E 17   JZ RPT_CHK_IDLE
+1733  FE 02      CPI 02H
+1735  C0         RNZ
+1736  3E 01      MVI A,01H
+1738  32 DD 70   STA PROTO_STATE
+173B  C3 8F 17   JMP RPT_ARM
+RPT_CHK_IDLE:                                ; xref: j1730
+173E  3A 3D 70   LDA TICK_BCD
+1741  FE 00      CPI 00H
+1743  C0         RNZ
+1744  3A DF 70   LDA OPTIONS
+1747  07         RLC
+1748  D2 8F 17   JNC RPT_ARM
+174B  3A 4F 70   LDA VAR_704F
+174E  E6 0F      ANI 0FH
+1750  FE 00      CPI 00H
+1752  C0         RNZ
+1753  3A DF 70   LDA OPTIONS
+1756  0F         RRC
+1757  DA 8F 17   JC RPT_ARM
+175A  3A 4F 70   LDA VAR_704F
+175D  FE 00      CPI 00H
+175F  C0         RNZ
+1760  3A DF 70   LDA OPTIONS
+1763  0F         RRC
+1764  0F         RRC
+1765  DA 8F 17   JC RPT_ARM
+1768  3A CD 70   LDA SW_LO
+176B  E6 0F      ANI 0FH
+176D  FE 00      CPI 00H
+176F  C0         RNZ
+1770  3A DF 70   LDA OPTIONS
+1773  0F         RRC
+1774  0F         RRC
+1775  0F         RRC
+1776  DA 8F 17   JC RPT_ARM
+1779  3A CD 70   LDA SW_LO
+177C  FE 00      CPI 00H
+177E  C0         RNZ
+177F  3A DF 70   LDA OPTIONS
+1782  0F         RRC
+1783  0F         RRC
+1784  0F         RRC
+1785  0F         RRC
+1786  DA 8F 17   JC RPT_ARM
+1789  3A CC 70   LDA SW_HI
+178C  FE 00      CPI 00H
+178E  C0         RNZ
+RPT_ARM:                                     ; xref: j173B j1748 j1757 j1765 j1776 j1786
+178F  3E FF      MVI A,0FFH
+1791  32 D0 70   STA RPT_STATE
+1794  C9         RET
+RPT_RUNNING:                                 ; xref: j1728
+1795  3A D0 70   LDA RPT_STATE
+1798  FE 09      CPI 09H
+179A  CA B7 17   JZ RPT_FINISH
+179D  3A 4E 70   LDA TX_PENDING
+17A0  FE 00      CPI 00H
+17A2  C8         RZ
+17A3  3E 00      MVI A,00H
+17A5  32 4E 70   STA TX_PENDING
+17A8  3A D0 70   LDA RPT_STATE
+17AB  3C         INR A
+17AC  32 D0 70   STA RPT_STATE
+17AF  FE 09      CPI 09H
+17B1  CA 40 19   JZ X_1940
+17B4  C3 BD 17   JMP RPT_NEXT_ITEM
+RPT_FINISH:                                  ; xref: j179A
+17B7  3E FE      MVI A,0FEH
+17B9  32 D0 70   STA RPT_STATE
+17BC  C9         RET
+RPT_NEXT_ITEM:                               ; xref: j17B4
+17BD  3A D0 70   LDA RPT_STATE
+17C0  FE 00      CPI 00H
+17C2  C2 D3 17   JNZ RPT_ITEM_N
+17C5  3A 04 6F   LDA SLOT_FLAGS
+17C8  E6 50      ANI 50H                     ; 'P'
+17CA  FE 50      CPI 50H                     ; 'P'
+17CC  C0         RNZ
+17CD  3A 04 6F   LDA SLOT_FLAGS
+17D0  C3 E1 17   JMP RPT_FORMAT
+RPT_ITEM_N:                                  ; xref: j17C2
+17D3  4F         MOV C,A
+17D4  06 00      MVI B,00H
+17D6  21 04 6F   LXI H,SLOT_FLAGS
+17D9  09         DAD B
+17DA  7E         MOV A,M
+17DB  E6 D0      ANI 0D0H
+17DD  FE D0      CPI 0D0H
+17DF  7E         MOV A,M
+17E0  C0         RNZ
+RPT_FORMAT:                                  ; xref: j17D0
+17E1  3A D0 70   LDA RPT_STATE
+17E4  21 F1 6F   LXI H,SLOTREC_3
+17E7  CD 0B 05   CALL MUL9_INDEX             ; HL = SLOTREC_3 + 9 * item
+17EA  CD 9B 18   CALL X_189B
+17ED  CD 78 18   CALL X_1878
+17F0  3A D0 70   LDA RPT_STATE
+17F3  FE 00      CPI 00H
+17F5  C2 FE 17   JNZ RPT_ITEM_OFS
+17F8  21 1F 6F   LXI H,GRI_BCD_HI
+17FB  C3 04 18   JMP X_1804
+RPT_ITEM_OFS:                                ; xref: j17F5
+17FE  21 56 FF   LXI H,0FF56H                ; operand high byte is at 1800 in the undumped half: real value unknown (dump shows 0FFH)
+1801  FF ...     ; unprogrammed (0FFH) through 1FFF -- 2047 bytes not present in dump
