@@ -80,7 +80,9 @@ M = consistent reading, L = placeholder name).
 | 704E | `TX_PENDING` | 1 | H | set when the print buffer ran dry, cleared by the report sequencer |
 | 704F | `VAR_704F` | 1 | L | cleared when set-up latches; gates the report; also cascaded as a BCD clock digit by `TICK_CLOCK_CASCADE` (unreconciled dual use, see firmware.md) |
 | 7050 | `VAR_7050` | 2 | L | cleared by second button press in set-up |
+| 7053 | `SEL_COL_TBL` | 10 x n | M | 10-byte-stride per-selector display-column table, indexed by `SEL_A`/`SEL_B` via `MUL10_INDEX`; feeds `CHECK_SEL_RANGE`/`COMMIT_DISP_ROWS` |
 | 7054 | `SLOT_TBL` | n | L | one byte per slot, tested at 1000 |
+| 70B7 | `DISP_ROW_A_FLAG`, `DISP_ROW_B_FLAG` | 1 each | M | per-row display flag byte; bit 7 gates `BLINK_ROW_BLANK`'s blink-to-blank effect; also stamped by `SW_ERR_SHOW` during error display |
 | 70BD | `VAR_70BD` | 2 | L | cleared with `VAR_7050`; also cascaded by `TICK_CLOCK_CASCADE`'s second clock when `STATUS_BITS` bit 7 is clear |
 | 70BF | `STATUS_BITS` | 1 | M | bit 7 set/cleared by button edges in set-up |
 | 70C0 | `SEL_QUEUE_0`..`SEL_QUEUE_2` | 3 | H | 3-element FIFO of operator-selected slot numbers, filled by `QUEUE_SLOT_SEL` and drained by `DEQUEUE_SLOT_SEL` |

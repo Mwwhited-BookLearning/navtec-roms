@@ -244,10 +244,10 @@ control flow inside an already-named routine, not independent things to name.
 | 19A4 | `SW_ERR_GRI3` | 1 | named |
 | 19A9 | `SW_ERR_GRI4` | 1 | named |
 | 19E7 | `X_19E7` | 1 | needs analysis |
-| 1C3F | `SUB_1C3F` | 4 | needs analysis |
-| 1CF3 | `SUB_1CF3` | 1 | needs analysis |
-| 1D10 | `SUB_1D10` | 1 | needs analysis |
-| 1D45 | `SUB_1D45` | 2 | needs analysis |
+| 1C3F | `CHECK_SEL_RANGE` | 4 | named |
+| 1CF3 | `COMMIT_DISP_ROWS` | 1 | named |
+| 1D10 | `APPLY_DISP_BLINK` | 1 | named |
+| 1D45 | `BLINK_ROW_BLANK` | 2 | named |
 | 1DBD | `QUEUE_SLOT_SEL` | 3 | named |
 | 1E05 | `DEQUEUE_SLOT_SEL` | 3 | named |
 | 1E23 | `SWAP_SLOT_IDX` | 1 | named |
@@ -265,7 +265,7 @@ control flow inside an already-named routine, not independent things to name.
 | 1F20 | `SUB_1F20` | 1 | needs analysis |
 | 2001 | `EXTROM_ENTRY` | 1 | named |
 
-**15 of 137 still need analysis** (down from 77 at the start of this session).
+**11 of 137 still need analysis** (down from 77 at the start of this session).
 
 ## Variables (all 175 referenced RAM/IO addresses)
 
@@ -380,11 +380,11 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 704F | `VAR_704F` | 7 | 3 | 0 | named |
 | 7050 | `VAR_7050` | 2 | 3 | 0 | named |
 | 7051 | `VAR_7051` | 2 | 3 | 0 | named |
-| 7053 | `M_7053` | 0 | 0 | 10 | needs analysis |
+| 7053 | `SEL_COL_TBL` | 0 | 0 | 10 | named |
 | 7054 | `SLOT_TBL` | 0 | 0 | 1 | named |
 | 7057 | `M_7057` | 0 | 0 | 1 | needs analysis |
-| 70B7 | `M_70B7` | 1 | 15 | 0 | needs analysis |
-| 70B8 | `M_70B8` | 1 | 16 | 0 | needs analysis |
+| 70B7 | `DISP_ROW_A_FLAG` | 1 | 15 | 0 | named |
+| 70B8 | `DISP_ROW_B_FLAG` | 1 | 16 | 0 | named |
 | 70B9 | `M_70B9` | 3 | 2 | 0 | needs analysis |
 | 70BA | `M_70BA` | 1 | 1 | 0 | needs analysis |
 | 70BB | `M_70BB` | 1 | 1 | 0 | needs analysis |
@@ -450,7 +450,7 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | FF9C | `M_FF9C` | 0 | 0 | 1 | needs analysis |
 | FFC0 | `M_FFC0` | 0 | 0 | 1 | needs analysis |
 
-**42 of 175 still need analysis.** Most of the `FFxx` ones (FF38, FF80, FF9C,
+**39 of 175 still need analysis.** Most of the `FFxx` ones (FF38, FF80, FF9C,
 FFC0) and `8020` are single `LXI`-only references with no read/write - almost
 certainly operands of arithmetic (e.g. negative BCD limit constants) rather
 than real variables; low priority. Two more (`M_F9CA`, `M_AC9F`) are the same
@@ -462,36 +462,31 @@ memory locations at all.
 
 Roughly in priority order (highest caller-count / most load-bearing first):
 
-1. **`GET_FLAGS_A` neighborhood (0800-0FFF): the slot-tracking arithmetic
-   helpers.** Down to 2 targets: `X_0F31`/`X_0FE9` (the `DISP_MODE`-selected
-   display-format handlers, per firmware.md's `TRACK_LOOP` diagram) plus
-   their associated `M_70Cx` variables. Everything else in this cluster is
-   now resolved this session, including two corrected wrong guesses
-   (`ROM_SELFTEST` was "receiver init"; `INIT_REC_FROM_TOA`/`INIT_REC_AND_SEND`
-   were "display fill/clear") and one real bug fix (`PHASE_AB_SELECT`/
-   `MUL10_INDEX` were mislabeled dead code but are live) - see the table
-   above and the git history for the full trail. `X_0F31` is next.
-2. **`SUB_1C3F` / `SUB_1CF3` / `SUB_1D10` / `SUB_1D45` (1C00-1D50) and the
-   `M_70B7`-`M_70C7` display-column variables.** These feed `L_1CEA`'s
-   display-commit path (same one `SW_ERR_SHOW` uses) and are keyed off
-   `SEL_A`/`SEL_B` - likely "which secondary's TD to show in row A/B".
-   `M_7053` (the other 10-byte-stride table `MUL10_INDEX` indexes, alongside
-   the now-resolved `ACCUM_SLOT_TOA`'s `M_7057`) belongs here too.
-3. **`X_19E7`** (called every 20 ticks from `TICK_TASK`, touches `M_70BB`) -
+Down to 11 targets total - nearly done. In priority order:
+
+1. **`X_0F31`/`X_0FE9`** (the last two `GET_FLAGS_A`-neighborhood holdouts -
+   the `DISP_MODE`-selected display-format handlers from `TRACK_LOOP`, per
+   firmware.md). Everything else in that once-36-strong cluster is resolved.
+2. **`X_19E7`** (called every 20 ticks from `TICK_TASK`, touches `M_70BB`) -
    possibly a display-blink or column-rotation counter; unrelated to the
    `SW_ERR_*` family despite the nearby address.
-4. **`SUB_1EAA`/`SUB_1EBB`/`SUB_1ECF`/`SUB_1ED9`/`SUB_1EED`/`SUB_1F0E`/`SUB_1F20`**
+3. **`SUB_1EAA`/`SUB_1EBB`/`SUB_1ECF`/`SUB_1ED9`/`SUB_1EED`/`SUB_1F0E`/`SUB_1F20`**
    (1E9B-1F20) - all single-caller, small, clustered; likely one coherent
    feature once traced together.
-5. **Remaining `FFxx`/`8020` single-LXI addresses** - check whether they're
-   BCD constants (operand of `LXI H,<addr>` immediately followed by an
-   arithmetic call) before spending real effort; may not be "variables" at
-   all.
+4. **Remaining `FFxx`/`8020` single-LXI addresses** (variables list only) -
+   check whether they're BCD constants (operand of `LXI H,<addr>`
+   immediately followed by an arithmetic call) before spending real effort;
+   may not be "variables" at all.
 
-Resolved this pass: `QUEUE_SLOT_SEL`/`DEQUEUE_SLOT_SEL` (was `X_1DBD`/`X_1E05`)
-- a 3-element FIFO of operator-selected slot numbers (`SEL_QUEUE_0..2`) feeding
-`ACTIVATE_SELECTED_SLOT` via `SLOT_RESULT` - and `SWAP_SLOT_IDX` (was
-`SUB_1E23`), the live counterpart of the dead `OLD_SUB_1E23` patch fragment.
+Resolved this session (see git history for the full trail, one entry per
+commit): the entire 0800-0FFF arithmetic cluster except item 1 above,
+including two corrected wrong guesses (`ROM_SELFTEST` was "receiver init";
+`INIT_REC_FROM_TOA`/`INIT_REC_AND_SEND` were "display fill/clear") and one
+real bug fix (`PHASE_AB_SELECT`/`MUL10_INDEX` were mislabeled dead code but
+are live); `QUEUE_SLOT_SEL`/`DEQUEUE_SLOT_SEL`/`SWAP_SLOT_IDX` (selector
+queueing); and `CHECK_SEL_RANGE`/`COMMIT_DISP_ROWS`/`APPLY_DISP_BLINK`/
+`BLINK_ROW_BLANK` (the SEL_A/SEL_B-driven display-column and blink pipeline,
+`SEL_COL_TBL`/`DISP_ROW_A_FLAG`/`DISP_ROW_B_FLAG` new equates).
 
 ## Regenerating the tables above
 

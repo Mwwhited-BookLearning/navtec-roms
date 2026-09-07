@@ -110,11 +110,11 @@ TX_PENDING   EQU  704EH  ; rd=2 wr=2 lxi=0
 VAR_704F     EQU  704FH  ; rd=7 wr=3 lxi=0
 VAR_7050     EQU  7050H  ; rd=2 wr=3 lxi=0
 VAR_7051     EQU  7051H  ; rd=2 wr=3 lxi=0
-M_7053       EQU  7053H  ; rd=0 wr=0 lxi=10
+SEL_COL_TBL  EQU  7053H  ; rd=0 wr=0 lxi=10
 SLOT_TBL     EQU  7054H  ; rd=0 wr=0 lxi=1
 M_7057       EQU  7057H  ; rd=0 wr=0 lxi=1
-M_70B7       EQU  70B7H  ; rd=1 wr=15 lxi=0
-M_70B8       EQU  70B8H  ; rd=1 wr=16 lxi=0
+DISP_ROW_A_FLAG EQU  70B7H  ; rd=1 wr=15 lxi=0
+DISP_ROW_B_FLAG EQU  70B8H  ; rd=1 wr=16 lxi=0
 M_70B9       EQU  70B9H  ; rd=3 wr=2 lxi=0
 M_70BA       EQU  70BAH  ; rd=1 wr=1 lxi=0
 M_70BB       EQU  70BBH  ; rd=1 wr=1 lxi=0
@@ -934,7 +934,7 @@ MUL9_INDEX:
 ; MUL10_INDEX: A = (HL + 10*A), then falls into the shared MUL_IDX_TAIL (loads
 ; M[HL] into A, HL left pointing at it). Previously mislabeled OLD_MUL10/"dead code from
 ; a patch" - it is in fact live, with 11 real callers (0922, 0A28, 1B1F, 1B36, 1B54,
-; 1BB0, 1BC7, 1BEB, 1CB5, 1801, 1E2F), all indexing 10-byte-stride tables (M_7053,
+; 1BB0, 1BC7, 1BEB, 1CB5, 1801, 1E2F), all indexing 10-byte-stride tables (SEL_COL_TBL,
 ; M_7057, the 7056H report-item table) that are unrelated to the 9-byte SLOTREC_CNT.
 ; The earlier "dead code left by an in-place patch" comment was simply wrong; a
 ; forced db override was hiding this as data. See docs/firmware.md for the correction.
@@ -1671,7 +1671,7 @@ SLOT_STALE_CHECK:
         CALL SWAP_SLOT_IDX
 
 ; ACCUM_SLOT_TOA (was SUB_091B). HL = M_7057 + 10*SLOT_IDX via MUL10_INDEX (confirming
-; M_7057 is a 10-byte-stride per-slot table, like M_7053). For slot 0 (master):
+; M_7057 is a 10-byte-stride per-slot table, like SEL_COL_TBL). For slot 0 (master):
 ; record[0..3] += M_6F28. For other slots: record[0..3] += CUR_TOA, then += M_70C3 too
 ; (two BCD_ADD4 calls into the same destination - an accumulator, not a single add).
 ; If REC_MASTER's status byte bit 7 is clear (master not "active"), zeroes 4 bytes at
@@ -1839,7 +1839,7 @@ L_0A14:
         MOV D,A
 L_0A22:
         LDA SLOT_IDX
-        LXI H,M_7053
+        LXI H,SEL_COL_TBL
         CALL MUL10_INDEX
         ANI 0F0H
         ORA D
@@ -4252,7 +4252,7 @@ X_19B3:
 ; SW_ERR_SHOW: B = error field number (1..6, see ERR_DASH_TBL). Copies the 6-byte
 ; ERR_DASH_TBL into M_7034..M_7039 (both display rows), then BCD-formats B into
 ; M_7038 and M_7035 (middle digit of each row) and loads a 3-byte pointer/base into
-; M_70B7/M_70B8 ("'3'") before falling into the shared display-commit path at 1CEA.
+; DISP_ROW_A_FLAG/DISP_ROW_B_FLAG ("'3'") before falling into the shared display-commit path at 1CEA.
 SW_ERR_SHOW:
         PUSH B
         MVI E,06H
@@ -4277,8 +4277,8 @@ L_19C1:
         LXI H,DISP_ROW_A
         LXI B,DISP_ROW_B
         MVI A,33H                   ; '3'
-        STA M_70B7
-        STA M_70B8
+        STA DISP_ROW_A_FLAG
+        STA DISP_ROW_B_FLAG
         JMP L_1CEA
 X_19E7:
         LDA SW_D4
@@ -4291,8 +4291,8 @@ X_19E7:
         STA M_70BB
 L_19FB:
         MVI A,00H
-        STA M_70B7
-        STA M_70B8
+        STA DISP_ROW_A_FLAG
+        STA DISP_ROW_B_FLAG
 L_1A03:
         LXI H,D_0005
         LXI B,D_0005
@@ -4304,16 +4304,16 @@ L_1A0C:
         INR A
         STA M_70BC
         MVI A,3FH                   ; '?'
-        STA M_70B7
-        STA M_70B8
+        STA DISP_ROW_A_FLAG
+        STA DISP_ROW_B_FLAG
         JMP L_1A03
 L_1A23:
         LDA SW_D2
         CPI 0BH
         JNZ L_1A51
         MVI A,00H
-        STA M_70B7
-        STA M_70B8
+        STA DISP_ROW_A_FLAG
+        STA DISP_ROW_B_FLAG
         LDA ORPHAN_0031
         STA DISP_ROW_A
         MVI A,0FFH
@@ -4340,8 +4340,8 @@ L_1A51:
         JNZ L_1AD5
 L_1A5E:
         MVI A,00H
-        STA M_70B7
-        STA M_70B8
+        STA DISP_ROW_A_FLAG
+        STA DISP_ROW_B_FLAG
         LDA SEL_A
         STA DISP_ROW_A
         LDA SEL_B
@@ -4376,24 +4376,24 @@ L_1AB1:
         RLC
         JC L_1ACA
         MVI A,43H                   ; 'C'
-        STA M_70B7
-        STA M_70B8
+        STA DISP_ROW_A_FLAG
+        STA DISP_ROW_B_FLAG
         LXI H,GRI_BCD
         LXI B,GRI_BCD
         JMP L_1CEA
 L_1ACA:
         MVI A,00H
-        STA M_70B7
-        STA M_70B8
+        STA DISP_ROW_A_FLAG
+        STA DISP_ROW_B_FLAG
         JMP L_1B14
 L_1AD5:
         LDA SEL_B
         CPI 0CH
         JNZ L_1AB1
         MVI A,00H
-        STA M_70B7
+        STA DISP_ROW_A_FLAG
         MVI A,40H                   ; '@'
-        STA M_70B8
+        STA DISP_ROW_B_FLAG
         LDA SW_HI
         STA DISP_ROW_A
         LDA SW_LO
@@ -4413,9 +4413,9 @@ L_1B14:
         LDA SEL_A
         CPI 0AH
         JP L_1CC5
-        LXI H,M_7053
+        LXI H,SEL_COL_TBL
         CALL MUL10_INDEX
-        STA M_70B7
+        STA DISP_ROW_A_FLAG
         INX H
         MOV A,M
         CPI 00H
@@ -4423,33 +4423,33 @@ L_1B14:
         LDA SEL_A
         DCR A
         JZ L_1B48
-        LXI H,M_7053
+        LXI H,SEL_COL_TBL
         CALL MUL10_INDEX
         ORI 80H
-        STA M_70B7
+        STA DISP_ROW_A_FLAG
         INX H
         LDA SEL_A
-        CALL SUB_1C3F
+        CALL CHECK_SEL_RANGE
         JNC L_1B9F
 L_1B48:
         LDA SEL_A
         INR A
         CPI 0AH
         JZ L_1B6C
-        LXI H,M_7053
+        LXI H,SEL_COL_TBL
         CALL MUL10_INDEX
         ORI 80H
-        STA M_70B7
+        STA DISP_ROW_A_FLAG
         INX H
         MOV A,M
         CPI 00H
         JZ L_1B6C
         LDA SEL_A
-        CALL SUB_1C3F
+        CALL CHECK_SEL_RANGE
         JNC L_1B9F
 L_1B6C:
         MVI A,77H                   ; 'w'
-        STA M_70B7
+        STA DISP_ROW_A_FLAG
         LDA SEL_A
         STA M_7035
         CPI 0AH
@@ -4469,7 +4469,7 @@ L_1B7E:
         ORI 50H                     ; 'P'
         STA M_7035
         MVI A,0F7H
-        STA M_70B7
+        STA DISP_ROW_A_FLAG
 L_1B9C:
         LXI H,DISP_ROW_A
 L_1B9F:
@@ -4480,9 +4480,9 @@ L_1B9F:
         CPI 0BH
         JZ L_1C65
 L_1BAD:
-        LXI H,M_7053
+        LXI H,SEL_COL_TBL
         CALL MUL10_INDEX
-        STA M_70B8
+        STA DISP_ROW_B_FLAG
         INX H
         MOV A,M
         CPI 00H
@@ -4490,36 +4490,36 @@ L_1BAD:
         LDA SEL_B
         DCR A
         JZ L_1BDF
-        LXI H,M_7053
+        LXI H,SEL_COL_TBL
         CALL MUL10_INDEX
         ORI 80H
-        STA M_70B8
+        STA DISP_ROW_B_FLAG
         INX H
         MOV A,M
         CPI 00H
         JZ L_1BDF
         LDA SEL_B
-        CALL SUB_1C3F
+        CALL CHECK_SEL_RANGE
         JNC L_1C39
 L_1BDF:
         LDA SEL_B
         INR A
         CPI 0AH
         JZ L_1C03
-        LXI H,M_7053
+        LXI H,SEL_COL_TBL
         CALL MUL10_INDEX
         ORI 80H
-        STA M_70B8
+        STA DISP_ROW_B_FLAG
         INX H
         MOV A,M
         CPI 00H
         JZ L_1C03
         LDA SEL_B
-        CALL SUB_1C3F
+        CALL CHECK_SEL_RANGE
         JNC L_1C39
 L_1C03:
         MVI A,77H                   ; 'w'
-        STA M_70B8
+        STA DISP_ROW_B_FLAG
         LDA SEL_B
         CPI 0AH
         JC L_1C12
@@ -4539,7 +4539,7 @@ L_1C12:
         ORI 50H                     ; 'P'
         STA M_7038
         MVI A,0F7H
-        STA M_70B8
+        STA DISP_ROW_B_FLAG
 L_1C33:
         LXI B,DISP_ROW_B
         JMP L_1C3B
@@ -4549,7 +4549,13 @@ L_1C39:
 L_1C3B:
         POP H
         JMP L_1CEA
-SUB_1C3F:
+
+; CHECK_SEL_RANGE (was SUB_1C3F). A = SEL_A or SEL_B; HL = an SEL_COL_TBL record pointer.
+; Computes ((A&0FH)<<4) - 09H (swap-nibble-then-offset) and compares it against the byte
+; at HL, then a second threshold +1BH from the first; returns carry if the value falls in
+; that range. A range-check gate used by the SEL_A/SEL_B display-column dispatch (1B14-1C39)
+; to decide whether the selected secondary's SEL_COL_TBL entry is valid for showing in the row.
+CHECK_SEL_RANGE:
         RLC
         RLC
         RLC
@@ -4571,7 +4577,7 @@ L_1C51:
         MOV B,H
         MOV C,L
         MVI A,40H                   ; '@'
-        STA M_70B8
+        STA DISP_ROW_B_FLAG
         POP H
         JMP L_1CEA
 L_1C65:
@@ -4614,18 +4620,18 @@ L_1CA9:
         CALL MUL9_INDEX
         PUSH H
         MOV A,E
-        LXI H,M_7053
+        LXI H,SEL_COL_TBL
         CALL MUL10_INDEX
-        STA M_70B7
+        STA DISP_ROW_A_FLAG
         MVI A,40H                   ; '@'
-        STA M_70B8
+        STA DISP_ROW_B_FLAG
         INX H
         POP B
         JMP L_1CEA
 L_1CC5:
-        LXI H,M_7053
+        LXI H,SEL_COL_TBL
         MOV A,M
-        STA M_70B7
+        STA DISP_ROW_A_FLAG
         INX H
         PUSH H
         LDA SEL_B
@@ -4637,14 +4643,21 @@ L_1CC5:
 L_1CDE:
         LXI B,M_6FEF
         MVI A,40H                   ; '@'
-        STA M_70B8
+        STA DISP_ROW_B_FLAG
         POP H
         JMP L_1CEA
 L_1CEA:
-        CALL SUB_1CF3
-        CALL SUB_1D10
+        CALL COMMIT_DISP_ROWS
+        CALL APPLY_DISP_BLINK
         JMP DISP_REFRESH
-SUB_1CF3:
+
+; COMMIT_DISP_ROWS (was SUB_1CF3, called from L_1CEA before APPLY_DISP_BLINK and
+; DISP_REFRESH). Copies 3 bytes from (BC) into DISP_ROW_B and 3 bytes from (HL, saved on
+; entry) into DISP_ROW_A. HL/BC are set up by the SEL_A/SEL_B dispatch beforehand - often
+; to DISP_ROW_A/B's own address (a deliberate no-op self-copy, leaving the row as whatever
+; the per-epoch tracking display already put there) or to an SEL_COL_TBL record pointer
+; (substituting that selector's precomputed 3-byte display snippet).
+COMMIT_DISP_ROWS:
         MVI E,03H
         PUSH H
         LXI H,DISP_ROW_B
@@ -4666,13 +4679,20 @@ L_1D07:
         DCR E
         JNZ L_1D07
         RET
-SUB_1D10:
+
+; APPLY_DISP_BLINK (was SUB_1D10, called from L_1CEA after COMMIT_DISP_ROWS). Runs
+; BLINK_ROW_BLANK for DISP_ROW_A (flag byte DISP_ROW_A_FLAG) then DISP_ROW_B (flag byte DISP_ROW_B_FLAG).
+; Then, if BTN_STATE bit 7 is set or TICK_BCD bit 6 is set, ORs 10H into DISP_EXTRA's low
+; nibble; otherwise ANDs it down to just the low nibble (clearing bit 4) - a blink toggle on
+; DISP_EXTRA, likely a colon or lock-status indicator, synced to the same TICK_BCD phase
+; BLINK_ROW_BLANK uses.
+APPLY_DISP_BLINK:
         LXI H,DISP_ROW_A
-        LDA M_70B7
-        CALL SUB_1D45
+        LDA DISP_ROW_A_FLAG
+        CALL BLINK_ROW_BLANK
         LXI H,DISP_ROW_B
-        LDA M_70B8
-        CALL SUB_1D45
+        LDA DISP_ROW_B_FLAG
+        CALL BLINK_ROW_BLANK
         LDA BTN_STATE
         RLC
         JNC L_1D3A
@@ -4689,7 +4709,14 @@ L_1D3A:
         ORI 10H
         STA DISP_EXTRA
         RET
-SUB_1D45:
+
+; BLINK_ROW_BLANK (was SUB_1D45). HL = DISP_ROW_A or DISP_ROW_B; A = that row's flag
+; byte (DISP_ROW_A_FLAG/DISP_ROW_B_FLAG). If bit 7 of A is set, AND VAR_704F bit 0 is set, AND TICK_BCD bit 6
+; is set, fills all 3 bytes at HL with 0FFH (blank on a 7447-style decoder) - a blink-to-
+; blank effect timed by TICK_BCD's slow bit, gated by a per-row "needs blinking" flag and a
+; VAR_704F enable bit. Likely how a lost/re-acquiring station's TD display blinks instead
+; of showing stale data.
+BLINK_ROW_BLANK:
         PUSH PSW
         ANI 80H
         JZ L_1D66
@@ -4838,8 +4865,8 @@ OLD_SUB_1E23:
 
 ; SWAP_SLOT_IDX (was SUB_1E23 - the live counterpart of the dead OLD_SUB_1E23 patch
 ; fragment at 1E1C). C = new SLOT_IDX. Saves the OLD SLOT_IDX, installs C as the new
-; SLOT_IDX, then indexes M_7053 (MUL10_INDEX) using the OLD SLOT_IDX - i.e. switches
-; tracking to slot C while fetching the just-abandoned slot's M_7053 entry (the same
+; SLOT_IDX, then indexes SEL_COL_TBL (MUL10_INDEX) using the OLD SLOT_IDX - i.e. switches
+; tracking to slot C while fetching the just-abandoned slot's SEL_COL_TBL entry (the same
 ; 10-byte-stride table the display-column code at 1B1x reads via SEL_A/SEL_B), likely to
 ; clean up or update that slot's display column on the way out. Called from
 ; SLOT_STALE_CHECK when giving up on a stale slot.
@@ -4849,7 +4876,7 @@ SWAP_SLOT_IDX:
         MOV A,C
         STA SLOT_IDX
         MOV A,D
-        LXI H,M_7053
+        LXI H,SEL_COL_TBL
         CALL MUL10_INDEX
         MVI E,0AH
 L_1E34:
