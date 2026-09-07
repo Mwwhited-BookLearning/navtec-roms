@@ -315,7 +315,7 @@ D_0080       EQU  $+1
         STA KDC_CMD                 ; 8279 clock prescaler = 6
         MVI A,90H
         STA KDC_CMD                 ; 8279: write display RAM, auto-increment, addr 0
-        CALL X_1E4C
+        CALL ROM_SELFTEST
         MVI A,20H                   ; ' '
         CALL PULSE_PB
         MVI B,00H
@@ -4582,17 +4582,34 @@ L_1E44:
         DCR E
         JNZ L_1E44
         RET
-X_1E4C:
-        CALL SUB_1E4F
-SUB_1E4F:
-        CALL SUB_1E52
-SUB_1E52:
-        CALL SUB_1E55
-SUB_1E55:
+
+; ROM_SELFTEST (was X_1E4C, guessed "receiver hardware initialisation" - wrong).
+; Three trivial one-line wrapper calls (ROM_SELFTEST -> _2 -> _3, each just
+; "CALL next") reach ROM_SELFTEST_BODY (1E55), which:
+;   1. STA KDC_CMD,0E0H (8279 end-interrupt - clears any pending sensor IRQ)
+;   2. XORs together every byte from 0001H to 1E4CH inclusive (its own entry address,
+;      i.e. essentially the whole ROM below itself) into A, using the classic
+;      INR/DCR-to-test-without-modifying idiom on H then L to detect HL==0.
+;   3. CPI 9AH and RET - a ROM checksum compared against a hard-coded expected value.
+; Called once from INIT (00BC), right after 8279 setup. CONFIRMED BY SIMULATION this
+; is a real algorithm, but the checksum does not match: XORing the actual (verified
+; byte-exact) ROM contents over that exact range gives 4EH, not 9AH. The Z flag from
+; CPI is never tested by the caller either (00BF overwrites A with an unrelated MVI
+; before any conditional jump), so the self-test's pass/fail result is discarded
+; either way. Open question: whether 9AH was correct before the in-place hand patches
+; (OLD_LOAD_REC etc.) touched bytes in this range and nobody recomputed it, or whether
+; this check never passed and was always vestigial/debug-only.
+ROM_SELFTEST:
+        CALL ROM_SELFTEST_2
+ROM_SELFTEST_2:
+        CALL ROM_SELFTEST_3
+ROM_SELFTEST_3:
+        CALL ROM_SELFTEST_BODY
+ROM_SELFTEST_BODY:
         MVI A,0E0H
         STA KDC_CMD
         XRA A
-        LXI H,X_1E4C
+        LXI H,ROM_SELFTEST
 L_1E5E:
         XRA M
         DCX H

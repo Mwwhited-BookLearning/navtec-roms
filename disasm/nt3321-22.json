@@ -451,7 +451,10 @@
     "1E05": "X_1E05",
     "1E1C": "OLD_SUB_1E23",
     "1E6D": "ORPHAN_1E6D",
-    "1E4C": "X_1E4C"
+    "1E4C": "ROM_SELFTEST",
+    "1E4F": "ROM_SELFTEST_2",
+    "1E52": "ROM_SELFTEST_3",
+    "1E55": "ROM_SELFTEST_BODY"
   },
   "blockComments": {
     "1000": ["SLOTTBL_CHK: tail of a routine spanning the ROM 1/ROM 2 boundary (entered from 0FFxH):","test SLOT_TBL[A]; clean up stack and continue at X_0FE9 or SLOT_INC_CHK."],
@@ -476,6 +479,7 @@
     "1F80": ["128-byte tail block of superseded routine bodies, left in place by the same kind","of in-place patch/reorg that produced OLD_LOAD_REC (0533) - unlike MUL10_INDEX (0515),","this block genuinely has no live callers anywhere.","Manually decoded (not part of live flow, so kept as DB):","  1F80-1F9B: old GET_FLAGS_A/COPY_E/FILL_ZERO-based routine, ends with JMP FILL_ZERO.","  1F9E-1FBB: old copy of the SLOTTBL_ZERO/SLOT_INC_CHK-style flag check, ends RET.","  1FBC-1FF5: old copy of X_0FBE's slot-flag logic (same GET_FLAGS_A/CMP/JNZ shape,","    with an extra leading MVI A,01H and a different post-branch tail), ends RET.","  1FF6-1FFF: an x10-multiply fragment (PUSH PSW/H/B; RLC;MOV C,A;RLC;RLC;ADD C) with the","    same instruction shape as MUL10_INDEX's body, but this copy is dead (no xrefs at all)."],
     "0034": ["RST 6.5 interrupt: receiver sample-ready strobe.","Entered only from the EI/NOP/DI window inside WAIT_SAMPLE, so the stack holds","[ret into WAIT_SAMPLE][ret to WAIT_SAMPLE's caller]. The trailing POP B / RET discards","the first and returns to the main-loop caller with A = B = PIO2_PC rotated left twice.","Sets PIO1_PC bit 0 (busy) and acknowledges the receiver with a pulse on PIO2_PB bit 5."],
     "0072": ["INIT: cold start. Program the 8251 USART (mode 0DAH = async x16, 7 data, odd parity,","2 stop; command 37H = TxEN DTR RxE ER RTS), set SP, program both 8155s and the 8279,","SIM 1DH = enable RST 6.5 only, clear RAM 6F00-70FB, read the front-panel switches,","derive SLOT_COUNT from the GRI and fall into the acquisition sequence."],
+    "1E4C": ["ROM_SELFTEST (was X_1E4C, guessed \"receiver hardware initialisation\" - wrong).","Three trivial one-line wrapper calls (ROM_SELFTEST -> _2 -> _3, each just","\"CALL next\") reach ROM_SELFTEST_BODY (1E55), which:","  1. STA KDC_CMD,0E0H (8279 end-interrupt - clears any pending sensor IRQ)","  2. XORs together every byte from 0001H to 1E4CH inclusive (its own entry address,","     i.e. essentially the whole ROM below itself) into A, using the classic","     INR/DCR-to-test-without-modifying idiom on H then L to detect HL==0.","  3. CPI 9AH and RET - a ROM checksum compared against a hard-coded expected value.","Called once from INIT (00BC), right after 8279 setup. CONFIRMED BY SIMULATION this","is a real algorithm, but the checksum does not match: XORing the actual (verified","byte-exact) ROM contents over that exact range gives 4EH, not 9AH. The Z flag from","CPI is never tested by the caller either (00BF overwrites A with an unrelated MVI","before any conditional jump), so the self-test's pass/fail result is discarded","either way. Open question: whether 9AH was correct before the in-place hand patches","(OLD_LOAD_REC etc.) touched bytes in this range and nobody recomputed it, or whether","this check never passed and was always vestigial/debug-only."],
     "012D": ["ACQ_START: (re)start master acquisition. Reached again whenever tracking is lost."],
     "0163": ["SEARCH_LOOP: search for the master phase code, alternating REC_MASTER / REC_SEC targets."],
     "01B0": ["MASTER_FOUND: master locked. Slot 0 flags = C8H, then 20 settle passes (SETTLE_CNT)."],

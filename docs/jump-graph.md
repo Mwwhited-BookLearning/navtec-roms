@@ -251,10 +251,10 @@ control flow inside an already-named routine, not independent things to name.
 | 1DBD | `X_1DBD` | 3 | needs analysis |
 | 1E05 | `X_1E05` | 3 | needs analysis |
 | 1E23 | `SUB_1E23` | 1 | needs analysis |
-| 1E4C | `X_1E4C` | 1 | needs analysis |
-| 1E4F | `SUB_1E4F` | 1 | needs analysis |
-| 1E52 | `SUB_1E52` | 1 | needs analysis |
-| 1E55 | `SUB_1E55` | 1 | needs analysis |
+| 1E4C | `ROM_SELFTEST` | 1 | named |
+| 1E4F | `ROM_SELFTEST_2` | 1 | named |
+| 1E52 | `ROM_SELFTEST_3` | 1 | named |
+| 1E55 | `ROM_SELFTEST_BODY` | 1 | named |
 | 1E9B | `SUB_1E9B` | 1 | needs analysis |
 | 1EAA | `SUB_1EAA` | 2 | needs analysis |
 | 1EBB | `SUB_1EBB` | 1 | needs analysis |

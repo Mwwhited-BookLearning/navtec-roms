@@ -41,7 +41,7 @@ the schematic).
 | [docs/front-panel.md](docs/front-panel.md) | 8279 sensor matrix, thumbwheel decoding, set-up mode, display layout |
 | [docs/ram-map.md](docs/ram-map.md) | every RAM variable with its working name |
 | [docs/routines.md](docs/routines.md) | subroutine catalog |
-| [docs/rom-status.md](docs/rom-status.md) | the missing ROM halves and how to recover them |
+| [docs/rom-status.md](docs/rom-status.md) | the ROM recovery story: how the missing halves were found and read (now resolved) |
 | [docs/jump-graph.md](docs/jump-graph.md) | jump-graph sequence diagrams, full jump-target/variable tables, analysis worklist |
 
 ## Regenerating the listing

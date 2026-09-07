@@ -1,5 +1,12 @@
 # ROM dump status
 
+**Both chips are now fully recovered.** This document is written
+chronologically, as the recovery actually happened (NT3321 first, then
+NT3322), and was never fully swept afterward - some sections below still
+read as if NT3322 were outstanding. It isn't; `originals/*.BIN` are both
+complete, correct 4 KB dumps. See `docs/PROGRESS.md` for the current status
+and `docs/jump-graph.md` for what's left to *analyze* (as opposed to dump).
+
 ## Resolved: the correct read wiring for these EPROMs
 
 The devices read correctly as a standard **2732** on a TL866-class programmer
@@ -34,7 +41,7 @@ yet been confirmed on that chip.
 | File | Bytes | Programmed | Blank (FFH) |
 |---|---|---|---|
 | `CN19229N NT3321 7943.BIN` | 4096 | 0000-07FF | 0800-0FFF (now recovered, see above) |
-| `CN19230N NT3322 7943.BIN` | 4096 | 1000-17FF | 1800-1FFF (still outstanding) |
+| `CN19230N NT3322 7943.BIN` | 4096 | 1000-17FF | 1800-1FFF (now recovered, see above) |
 
 Both images were dumped as 4 KB with an all-FFH upper half. That was not
 padding: the programmed halves call into the blank halves, so the code there
@@ -51,7 +58,9 @@ exists and simply was not captured by a plain 2732 read.
 - The `LXI H` instruction at 17FE is the last one in ROM 2's dumped half and its
   high operand byte lies at 1800, so its value (shown as 0FF56H) is unknown.
 - `DISP_REFRESH` (13E7) and `ADJ_PULSES` (0698) are complete routines that no
-  dumped code calls: their callers are in the missing halves.
+  *then-dumped* code called: their callers turned out to be in the halves
+  recovered later - `L_1CEA` for `DISP_REFRESH`, and `CALC_TD` for
+  `ADJ_PULSES` (both now identified, see `docs/routines.md`).
 
 The address layout also means the parts are not two 2 KB devices in a four-ROM
 system: each chip's own upper half is what is missing.
@@ -74,17 +83,15 @@ reference for reading one of these chips. In short: read as "2732" on the
 programmer, but wire programmer-pin-21 to chip-pin-18, programmer-pin-18 to
 both chip-pins 20 and 21, and leave programmer-pin-20 disconnected.
 
-## What's left to do
+## What's left to do (done - kept for the historical record)
 
-1. **NT3322** still needs a fresh read using the wiring in
-   `originals/README.md`. It's almost certainly the same physical part as
-   NT3321, so the same rewire should work directly, but this hasn't been
-   confirmed on that specific chip yet.
-2. Drop the corrected NT3322 image into `originals/` (replacing the current
-   half-blank file) and re-run `node tools/dis8085.js disasm/nt3321-22.json`.
-   The hints file already names the routines that live in the missing half
-   (`X_1804`, `X_1878`, `X_1DBD`, etc. - see the table below), so the listing
-   should fill in immediately, the same way it did for NT3321.
+1. ~~**NT3322** still needs a fresh read using the wiring in
+   `originals/README.md`.~~ Done: the same rewire worked directly on NT3322.
+2. ~~Drop the corrected NT3322 image into `originals/`... and re-run
+   `node tools/dis8085.js disasm/nt3321-22.json`.~~ Done: the listing filled
+   in immediately, the same way it did for NT3321. `X_1804` is now
+   `RPT_FMT_TD3` and `X_1878` is now `PRT_HEX_BYTE` - see `docs/jump-graph.md`
+   for the current names of everything that was "missing" when this was written.
 
 ## Routines in the missing halves and what the callers tell us
 
@@ -94,7 +101,12 @@ pre-recovery guesswork, kept for the record. See `docs/routines.md`,
 the `X_1990`..`X_19A9` guess below was exactly right (now named `SW_ERR_SEL_A`,
 `SW_ERR_SEL_B`, `SW_ERR_GRI1`..`SW_ERR_GRI4`); the `X_18C0` guess ("probably
 `DISP_REFRESH` driver") was **wrong** - it's actually a cascading BCD tick
-clock (`TICK_CLOCK_CASCADE`), see `firmware.md`.
+clock (`TICK_CLOCK_CASCADE`); the `X_1E4C` guess ("receiver hardware
+initialisation") was also **wrong** - it's `ROM_SELFTEST`, an XOR checksum
+over most of the ROM whose pass/fail result is never even tested by the
+caller (see `disasm/nt3321-22.json`'s `1E4C` comment). Both wrong guesses
+were architecturally reasonable calls-from-INIT/calls-from-tick, just not
+what the actual decoded bytes turned out to do.
 
 | Address | Name | Called from | Inferred purpose |
 |---|---|---|---|

@@ -100,5 +100,7 @@ M = consistent reading, L = placeholder name).
 | 70E8 | `PLOT_BASE` | 2 | H | B,C values for the current plot line |
 | 70FC | (stack) | 4 | H | top of stack, 7100 = initial SP |
 
-Addresses not listed are either untouched by the dumped halves or only used by
-code in the missing halves.
+Addresses not listed are either untouched by any code, or touched only by
+routines that are present in the fully-recovered ROM but not yet individually
+analyzed - see [jump-graph.md](jump-graph.md)'s variable worklist for the
+full list of those (`M_xxxx` names).

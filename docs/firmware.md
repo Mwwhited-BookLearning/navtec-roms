@@ -27,7 +27,7 @@ start
 :8251 command 37H;
 :SIM 1DH (RST 6.5 only);
 :8279 mode 04H, prescaler 26H, write-display 90H;
-:X_1E4C (missing half: receiver init);
+:ROM_SELFTEST (XOR checksum 0001-1E4C vs 9AH, result unused - see disasm/nt3321-22.json's 1E4C comment);
 :clear RAM 6F00-70FB;
 :VAR_6FD9 = 1BH, UNIT_ID = '0', PRTBUF_PTR = PRTBUF, VAR_6FCB = FFH;
 :READ_SWITCHES (loops until GRI and selectors are valid);
@@ -129,9 +129,10 @@ SLOT_DONE --> TRACK_NEXT_SLOT
 @enduml
 ```
 
-The exact semantics of the window arithmetic live partly in the missing halves
-(`X_0E1D`, `X_0E2D`, `X_0EC1`, `X_0ED9`, `X_0EEE`), so the phase names above are
-working names, not proven ones.
+The exact semantics of the window arithmetic are in routines that are present
+in the fully-recovered ROM but not yet individually analyzed (`X_0E1D`,
+`X_0E2D`, `X_0EC1`, `X_0ED9`, `X_0EEE` - see `docs/jump-graph.md`'s worklist,
+item 1), so the phase names above are working names, not proven ones.
 
 ## Per-slot data
 
@@ -163,7 +164,7 @@ out of the working copy; `GET_SLOT_REC` picks the instance from the slot flags.
 | Routine | Function |
 |---|---|
 | `BCD_ADD4` / `BCD_SUB4` | 4-byte packed BCD add / ten's-complement subtract, `(BC) op= (HL)` |
-| `BCD_TO_BIN` / `BIN_TO_BCD` | single byte conversions (tails in the missing half) |
+| `BCD_TO_BIN` / `BIN_TO_BCD` | single byte conversions (short tails at 0800 and in `HI_NIBBLE`) |
 | `MUL8` | 8 x 8 -> 16 shift-add multiply |
 | `MUL9_INDEX` | HL + 9*A (record indexing) |
 | `COUNT_BITS4`, `PHASE_MISMATCH` | popcounts used for phase-code correlation |

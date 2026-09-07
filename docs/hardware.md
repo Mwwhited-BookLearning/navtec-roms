@@ -1,9 +1,11 @@
 # Hardware reconstruction (from firmware analysis)
 
-Everything below is inferred from the two ROM images. Nothing has been verified
-against a board yet. Items marked **(inferred)** are strong deductions from the
-code; items marked **(guess)** are plausible but need confirmation from the
-hardware or from the missing ROM halves.
+Everything below is inferred from the two ROM images (now fully recovered -
+see [rom-status.md](rom-status.md)). Nothing has been verified against a
+board yet. Items marked **(inferred)** are strong deductions from the code;
+items marked **(guess)** are plausible but need confirmation from the
+hardware, or from analyzing the ROM's still-generically-named routines
+further (see [jump-graph.md](jump-graph.md)'s worklist).
 
 ## System overview
 
@@ -161,8 +163,9 @@ momentary push buttons on bits 7 and 6. The 8279 IRQ output drives **RST 5.5**
 Display RAM is written as 7 bytes. Each byte carries two 4-bit digit codes (the
 8279 OUTA/OUTB nibbles), so the display is two rows of 6 digits plus one extra
 byte, most likely through BCD-to-seven-segment decoders. Codes 0EH and 0FH are
-passed to display routines in the missing half, which on a 7447-class decoder
-give "blank"-like patterns.
+passed to display routines `X_0DB3` and `X_0D79` (present in the ROM, not yet
+individually analyzed), which on a 7447-class decoder give "blank"-like
+patterns.
 
 ### 8155 #1 (I/O at E000)
 
@@ -173,9 +176,22 @@ give "blank"-like patterns.
 | E003 port C | bit 0 | set when the CPU starts work, cleared in the idle loop: **busy indicator / watchdog strobe** |
 
 The timer runs at CLK/2000 (1250 Hz at 2.5 MHz). Its output is the most likely
-source of the periodic **RST 7.5** tick **(guess)**. Ports A and B of this chip
-are never touched by the dumped halves; they are probably driven by code in the
-missing halves (status lamps are the obvious candidate).
+source of the periodic **RST 7.5** tick **(guess)**.
+
+**Correction:** this table previously said ports A and B of this chip were
+"never touched by the dumped halves" - that was true only before the second
+EPROM was recovered. They are written, from `X_0DE6` (0800-0FFF, called from
+`SEARCH_LOOP`/`SETTLE_LOOP`/`TRACK_LOOP`): bytes 1-3 of the current record's
+4-byte BCD value (`CUR_REC`+1..+3) are copied out to `PIO1_PB` (E002),
+`PIO1_PA` (E001) and `PIO2_PA` (F001) in sequence, immediately after
+`PIO2_PB`'s low bits are updated from `CUR_REC`'s status byte. Not yet
+understood *why* - candidates are an analog/parallel output for an external
+recorder (there's a silkscreened `SAMPLER` section and a `TRF` connector on
+the board, see the photo-derived notes below) or some other board beyond this
+one reading the current TD value in binary rather than over the serial link.
+This also means `PIO2_PB` bits 0, 1, 3 (previously "static, meaning unknown")
+are not static - they carry `CUR_REC`'s status-byte bits 0, 1, 3. Needs a full
+trace of `X_0DE3`/`X_0DE6` (see `docs/jump-graph.md`'s worklist).
 
 ### 8155 #2 (I/O at F000)
 
@@ -193,8 +209,8 @@ Port B bit usage:
 | 2 | 1 | pulsed (`PULSE_PB2`) at INIT, around the window-end capture in the ISR, and in tracking. Likely a counter latch/reset strobe. |
 | 4 | 0 | pulsed 8 times per `SHIFT_IN16`: shift clock for the receiver's serial data |
 | 5 | 0 | pulsed after every RST 6.5 sample: sample acknowledge |
-| 1, 3, 7 | 1 | static, meaning unknown |
-| 0, 6 | 0 | static, meaning unknown |
+| 0, 1, 3 | - | **not static** (correction, see 8155 #1 section above): set by `X_0DE6` from `CUR_REC`'s status-byte bits 0, 1, 3 during search/settle/track |
+| 6, 7 | 0, 1 | static, meaning unknown |
 
 Port C bit usage (as read in `SHIFT_IN16` and the ISR):
 
