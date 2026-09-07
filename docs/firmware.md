@@ -86,7 +86,7 @@ Consequences:
 @startuml
 [*] --> ACQ_START
 ACQ_START : CUR_TOA = GRI + const, WIN_END = ...
-ACQ_START : display cleared (X_0DB3 0EH)
+ACQ_START : seed REC_MASTER/REC_SEC from CUR_TOA (INIT_REC_FROM_TOA, status 0EH)
 ACQ_START --> SEARCH_LOOP
 SEARCH_LOOP : wait epoch, FIRST_SAMPLE, MATCH_PULSES (exact)
 SEARCH_LOOP --> SEARCH_LOOP : no match, alternate REC_MASTER / REC_SEC

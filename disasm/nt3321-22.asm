@@ -382,14 +382,14 @@ ACQ_START:
         SUI 05H
         STA WIN_END
         MVI A,0EH
-        CALL X_0DB3
+        CALL INIT_REC_FROM_TOA
         LXI H,CUR_REC
         LXI B,REC_MASTER
         CALL COPY4
         LXI H,BCD_K_00080980
         CALL TOA_ADD_CONST
         MVI A,0EH
-        CALL X_0DB3
+        CALL INIT_REC_FROM_TOA
         LXI H,CUR_REC
         LXI B,REC_SEC
         CALL COPY4
@@ -422,7 +422,7 @@ SEARCH_VERIFY:
         LXI H,BCD_DELTA_2
         CALL TOA_ADD_CONST
         MVI A,0FH
-        CALL X_0D79
+        CALL INIT_REC_AND_SEND
         CALL WAIT_EPOCH
         CALL WAIT_SAMPLE
         CALL SHIFT_IN16
@@ -447,7 +447,7 @@ MASTER_FOUND:
         SHLD GRI_TMP_VAL
         CALL CPY_GRI_TO_TOA
         MVI A,0FH
-        CALL X_0DB3
+        CALL INIT_REC_FROM_TOA
         LXI B,REC_MASTER
         CALL LOAD_REC_HL
 
@@ -1563,7 +1563,7 @@ L_0871:
         MOV A,C
         CALL PULSE_ALIGN_ADJ2_AND_CLEAR
 SAVE_CUR_REC:
-        CALL SUB_0D7F
+        CALL SAVE_REC_SYNC
         JMP OLD_LOAD_REC
 L_087B:
         LDA CUR_REC
@@ -2368,32 +2368,62 @@ L_0D6F:
         LXI D,CUR_FLAGS
         LDAX D
         JMP L_0D44
-X_0D79:
-        CALL X_0DB3
+
+; INIT_REC_AND_SEND (was X_0D79). CALL INIT_REC_FROM_TOA with whatever status the
+; caller left in A (0FH at its only call site, inside the SEARCH_LOOP-era code around
+; 019A), then falls into REC_TO_FRONTEND - seeds CUR_REC from the current CUR_TOA
+; estimate and immediately broadcasts it to the front end. Corrects front-panel.md's
+; old claim that 0EH/0FH are "display codes" passed to X_0DB3/X_0D79 - they are
+; CUR_REC status-byte values, and neither routine touches the display at all.
+INIT_REC_AND_SEND:
+        CALL INIT_REC_FROM_TOA
         JMP REC_TO_FRONTEND
-SUB_0D7F:
+
+; SAVE_REC_SYNC (was SUB_0D7F, called only from SAVE_CUR_REC - runs on every record
+; save). For slot 0 (master): BCD_TO_BIN's M_6FA8 into VAR_6FE2, then SEED_REC_STATUS.
+; For other slots: if VAR_6FE2's bits 1,0 (tested via two RRC) are both clear, just
+; SEED_REC_STATUS; otherwise temporarily bumps CUR_TOA by VAR_6FE3, reseeds CUR_REC from
+; that bumped value, then subtracts VAR_6FE3 back out - the same "offset, reseed, undo"
+; pattern CALC_TD/TOA_SUB_CONST uses elsewhere. Keeps some CUR_REC field in sync with
+; CUR_TOA/M_6FA8 after every save; VAR_6FE2/VAR_6FE3's deeper roles aren't traced further.
+SAVE_REC_SYNC:
         LDA SLOT_IDX
         CPI 00H
         JNZ L_0D93
         LDA M_6FA8
         CALL BCD_TO_BIN
         STA VAR_6FE2
-        JMP SUB_0DB0
+        JMP SEED_REC_STATUS
 L_0D93:
         LDA VAR_6FE2
         RRC
         RRC
-        JNC SUB_0DB0
+        JNC SEED_REC_STATUS
         LXI H,VAR_6FE3
         LXI B,CUR_TOA
         CALL BCD_ADD4
-        CALL SUB_0DB0
+        CALL SEED_REC_STATUS
         LXI H,VAR_6FE3
         LXI B,CUR_TOA
         JMP BCD_SUB4
-SUB_0DB0:
+
+; SEED_REC_STATUS (was SUB_0DB0): reloads CUR_REC's own current status byte into A,
+; then falls straight into INIT_REC_FROM_TOA - i.e. "reseed CUR_REC from CUR_TOA but keep
+; the existing status", as opposed to INIT_REC_FROM_TOA's other callers which pass a
+; fresh literal status (0EH/0FH).
+SEED_REC_STATUS:
         LDA CUR_REC
-X_0DB3:
+
+; INIT_REC_FROM_TOA (was X_0DB3; corrects the old "display fill/clear" guess - there is
+; no display code anywhere in this routine, see 0D79). A = status byte for the new record.
+; Copies CUR_TOA into CUR_REC[0..3], round-trips CUR_REC[3] through BCD_TO_BIN/RRC/
+; BIN_TO_BCD/RLC, then right-shifts CUR_REC[0..3] one bit as a 32-bit chain (RAR across
+; 4 bytes) - a binary halving-like transform applied to the packed-BCD bytes, not a
+; valid decimal divide - and finally stamps CUR_REC[0] with the caller's A. Used at
+; ACQ_START to seed REC_MASTER/REC_SEC from a freshly computed CUR_TOA (via COPY4 right
+; after), and via SEED_REC_STATUS/SAVE_REC_SYNC on every record save. The exact numeric
+; purpose of the bit-shift step isn't nailed down - medium confidence only.
+INIT_REC_FROM_TOA:
         LXI H,CUR_TOA
         PUSH PSW
         LXI B,CUR_REC

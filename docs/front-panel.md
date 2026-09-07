@@ -134,11 +134,13 @@ Reading: OUTA drives a six-digit row showing the packed-BCD number at
 position 6 provides two extra digits or indicators. That matches a classic
 two-line Loran-C TD readout (TD-A over TD-B, five digits plus tenths each).
 
-Display codes 0EH and 0FH are passed to the display routines `X_0DB3` and
-`X_0D79` (still generically named - not yet individually analyzed); on
-7447/7448-style decoders these codes produce partial-segment and blank
-patterns, which is consistent with "clear display"
-during acquisition.
+**Correction:** 0EH and 0FH are *not* display codes - that guess didn't
+survive contact with the decoded bytes. `INIT_REC_FROM_TOA` (was `X_0DB3`)
+and `INIT_REC_AND_SEND` (was `X_0D79`) take them as a `CUR_REC` status-byte
+value while seeding a fresh station record from `CUR_TOA` during
+acquisition; neither routine touches the 8279 or the display buffer at all.
+See `disasm/nt3321-22.json`'s `0DB3` comment for the actual (BCD/binary
+round-trip) algorithm.
 
 ## Not yet known
 

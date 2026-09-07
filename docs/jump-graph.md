@@ -187,10 +187,10 @@ control flow inside an already-named routine, not independent things to name.
 | 0CA4 | `SET_QUAL_FLAGS` | 1 | named |
 | 0CBE | `MASTER_CORR_ADJ` | 1 | named |
 | 0CE8 | `MASTER_CORR_ADD_3000` | 1 | named |
-| 0D79 | `X_0D79` | 1 | needs analysis |
-| 0D7F | `SUB_0D7F` | 1 | needs analysis |
-| 0DB0 | `SUB_0DB0` | 1 | needs analysis |
-| 0DB3 | `X_0DB3` | 4 | needs analysis |
+| 0D79 | `INIT_REC_AND_SEND` | 1 | named |
+| 0D7F | `SAVE_REC_SYNC` | 1 | named |
+| 0DB0 | `SEED_REC_STATUS` | 1 | named |
+| 0DB3 | `INIT_REC_FROM_TOA` | 4 | named |
 | 0DE3 | `CUR_REC_TO_FRONTEND` | 1 | named |
 | 0DE6 | `REC_TO_FRONTEND` | 2 | named |
 | 0E1A | `X_0E1A` | 3 | needs analysis |
@@ -265,7 +265,7 @@ control flow inside an already-named routine, not independent things to name.
 | 1F20 | `SUB_1F20` | 1 | needs analysis |
 | 2001 | `EXTROM_ENTRY` | 1 | named |
 
-**29 of 137 still need analysis** (down from 77 at the start of this session).
+**25 of 137 still need analysis** (down from 77 at the start of this session).
 
 ## Variables (all 175 referenced RAM/IO addresses)
 
@@ -463,7 +463,7 @@ memory locations at all.
 Roughly in priority order (highest caller-count / most load-bearing first):
 
 1. **`GET_FLAGS_A` neighborhood (0800-0FFF): the slot-tracking arithmetic
-   helpers.** ~15 targets remain (`X_0D79` through `X_0FE9`) plus their
+   helpers.** ~11 targets remain (`X_0E1A` through `X_0FE9`) plus their
    associated `M_70Cx` variables. This is the window/timing arithmetic that
    `firmware.md` already flags as "working names, not proven ones" - the
    hardest but highest-value cluster, needs careful numeric tracing of each
@@ -475,14 +475,14 @@ Roughly in priority order (highest caller-count / most load-bearing first):
    `HANDLE_ACQUIRING_SLOT`/`SLOT_STALE_CHECK`/`ACCUM_SLOT_TOA` (a
    slot-staleness watchdog plus a per-slot TOA accumulator at `M_7057`),
    `PULSE_SCORE_UPDATE`/`CLAMP_HL_BC`/`POPCOUNT_ADJ_HL`/`PHASE_QUALITY_UPDATE`
-   (0B07-0C34 - two saturating quality accumulators, `PHASE_QUAL_A`/`_B`, that
-   trigger a pulse realignment when either drifts too far), and
-   `SET_QUAL_FLAGS`/`MASTER_CORR_ADJ`/`MASTER_CORR_ADD_3000` (0CA4-0CFD -
-   `MASTER_TOA_CORR`, a master-only correction term folded into
-   `ACCUM_SLOT_TOA`'s sum). `X_0D79`/`SUB_0D7F`/`SUB_0DB0`/`X_0DB3` (the
-   display-fill-code group, right after the arithmetic helpers) is a
-   reasonable next target - it likely connects to `docs/front-panel.md`'s
-   display-clear codes 0EH/0FH.
+   (two saturating quality accumulators that trigger a pulse realignment),
+   `SET_QUAL_FLAGS`/`MASTER_CORR_ADJ`/`MASTER_CORR_ADD_3000` (`MASTER_TOA_CORR`,
+   a master-only correction term folded into `ACCUM_SLOT_TOA`'s sum), and
+   `INIT_REC_AND_SEND`/`SAVE_REC_SYNC`/`SEED_REC_STATUS`/`INIT_REC_FROM_TOA`
+   (seed a station record from `CUR_TOA` - corrected a wrong "display
+   fill/clear" guess along the way, see rom-status.md/hardware.md/
+   front-panel.md's corrections). `X_0E1A`/`X_0E1D`/`X_0E2D` (right after,
+   feeding into `TRACK_LOOP`'s window setup per firmware.md) is next.
 2. **`SUB_1C3F` / `SUB_1CF3` / `SUB_1D10` / `SUB_1D45` (1C00-1D50) and the
    `M_70B7`-`M_70C7` display-column variables.** These feed `L_1CEA`'s
    display-commit path (same one `SW_ERR_SHOW` uses) and are keyed off

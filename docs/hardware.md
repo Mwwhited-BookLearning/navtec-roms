@@ -162,10 +162,16 @@ momentary push buttons on bits 7 and 6. The 8279 IRQ output drives **RST 5.5**
 
 Display RAM is written as 7 bytes. Each byte carries two 4-bit digit codes (the
 8279 OUTA/OUTB nibbles), so the display is two rows of 6 digits plus one extra
-byte, most likely through BCD-to-seven-segment decoders. Codes 0EH and 0FH are
-passed to display routines `X_0DB3` and `X_0D79` (present in the ROM, not yet
-individually analyzed), which on a 7447-class decoder give "blank"-like
-patterns.
+byte, most likely through BCD-to-seven-segment decoders.
+
+**Correction:** this section previously claimed codes 0EH/0FH were passed to
+"display routines" `X_0DB3`/`X_0D79` and would give "blank"-like patterns on
+a 7447-class decoder. That guess didn't survive decoding the actual bytes:
+those routines (now `INIT_REC_FROM_TOA`/`INIT_REC_AND_SEND`) take 0EH/0FH as
+a `CUR_REC` status-byte value while seeding a station record from `CUR_TOA`,
+and never touch the 8279 or display RAM at all. See `docs/front-panel.md`'s
+own correction and `docs/jump-graph.md` for current names. Which routines
+actually drive the display's blank/clear pattern is still open.
 
 ### 8155 #1 (I/O at E000)
 

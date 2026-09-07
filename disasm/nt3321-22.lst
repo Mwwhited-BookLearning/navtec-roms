@@ -199,14 +199,14 @@ ACQ_START:                                   ; xref: j0123 j0127 j01FC j0202
 0136  D6 05      SUI 05H
 0138  32 0E 6F   STA WIN_END
 013B  3E 0E      MVI A,0EH
-013D  CD B3 0D   CALL X_0DB3
+013D  CD B3 0D   CALL INIT_REC_FROM_TOA
 0140  21 A1 6F   LXI H,CUR_REC
 0143  01 24 6F   LXI B,REC_MASTER
 0146  CD BB 07   CALL COPY4
 0149  21 14 00   LXI H,BCD_K_00080980
 014C  CD C1 0E   CALL TOA_ADD_CONST
 014F  3E 0E      MVI A,0EH
-0151  CD B3 0D   CALL X_0DB3
+0151  CD B3 0D   CALL INIT_REC_FROM_TOA
 0154  21 A1 6F   LXI H,CUR_REC
 0157  01 3D 6F   LXI B,REC_SEC
 015A  CD BB 07   CALL COPY4
@@ -239,7 +239,7 @@ SEARCH_VERIFY:                               ; xref: j017A
 0194  21 D1 6F   LXI H,BCD_DELTA_2
 0197  CD C1 0E   CALL TOA_ADD_CONST
 019A  3E 0F      MVI A,0FH
-019C  CD 79 0D   CALL X_0D79
+019C  CD 79 0D   CALL INIT_REC_AND_SEND
 019F  CD 9B 04   CALL WAIT_EPOCH
 01A2  CD 59 04   CALL WAIT_SAMPLE
 01A5  CD AE 04   CALL SHIFT_IN16
@@ -264,7 +264,7 @@ MASTER_FOUND:                                ; xref: j01AA
 01D0  22 19 6F   SHLD GRI_TMP_VAL
 01D3  CD 28 00   CALL CPY_GRI_TO_TOA
 01D6  3E 0F      MVI A,0FH
-01D8  CD B3 0D   CALL X_0DB3
+01D8  CD B3 0D   CALL INIT_REC_FROM_TOA
 01DB  01 24 6F   LXI B,REC_MASTER
 01DE  CD 3F 05   CALL LOAD_REC_HL
 
@@ -1380,7 +1380,7 @@ L_0871:                                      ; xref: j08D6 j08DD
 0871  79         MOV A,C
 0872  CD 92 0E   CALL PULSE_ALIGN_ADJ2_AND_CLEAR
 SAVE_CUR_REC:                                ; xref: j08B9 j08E0 j08E8 j08EE j08A6 c0317 j084E j0864
-0875  CD 7F 0D   CALL SUB_0D7F
+0875  CD 7F 0D   CALL SAVE_REC_SYNC
 0878  C3 33 05   JMP OLD_LOAD_REC
 L_087B:                                      ; xref: j08C5 j085A
 087B  3A A1 6F   LDA CUR_REC
@@ -2185,32 +2185,62 @@ L_0D6F:                                      ; xref: j0D2C
 0D72  11 BA 6F   LXI D,CUR_FLAGS
 0D75  1A         LDAX D
 0D76  C3 44 0D   JMP L_0D44
-X_0D79:                                      ; xref: c019C
-0D79  CD B3 0D   CALL X_0DB3
+
+; INIT_REC_AND_SEND (was X_0D79). CALL INIT_REC_FROM_TOA with whatever status the
+; caller left in A (0FH at its only call site, inside the SEARCH_LOOP-era code around
+; 019A), then falls into REC_TO_FRONTEND - seeds CUR_REC from the current CUR_TOA
+; estimate and immediately broadcasts it to the front end. Corrects front-panel.md's
+; old claim that 0EH/0FH are "display codes" passed to X_0DB3/X_0D79 - they are
+; CUR_REC status-byte values, and neither routine touches the display at all.
+INIT_REC_AND_SEND:                           ; xref: c019C
+0D79  CD B3 0D   CALL INIT_REC_FROM_TOA
 0D7C  C3 E6 0D   JMP REC_TO_FRONTEND
-SUB_0D7F:                                    ; xref: c0875
+
+; SAVE_REC_SYNC (was SUB_0D7F, called only from SAVE_CUR_REC - runs on every record
+; save). For slot 0 (master): BCD_TO_BIN's M_6FA8 into VAR_6FE2, then SEED_REC_STATUS.
+; For other slots: if VAR_6FE2's bits 1,0 (tested via two RRC) are both clear, just
+; SEED_REC_STATUS; otherwise temporarily bumps CUR_TOA by VAR_6FE3, reseeds CUR_REC from
+; that bumped value, then subtracts VAR_6FE3 back out - the same "offset, reseed, undo"
+; pattern CALC_TD/TOA_SUB_CONST uses elsewhere. Keeps some CUR_REC field in sync with
+; CUR_TOA/M_6FA8 after every save; VAR_6FE2/VAR_6FE3's deeper roles aren't traced further.
+SAVE_REC_SYNC:                               ; xref: c0875
 0D7F  3A 11 6F   LDA SLOT_IDX
 0D82  FE 00      CPI 00H
 0D84  C2 93 0D   JNZ L_0D93
 0D87  3A A8 6F   LDA M_6FA8
 0D8A  CD D9 07   CALL BCD_TO_BIN
 0D8D  32 E2 6F   STA VAR_6FE2
-0D90  C3 B0 0D   JMP SUB_0DB0
+0D90  C3 B0 0D   JMP SEED_REC_STATUS
 L_0D93:                                      ; xref: j0D84
 0D93  3A E2 6F   LDA VAR_6FE2
 0D96  0F         RRC
 0D97  0F         RRC
-0D98  D2 B0 0D   JNC SUB_0DB0
+0D98  D2 B0 0D   JNC SEED_REC_STATUS
 0D9B  21 E3 6F   LXI H,VAR_6FE3
 0D9E  01 A5 6F   LXI B,CUR_TOA
 0DA1  CD 82 07   CALL BCD_ADD4
-0DA4  CD B0 0D   CALL SUB_0DB0
+0DA4  CD B0 0D   CALL SEED_REC_STATUS
 0DA7  21 E3 6F   LXI H,VAR_6FE3
 0DAA  01 A5 6F   LXI B,CUR_TOA
 0DAD  C3 9F 07   JMP BCD_SUB4
-SUB_0DB0:                                    ; xref: j0D90 j0D98 c0DA4
+
+; SEED_REC_STATUS (was SUB_0DB0): reloads CUR_REC's own current status byte into A,
+; then falls straight into INIT_REC_FROM_TOA - i.e. "reseed CUR_REC from CUR_TOA but keep
+; the existing status", as opposed to INIT_REC_FROM_TOA's other callers which pass a
+; fresh literal status (0EH/0FH).
+SEED_REC_STATUS:                             ; xref: j0D90 j0D98 c0DA4
 0DB0  3A A1 6F   LDA CUR_REC
-X_0DB3:                                      ; xref: c013D c0151 c01D8 c0D79
+
+; INIT_REC_FROM_TOA (was X_0DB3; corrects the old "display fill/clear" guess - there is
+; no display code anywhere in this routine, see 0D79). A = status byte for the new record.
+; Copies CUR_TOA into CUR_REC[0..3], round-trips CUR_REC[3] through BCD_TO_BIN/RRC/
+; BIN_TO_BCD/RLC, then right-shifts CUR_REC[0..3] one bit as a 32-bit chain (RAR across
+; 4 bytes) - a binary halving-like transform applied to the packed-BCD bytes, not a
+; valid decimal divide - and finally stamps CUR_REC[0] with the caller's A. Used at
+; ACQ_START to seed REC_MASTER/REC_SEC from a freshly computed CUR_TOA (via COPY4 right
+; after), and via SEED_REC_STATUS/SAVE_REC_SYNC on every record save. The exact numeric
+; purpose of the bit-shift step isn't nailed down - medium confidence only.
+INIT_REC_FROM_TOA:                           ; xref: c013D c0151 c01D8 c0D79
 0DB3  21 A5 6F   LXI H,CUR_TOA
 0DB6  F5         PUSH PSW
 0DB7  01 A1 6F   LXI B,CUR_REC
