@@ -84,7 +84,7 @@ else (no)
     :UNIT_ID = D3:D4 as hex byte;
   else (no)
     :SCAN_SEL_CHK: validate SEL_A against SLOT_COUNT,
-    X_1DBD, X_1E05 -> SLOT_RESULT, NEW_DATA = 1;
+    QUEUE_SLOT_SEL, DEQUEUE_SLOT_SEL -> SLOT_RESULT, NEW_DATA = 1;
   endif
   stop
 endif

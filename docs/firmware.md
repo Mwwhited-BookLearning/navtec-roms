@@ -33,7 +33,7 @@ start
 :READ_SWITCHES (loops until GRI and selectors are valid);
 :GRI_VAL = GRI_SW
 SLOT_COUNT = 4 + ((bin(GRI low digits) + (GRI >= 6000)) - 40) / 10 + 1;
-:validate SEL_A / SEL_B against SLOT_COUNT (X_1DBD);
+:validate SEL_A / SEL_B against SLOT_COUNT (QUEUE_SLOT_SEL);
 :ACQ_START;
 stop
 @enduml
@@ -64,7 +64,7 @@ I <- : RST 6.5 during the EI window\n(pushes RET-to-WAIT_SAMPLE)
 I -> I : PIO1_PC bit 0 = busy
 I -> I : B = PIO2_PC << 2
 I -> I : PULSE_PB bit 5 (ack)
-I -> I : if SAMPLE_CNT+1 == WIN_END: PULSE_PB2, X_0E1D, SYNC_FLAG = 1
+I -> I : if SAMPLE_CNT+1 == WIN_END: PULSE_PB2, LATCH_REC_TO_PIO2PB, SYNC_FLAG = 1
 I -> I : POP B  (discard RET-to-WAIT_SAMPLE)
 I --> M : RET  (A = B = status)
 @enduml
@@ -91,7 +91,7 @@ ACQ_START --> SEARCH_LOOP
 SEARCH_LOOP : wait epoch, FIRST_SAMPLE, MATCH_PULSES (exact)
 SEARCH_LOOP --> SEARCH_LOOP : no match, alternate REC_MASTER / REC_SEC
 SEARCH_LOOP --> SEARCH_VERIFY : match
-SEARCH_VERIFY : SAMPLE_TO_BCD, copy GRI, X_0EC1(+110)
+SEARCH_VERIFY : SAMPLE_TO_BCD, copy GRI, TOA_ADD_CONST(+110)
 SEARCH_VERIFY : SHIFT_IN16 == 0CAH ?
 SEARCH_VERIFY --> SEARCH_LOOP : no
 SEARCH_VERIFY --> MASTER_FOUND : yes
@@ -100,19 +100,19 @@ MASTER_FOUND --> SETTLE_LOOP
 SETTLE_LOOP : 20 x (wait epoch, EPOCH_PHASE_UPDATE, QUAL_UPDATE)
 SETTLE_LOOP --> ACQ_START : flag bit 5 clear or QUAL_CHECK bad
 SETTLE_LOOP --> TRACK_LOOP : good signal
-TRACK_LOOP : wait epoch, X_0EEE, X_0ED9, display (X_0F31/X_0F08 by DISP_MODE), EPOCH_PHASE_UPDATE
+TRACK_LOOP : wait epoch, APPLY_NEW_DATA, TICK_DISP_AND_RESTART, DISP_MODE-gated task, EPOCH_PHASE_UPDATE
 TRACK_LOOP --> TRACK_NEXT_SLOT
 TRACK_NEXT_SLOT : SLOT_IDX++ (wrap -> TRACK_LOOP)
 TRACK_NEXT_SLOT --> TRACK_LOOP : wrapped
 TRACK_NEXT_SLOT --> TRACK_NEXT_SLOT : slot flag bit 7 clear
 TRACK_NEXT_SLOT --> SLOT_PROCESS : bit 7 set, bit 6 clear
-TRACK_NEXT_SLOT --> TRACK_NEXT_SLOT : bit 6 set: X_08A9
+TRACK_NEXT_SLOT --> TRACK_NEXT_SLOT : bit 6 set: HANDLE_ACQUIRING_SLOT
 SLOT_PROCESS : LOAD_CUR_REC
 SLOT_PROCESS --> SLOT_TRACKING : TRACK_STATE bit 7
 SLOT_PROCESS --> SLOT_ACQUIRE : TRACK_STATE bit 6
 SLOT_PROCESS --> SLOT_WIN_CALC : else (state = 1, compute window)
 SLOT_WIN_CALC --> SLOT_DONE : TRACK_STATE = 80H
-SLOT_TRACKING : X_0E2D, FIRST_SAMPLE, MATCH_PULSES (tolerant)
+SLOT_TRACKING : FIND_NEXT_TRACK_SLOT, FIRST_SAMPLE, MATCH_PULSES (tolerant)
 SLOT_TRACKING --> SLOT_DONE : ok (state 06)
 SLOT_TRACKING --> SLOT_TRK_MISS : miss: MISS_CNT++, TOA += 110
 SLOT_TRK_MISS --> SLOT_DONE
@@ -121,18 +121,28 @@ SLOT_TRK_LOST --> SLOT_DONE
 SLOT_ACQUIRE : READ_PHASE, COUNT_BITS4 x2, CUR_NPULSE++
 SLOT_ACQUIRE --> SLOT_DONE : < 4 or 8 pulses seen
 SLOT_ACQUIRE --> SLOT_ACQ_FAIL : CHK_NPULSE bad
-SLOT_ACQUIRE --> SLOT_ACQ_OK : CHK_NPULSE good: X_1E05, ACQ_COUNT++, flags |= C0H
+SLOT_ACQUIRE --> SLOT_ACQ_OK : CHK_NPULSE good: DEQUEUE_SLOT_SEL, ACQ_COUNT++, flags |= C0H
 SLOT_ACQ_OK --> SLOT_DONE
 SLOT_ACQ_FAIL --> SLOT_TRK_MISS
-SLOT_DONE : CUR_REC[0] = status, SAVE_CUR_REC (X_0875)
+SLOT_DONE : CUR_REC[0] = status, SAVE_CUR_REC
 SLOT_DONE --> TRACK_NEXT_SLOT
 @enduml
 ```
 
-The exact semantics of the window arithmetic are in routines that are present
-in the fully-recovered ROM but not yet individually analyzed (`X_0E1D`,
-`X_0E2D`, `X_0EC1`, `X_0ED9`, `X_0EEE` - see `docs/jump-graph.md`'s worklist,
-item 1), so the phase names above are working names, not proven ones.
+**Correction:** the "display (by DISP_MODE)" framing above was itself a wrong
+guess, now that both DISP_MODE-selected routines are fully decoded - neither
+touches the display. `DISP_MODE==1` calls `MASTER_SEC_PULSE_HANDOFF` (a
+pulse-position handoff between the master and first secondary) and
+`DISP_MODE==2` calls `ACTIVATE_SELECTED_SLOT` (brings an operator-selected
+slot into tracking); confirmed at the call site, `TRACK_DISP1`/`TRACK_UPDATE`
+in the listing. Despite its name, `DISP_MODE` gates which one-time per-epoch
+*task* runs, not which display update happens - matching the pattern of
+several other "X" names in this ROM that turned out not to mean what their
+variable name suggested. The window-arithmetic semantics themselves are now
+individually analyzed (see `docs/jump-graph.md`) with the caveat that a
+couple of names there (`MASTER_SEC_PULSE_HANDOFF`'s `REC_MASTER_18` test, and
+the channel-2 quality-streak cluster) are still marked medium/low confidence
+in their `disasm/nt3321-22.json` comments rather than fully proven.
 
 ## Per-slot data
 
@@ -227,7 +237,7 @@ both display rows with `ERR_DASH_TBL`'s dash pattern, then BCD-stamps the
 field number into the middle digit of each row before falling into the
 display-commit path at `L_1CEA` - i.e. it shows "field N is bad" as dashes
 with the field number in the middle, on both display rows. Two more stubs for
-field numbers 7 and 8 exist right after (`X_19AE`, `X_19B3`) but are dead:
+field numbers 7 and 8 exist right after (`SW_ERR_UNUSED_7`, `SW_ERR_UNUSED_8`) but are dead:
 only 6 fields are ever validated.
 
 ## `TICK_CLOCK_CASCADE` (18C0)
@@ -250,7 +260,7 @@ Dead fragments show the ROM was patched by hand after assembly in some spots:
 | Address | Old code | What replaced it |
 |---|---|---|
 | 0533-053E | copy `CUR_REC` -> record | `LOAD_CUR_REC` copies record -> `CUR_REC` |
-| 1E1C-1E22 | shorter entry into what's now `SUB_1E23` | `SUB_1E23` inserts an extra `MOV A,C` / `STA SLOT_IDX` step |
+| 1E1C-1E22 | shorter entry into what's now `SWAP_SLOT_IDX` | `SWAP_SLOT_IDX` inserts an extra `MOV A,C` / `STA SLOT_IDX` step |
 | 1F80-1FFF | four old routine bodies (see `disasm/nt3321-22.json`'s `1F80` comment) | reorganized/relocated equivalents elsewhere in ROM 1 |
 
 **Two corrections**, both the same shape: a stale forced-`db` override in the
@@ -261,7 +271,7 @@ addresses it renders as data).
 
 - 0515-051A (`0515`, once `OLD_MUL10`) - live code with 11 real callers, now
   `MUL10_INDEX`, a genuine sibling of `MUL9_INDEX` for 10-byte-stride tables
-  (`M_7053`, `M_7057`, the 7056H report-item table), unrelated to the 9-byte
+  (`SEL_COL_TBL`, `ACCUM_TOA_TBL`, the 7056H report-item table), unrelated to the 9-byte
   `SLOTREC_CNT` records.
 - 058C-059C (`058C`, once `ORPHAN_058C`, guessed to be followed by an inert
   "phase-code table") - also live, called once from `EPOCH_PHASE_UPDATE`

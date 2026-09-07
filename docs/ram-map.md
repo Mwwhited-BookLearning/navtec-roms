@@ -13,7 +13,7 @@ M = consistent reading, L = placeholder name).
 | 6F00 | `RAM1_BASE` | 1 | H | dual role: base address INIT's `FILL_ZERO` clears from, and a 0/1/2 tri-state dispatch variable `MASTER_SEC_PULSE_HANDOFF` uses to sequence its master/secondary pulse-position handoff |
 | 6F01 | `ACQ_COUNT` | 1 | M | number of secondaries acquired; 0 triggers `PREP_NEXT_SLOT_FRONTEND` |
 | 6F02 | `FIRST_SLOT` | 1 | M | slot of the first acquired / selected station (init from `SEL_A`) |
-| 6F03 | `SLOT_RESULT` | 1 | L | value returned by `X_1E05` |
+| 6F03 | `SLOT_RESULT` | 1 | L | value returned by `DEQUEUE_SLOT_SEL` |
 | 6F04 | `SLOT_FLAGS` | 10 | H | one flag byte per slot: bit 7 active, bit 6 acquiring, bits 1..0 secondary record index, bits 3/4/5 report & settle gates (master = C8H) |
 | 6F0E | `WIN_END` | 1 | H | sample count at which the ISR fires the window-end capture |
 | 6F0F | `TRACK_MASK` | 1 | H | bit per secondary (1 << (flags & 3)) currently tracked |
@@ -49,7 +49,7 @@ M = consistent reading, L = placeholder name).
 | 6FBD | `PHASE_QUAL_FLAGS` | 1 | M | set by `PHASE_QUALITY_UPDATE` when a quality accumulator saturates; copied into `PULSE_ALIGN_FLAGS` each epoch |
 | 6FBE | `PULSE_ALIGN_FLAGS` | 1 | M | refreshed from `PHASE_QUAL_FLAGS` every epoch by `EPOCH_PHASE_UPDATE`; consumed by `PULSE_ALIGN_ADJ` to correct `CUR_TOA` by whole pulse-intervals |
 | 6FBF | `PHASE_CODE` | 2 | H | last shift-register words after XOR (`PHASE_CODE_HI` = 6FC0) |
-| 6FC1 | `DISP_MODE` | 1 | M | 1 -> `X_0F31`, 2 -> `X_0F08` in the track loop |
+| 6FC1 | `DISP_MODE` | 1 | M | 1 -> `MASTER_SEC_PULSE_HANDOFF`, 2 -> `ACTIVATE_SELECTED_SLOT` in the track loop; despite the name, neither task touches the display (see firmware.md's correction) |
 | 6FC4 | `BUTTONS` | 1 | H | push-button bits from sensor rows 6/7 (bits 7, 6) |
 | 6FC5 | `SEL_A` | 1 | H | selector A wheel + 1 |
 | 6FC6 | `SEL_B` | 1 | H | selector B wheel + 1 (0CH = blank = set-up mode) |
@@ -57,7 +57,7 @@ M = consistent reading, L = placeholder name).
 | 6FCC | `GRI_SW` | 2 | H | GRI from wheels, packed BCD (low byte first) |
 | 6FCE | `RESTART_REQ` | 1 | L | set to 2 on a button press outside set-up |
 | 6FCF | `BCD_DELTA` | 4 | H | 4-byte BCD operand for `ADJ_PULSES` (`BCD_DELTA_3` = 6FD2 written by `BIN_TO_DELTA`) |
-| 6FD1 | `BCD_DELTA_2` | - | M | also passed to `X_0EC1` and copied to `CUR_TOA` |
+| 6FD1 | `BCD_DELTA_2` | - | M | also passed to `TOA_ADD_CONST` and copied to `CUR_TOA` |
 | 6FD5 | `TOA_SAVE` | 4 | M | TOA saved when tracking is lost |
 | 6FD9 | `VAR_6FD9` | 1 | L | 1BH at INIT |
 | 6FDA | `MISS_CNT` | 1 | H | consecutive misses while tracking |
@@ -121,7 +121,8 @@ M = consistent reading, L = placeholder name).
 | 70E8 | `PLOT_BASE` | 2 | H | B,C values for the current plot line |
 | 70FC | (stack) | 4 | H | top of stack, 7100 = initial SP |
 
-Addresses not listed are either untouched by any code, or touched only by
-routines that are present in the fully-recovered ROM but not yet individually
-analyzed - see [jump-graph.md](jump-graph.md)'s variable worklist for the
-full list of those (`M_xxxx` names).
+Addresses not listed here are either untouched by any code, or have a real
+name in `disasm/nt3321-22.json` that just hasn't been promoted into this
+summary table yet - every referenced RAM/IO address in the ROM has a name
+(0 generic `M_xxxx` remaining). See [jump-graph.md](jump-graph.md) for the
+complete, current list of all 175.

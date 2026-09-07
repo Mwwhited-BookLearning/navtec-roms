@@ -117,6 +117,15 @@ the full story. All these wrong guesses were architecturally reasonable
 calls-from-INIT/calls-from-tick/calls-from-loop, just not what the actual
 decoded bytes turned out to do.
 
+**Every address below now has a real name** - the table itself is left
+as-written (an `X_xxxx` name per row) because it's a historical record of
+what was guessed *before* seeing the actual bytes, not a current reference.
+Don't treat any row's `X_xxxx` name as current, including the ones not
+individually called out above. For the current name of any address here, see
+`docs/jump-graph.md`'s tables (every `CALL`ed target and every variable in
+the ROM is listed there, 0 generic remaining) or search
+`disasm/nt3321-22.json` for the address.
+
 | Address | Name | Called from | Inferred purpose |
 |---|---|---|---|
 | 0800 | (tail of `BIN_TO_BCD`) | 07FF | RLC RLC RLC ADD H RET |

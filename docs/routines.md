@@ -1,8 +1,19 @@
-# Routine catalog (dumped halves)
+# Routine catalog (partial - see note)
 
-Addresses are absolute. "Missing" means the body is in the undumped ROM halves,
-see [rom-status.md](rom-status.md). Register conventions follow the code:
-BC is usually a destination pointer, HL a source pointer, A the value.
+**This catalog predates the full ROM recovery** and only covers the routines
+that were known when it was written (mostly the low-ROM/dumped-half
+routines from before both EPROM halves were read - see
+[rom-status.md](rom-status.md)). It was never extended after that. For a
+complete, current catalog of every `CALL`ed routine in the ROM (137 of them,
+all named) plus every referenced variable (175, all named), see
+[jump-graph.md](jump-graph.md) instead - that table is regenerated from the
+disassembler's own output and won't drift out of sync the way this
+hand-written one has. This file is kept for the routines it documents in
+more descriptive prose than the jump-graph table does, not as the
+authoritative list.
+
+Addresses are absolute. Register conventions follow the code: BC is usually
+a destination pointer, HL a source pointer, A the value.
 
 ## Low ROM: vectors and I/O primitives
 
@@ -72,13 +83,13 @@ BC is usually a destination pointer, HL a source pointer, A the value.
 | 07BD | `COPY_E` | HL, BC, E | | E bytes |
 | 07C6 | `MUL8` | C, D | BC | C * D |
 | 07D9 | `BCD_TO_BIN` | A | A | packed BCD -> binary |
-| 07EF | `BIN_TO_BCD` | A | A | binary -> packed BCD (tail missing) |
+| 07EF | `BIN_TO_BCD` | A | A | binary -> packed BCD (continues at 0800: `RLC RLC RLC / ADD H / RET`) |
 
 ## ROM 2 (1000-17FF)
 
 | Addr | Name | Notes |
 |---|---|---|
-| 1000 | `SLOTTBL_CHK` | tail of a missing routine |
+| 1000 | `SLOTTBL_CHK` | tail of a routine spanning the ROM 1/ROM 2 boundary (entered from 0FFxH) |
 | 1028 | `SLOTREC_PHASE` | update per-slot record from `PHASE_CODE_HI` |
 | 105C | `SLOTREC_UPDATE` | per-slot BCD bookkeeping |
 | 10DB | `CALL_TICK_HOOK` | PCHL through `TICK_HOOK` |

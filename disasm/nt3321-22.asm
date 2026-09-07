@@ -238,7 +238,7 @@ CPY4_TO_TOA:
         JMP COPY4
 
 ; Not code: first byte (30H, ASCII '0') is read by LDA at 1A33 and copied into
-; M_7034, paired with D_1A4D's matching 30H -> M_7036 (see 1A4D). The other two
+; DISP_ROW_A, paired with D_1A4D's matching 30H -> DISP_ROW_A_2 (see 1A4D). The other two
 ; bytes, 18H and 3AH, have no references anywhere and are genuine orphans.
 ORPHAN_0031:
         DB   30H,18H,3AH
@@ -1652,7 +1652,7 @@ L_08EB:
 ; if they match, or if DISP_MODE's companion byte (DISP_MODE+1, read via LHLD) is
 ; nonzero, returns immediately via ACCUM_SLOT_TOA. Otherwise increments that companion
 ; byte, and once it wraps to 0FFH, clears SLOT_FLAGS[SLOT_IDX] entirely and calls
-; SUB_1E23 to resync SLOT_IDX to the tagged slot. Reads as a staleness watchdog: if
+; SWAP_SLOT_IDX to resync SLOT_IDX to the tagged slot. Reads as a staleness watchdog: if
 ; 256 consecutive epochs see a different slot than the one CUR_TOA_1 is tagged for,
 ; give up on the untagged slot and deactivate it. Confidence: medium - the DISP_MODE+1
 ; companion byte's own name/purpose isn't otherwise established.
@@ -2262,7 +2262,7 @@ L_0C96:
         CALL TOA_ADD_3000
         MVI C,02H
 
-; SET_QUAL_FLAGS (was SUB_0CA4). Clears M_6FB2, ORs C's bits into PHASE_QUAL_FLAGS,
+; SET_QUAL_FLAGS (was SUB_0CA4). Clears MATCH_SCORE_HI, ORs C's bits into PHASE_QUAL_FLAGS,
 ; returns B in A. A small "apply a (status, flag-bits) pair" utility called from the
 ; CUR_FLAGS/PHASE_CODE decision tree at L_0C37-0C96 (not independently named - it's not
 ; a call target, just inline flow reached by a jump - but see its shape: it tests CUR_FLAGS
@@ -2289,7 +2289,7 @@ L_0CB1:
         JMP L_0EC7
 
 ; MASTER_CORR_ADJ (was SUB_0CBE). Only acts when SLOT_IDX==0 (master): adds
-; TOA_ADJ_2000 or subtracts TOA_ADJ_6000 to/from MASTER_TOA_CORR (M_70C3) depending on a
+; TOA_ADJ_2000 or subtracts TOA_ADJ_6000 to/from MASTER_TOA_CORR (70C3) depending on a
 ; carry flag passed in from the caller. MASTER_CORR_ADD_3000 (0CE8) is the same shape,
 ; always adding TOA_ADJ_3000, no carry test. Both correct MASTER_TOA_CORR rather than
 ; CUR_TOA directly - MASTER_TOA_CORR is the term ACCUM_SLOT_TOA (091B) adds into the
@@ -2554,7 +2554,7 @@ L_0E0B:
         JMP L_0DF3
 
 ; PREP_NEXT_SLOT_FRONTEND (was X_0E1A): a one-instruction trampoline, just
-; CALL FIND_NEXT_TRACK_SLOT (its RET returns straight to X_0E1A's own caller).
+; CALL FIND_NEXT_TRACK_SLOT (its RET returns straight to this routine's own caller).
 PREP_NEXT_SLOT_FRONTEND:
         CALL FIND_NEXT_TRACK_SLOT
 
@@ -2759,7 +2759,7 @@ APPLY_NEW_DATA:
 
 ; ACTIVATE_SELECTED_SLOT (was X_0F08, called once per epoch from TRACK_LOOP). Only
 ; proceeds if TRACK_STATE==01H (window search), ACQ_COUNT<4, and SLOT_RESULT!=0
-; (X_1E05's output). If the slot named by SLOT_RESULT is not already active (flags bit
+; (DEQUEUE_SLOT_SEL's output). If the slot named by SLOT_RESULT is not already active (flags bit
 ; 7 clear), falls into SET_SLOT_ACTIVE(A=SLOT_RESULT). Brings an operator-selected slot
 ; into tracking once conditions allow.
 ACTIVATE_SELECTED_SLOT:
@@ -2783,7 +2783,7 @@ ACTIVATE_SELECTED_SLOT:
 ; SET_SLOT_ACTIVE (was X_0F23). A = slot number. Sets SLOT_IDX_B=A, that slot's flags
 ; to 80H (active, not acquiring), and TRACK_STATE to 20H - a state value not previously
 ; catalogued in ram-map.md's TRACK_STATE list (01/40H/80H/06/07). Called directly (A
-; already set by the caller, e.g. right after X_1E05 at 0212, matching the old "after
+; already set by the caller, e.g. right after DEQUEUE_SLOT_SEL at 0212, matching the old "after
 ; master lock, start secondary search" guess) or via ACTIVATE_SELECTED_SLOT's gate.
 SET_SLOT_ACTIVE:
         STA SLOT_IDX_B
@@ -2803,13 +2803,13 @@ SET_SLOT_ACTIVE:
 ;     RESET_REC_TAIL(REC_MASTER) (marks it active, clears its tail), then falls through
 ;     with (B,A) = (FIRST_SLOT, 0).
 ;   State 1: if the master's OWN flags (SLOT_FLAGS[0]) have bit 4 set, sets RAM1_BASE=2 and
-;     falls through with (B,A) = (0, FIRST_SLOT); otherwise defers to X_0FBE's slot search
+;     falls through with (B,A) = (0, FIRST_SLOT); otherwise defers to FIND_ELIGIBLE_SLOT's slot search
 ;     instead (RAM1_BASE stays 1).
 ;   State 2 (L_0F9E): tests REC_MASTER_18 (a 16-bit field in REC_MASTER's otherwise-unnamed
 ;     +16..+21 gap, between CUR_PULSE_PTR and CUR_MODE) against a threshold of 100 via
 ;     DAD-with-(-100). If the master's own flags bit 3 is clear, defers to the shared
-;     CHK_H_NEG/X_0FBE slot-search tail regardless of the threshold result. If bit 3 is set:
-;     below 100 also defers to X_0FBE (via L_0FBC); at or above 100, tests FIRST_SLOT's flags
+;     CHK_H_NEG/FIND_ELIGIBLE_SLOT slot-search tail regardless of the threshold result. If bit 3 is set:
+;     below 100 also defers to FIND_ELIGIBLE_SLOT (via L_0FBC); at or above 100, tests FIRST_SLOT's flags
 ;     bit 6 and, if set, loops back into the state-0/1 shared tail at L_0F54 (re-running the
 ;     handoff), otherwise just returns. Reads as "once REC_MASTER_18 reaches 100, keep
 ;     re-running the handoff while FIRST_SLOT stays in its bit-6 condition" - REC_MASTER_18's
@@ -2820,7 +2820,7 @@ SET_SLOT_ACTIVE:
 ;     source - state 0's path copies REC_MASTER_9 -> REC_SEC_9 (master's accumulated pulse
 ;     positions seed the first secondary's slot), state 1's path copies it back
 ;     REC_SEC_9 -> REC_MASTER_9. A two-stage pulse-position handoff between the master and
-;     the first tracked secondary, gated on specific flag-bit milestones, with X_0F6A
+;     the first tracked secondary, gated on specific flag-bit milestones, with PULSE_HANDOFF_ENTRY2
 ;     (reached separately from the ROM1/ROM2 boundary tail at 1024) as an alternate entry
 ;     into the same state-1-style handoff with B=0 forced.
 MASTER_SEC_PULSE_HANDOFF:
@@ -2854,7 +2854,7 @@ L_0F5C:
         ANI 10H
         JZ L_0FBC
         MVI M,02H
-X_0F6A:
+PULSE_HANDOFF_ENTRY2:
         MVI B,00H
         LDA FIRST_SLOT
 L_0F6F:
@@ -2905,7 +2905,7 @@ L_0F9E:
         RET
 L_0FBC:
         MVI A,01H
-X_0FBE:
+FIND_ELIGIBLE_SLOT:
         PUSH PSW
         CALL GET_FLAGS_A
         MOV B,A
@@ -2931,8 +2931,8 @@ X_0FBE:
         JNZ SLOT_INC_CHK
 
 ; RESET_REC_TAIL (was X_0FE9). HL = a 25-byte station record pointer (REC_MASTER from
-; SLOT_STATE_DISPATCH's state-0 path, or whatever SLOTTBL_CHK popped off the stack via its
-; SLOTTBL_ZERO fallthrough at 1010). ORs 82H into the record's status byte (marks it
+; MASTER_SEC_PULSE_HANDOFF's state-0 path, or whatever SLOTTBL_CHK popped off the stack via
+; its SLOTTBL_ZERO fallthrough at 1010). ORs 82H into the record's status byte (marks it
 ; active, sets bit 1), then zeroes the last two bytes of the 25-byte record (offsets +23,
 ; +24, reached via LXI D,0018H;DAD H then two MVI M,00H/DCX H) - a record
 ; reset/reinitialize step, run when a slot is (re)activated.
@@ -2958,7 +2958,7 @@ L_0FF7:
         ADD C
 
 ; SLOTTBL_CHK: tail of a routine spanning the ROM 1/ROM 2 boundary (entered from 0FFxH):
-; test SLOT_TBL[A]; clean up stack and continue at X_0FE9 or SLOT_INC_CHK.
+; test SLOT_TBL[A]; clean up stack and continue at RESET_REC_TAIL or SLOT_INC_CHK.
 SLOTTBL_CHK:
         MOV C,A
         MVI B,00H
@@ -2982,12 +2982,12 @@ SLOT_INC_CHK:
         INR A
         LXI H,SLOT_COUNT
         CMP M
-        JNZ X_0FBE
+        JNZ FIND_ELIGIBLE_SLOT
         RET
 CHK_H_NEG:
         MOV A,H
         RLC
-        JC X_0F6A
+        JC PULSE_HANDOFF_ENTRY2
         RET
 
 ; SLOTREC_PHASE: update the 9-byte per-slot record from PHASE_CODE_HI.
@@ -3652,9 +3652,9 @@ SW_TO_DIGIT:
         CMC
         RET
 
-; TICK_TASK: run once per RST 7.5 tick. TICK_BCD += 2 (BCD); every 20 ticks call X_19E7.
-; If RST 5.5 (8279 IRQ) is pending: send End-Interrupt (0E0H) and set KEY_CHANGED;
-; on a later tick with KEY_CHANGED set, rescan the switches.
+; TICK_TASK: run once per RST 7.5 tick. TICK_BCD += 2 (BCD); every 20 ticks call
+; DISP_TEST_TICK. If RST 5.5 (8279 IRQ) is pending: send End-Interrupt (0E0H) and set
+; KEY_CHANGED; on a later tick with KEY_CHANGED set, rescan the switches.
 TICK_TASK:
         LDA TICK_BCD
         INR A
@@ -4304,12 +4304,12 @@ PRT_DIGIT_LO:
         JMP PRTBUF_PUT
 
 ; ERR_DASH_TBL: 6-byte dash pattern (0AAH,0ABH,0BBH x2) copied by SW_ERR_SHOW's
-; loop into M_7034..M_7039 (both display rows); read only via the BC pointer loaded
-; at 19BE, never as code. Confirmed purpose: SW_ERR_SEL_A..SW_ERR_GRI4 (1990-19A9)
+; loop into DISP_ROW_A..DISP_ROW_B_2 (both display rows); read only via the BC pointer
+; loaded at 19BE, never as code. Confirmed purpose: SW_ERR_SEL_A..SW_ERR_GRI4 (1990-19A9)
 ; are the six switch-validation error stubs named in front-panel.md - each does
 ; MVI B,<field 1..6> / JMP SW_ERR_SHOW, which fills both display rows with this dash
-; pattern, then BCD-formats B into M_7038 and M_7035 (both rows' middle digit) so the
-; field number shows through the dashes, e.g. "--N--" over "--N--".
+; pattern, then BCD-formats B into DISP_ROW_B_1 and DISP_ROW_A_1 (both rows' middle digit)
+; so the field number shows through the dashes, e.g. "--N--" over "--N--".
 ERR_DASH_TBL:
         DB   0AAH,0ABH,0BBH,0AAH,0ABH,0BBH
 SW_ERR_SEL_A:
@@ -4335,15 +4335,16 @@ SW_ERR_GRI4:
 ; continuing the SW_ERR_SEL_A..SW_ERR_GRI4 pattern, but with no callers - READ_SWITCHES
 ; only validates 6 fields (SEL_A, SEL_B, GRI digits 1-4), so error codes 7 and 8 are
 ; never raised.
-X_19AE:
+SW_ERR_UNUSED_7:
         DB   06H,07H,0C3H,0B8H,19H
-X_19B3:
+SW_ERR_UNUSED_8:
         DB   06H,08H,0C3H,0B8H,19H
 
 ; SW_ERR_SHOW: B = error field number (1..6, see ERR_DASH_TBL). Copies the 6-byte
-; ERR_DASH_TBL into M_7034..M_7039 (both display rows), then BCD-formats B into
-; M_7038 and M_7035 (middle digit of each row) and loads a 3-byte pointer/base into
-; DISP_ROW_A_FLAG/DISP_ROW_B_FLAG ("'3'") before falling into the shared display-commit path at 1CEA.
+; ERR_DASH_TBL into DISP_ROW_A..DISP_ROW_B_2 (both display rows), then BCD-formats B into
+; DISP_ROW_B_1 and DISP_ROW_A_1 (middle digit of each row) and loads a 3-byte pointer/base
+; into DISP_ROW_A_FLAG/DISP_ROW_B_FLAG ("'3'") before falling into the shared display-commit
+; path at 1CEA.
 SW_ERR_SHOW:
         PUSH B
         MVI E,06H
@@ -4425,10 +4426,10 @@ L_1A23:
         LXI B,D_1A4E
         JMP L_1CEA
 
-; D_1A4D: single byte 30H (ASCII '0'), read at 1A3E and copied into M_7036
-; (companion to ORPHAN_0031's byte -> M_7034; see 0031).
+; D_1A4D: single byte 30H (ASCII '0'), read at 1A3E and copied into DISP_ROW_A_2
+; (companion to ORPHAN_0031's byte -> DISP_ROW_A; see 0031).
 ; D_1A4E: 3-byte table {11H,0FFH,78H}; its address is loaded into BC at 1A47
-; and consumed by SUB_1CF3 (via L_1CEA), which copies it into M_7037..M_7039.
+; and consumed by COMMIT_DISP_ROWS (via L_1CEA), which copies it into DISP_ROW_B..DISP_ROW_B_2.
 D_1A4D:
         DB   30H
 D_1A4E:
@@ -4968,7 +4969,7 @@ DEQUEUE_SLOT_SEL:
 
 ; OLD_SUB_1E23: dead code from an in-place patch. LDA SLOT_IDX; MOV D,A; then a
 ; direct JMP to 1E2B, skipping the MOV A,C / STA SLOT_IDX step that the live
-; SUB_1E23 (1E23) inserts before falling into the same 1E2B tail.
+; SWAP_SLOT_IDX (1E23) inserts before falling into the same 1E2B tail.
 OLD_SUB_1E23:
         DB   3AH,11H,6FH,57H,0C3H,2BH,1EH
 
@@ -5044,9 +5045,9 @@ L_1E5E:
         RET
 
 ; ORPHAN_1E6D: dead code, unreached from anywhere. Decodes as CNZ 19AE (calls the
-; dead X_19AE stub above) followed by JMP 1E6D, an infinite self-loop. Neither this
-; nor 19AE has any live caller, so the pair forms a self-contained dead-code island
-; sitting between SUB_1E55 (ends 1E6C RET) and the live L_1E73.
+; dead SW_ERR_UNUSED_7 stub above) followed by JMP 1E6D, an infinite self-loop. Neither this
+; nor SW_ERR_UNUSED_7 has any live caller, so the pair forms a self-contained dead-code island
+; sitting between ROM_SELFTEST_BODY (ends 1E6C RET) and the live L_1E73.
 ORPHAN_1E6D:
         DB   0C4H,0AEH,19H,0C3H,6DH,1EH
 L_1E73:
@@ -5151,7 +5152,7 @@ L_1EBD:
 
 ; LOAD3_BC (was SUB_1ECF). Loads 3 bytes from (BC), advancing BC each time, into H, L,
 ; E respectively. A small loader feeding the SHR4_ROUND/SHL4_EHL arithmetic at 1F35-1F75
-; with 3-byte operands from GRI_VAL, M_70D6 and a caller-supplied pointer.
+; with 3-byte operands from GRI_VAL, M70D6_OPERAND and a caller-supplied pointer.
 LOAD3_BC:
         LDAX B
         MOV H,A
@@ -5303,7 +5304,7 @@ L_1F6A:
 ; Manually decoded (not part of live flow, so kept as DB):
 ;   1F80-1F9B: old GET_FLAGS_A/COPY_E/FILL_ZERO-based routine, ends with JMP FILL_ZERO.
 ;   1F9E-1FBB: old copy of the SLOTTBL_ZERO/SLOT_INC_CHK-style flag check, ends RET.
-;   1FBC-1FF5: old copy of X_0FBE's slot-flag logic (same GET_FLAGS_A/CMP/JNZ shape,
+;   1FBC-1FF5: old copy of FIND_ELIGIBLE_SLOT's slot-flag logic (same GET_FLAGS_A/CMP/JNZ shape,
 ;     with an extra leading MVI A,01H and a different post-branch tail), ends RET.
 ;   1FF6-1FFF: an x10-multiply fragment (PUSH PSW/H/B; RLC;MOV C,A;RLC;RLC;ADD C) with the
 ;     same instruction shape as MUL10_INDEX's body, but this copy is dead (no xrefs at all).

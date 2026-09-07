@@ -162,7 +162,18 @@ momentary push buttons on bits 7 and 6. The 8279 IRQ output drives **RST 5.5**
 
 Display RAM is written as 7 bytes. Each byte carries two 4-bit digit codes (the
 8279 OUTA/OUTB nibbles), so the display is two rows of 6 digits plus one extra
-byte, most likely through BCD-to-seven-segment decoders.
+byte, most likely through BCD-to-seven-segment decoders (7-segment LED is the
+standard, cheap choice for a numeric instrument readout from this era - the
+board's date code, 7943, is week 43 of 1979, and BCD-to-7-segment decoder/
+drivers like the 7447/7448/4511 were the default part for exactly this job at
+the time; VFD and LCD numeric displays existed but were less common and would
+usually show up as a different decoder family, and nothing in the code hints
+at either). Treated as the working conclusion for open question 4 below -
+not board-confirmed, and can't be: the display/keypad panel itself (as
+opposed to the processor board, which was photographed - see "Physical board
+observations") is a separate physical unit this project doesn't have access
+to, so there is no meter check or chip-silkscreen photo available to settle
+it beyond this code- and era-based inference.
 
 **Correction:** this section previously claimed codes 0EH/0FH were passed to
 "display routines" `X_0DB3`/`X_0D79` and would give "blank"-like patterns on
@@ -186,18 +197,26 @@ source of the periodic **RST 7.5** tick **(guess)**.
 
 **Correction:** this table previously said ports A and B of this chip were
 "never touched by the dumped halves" - that was true only before the second
-EPROM was recovered. They are written, from `X_0DE6` (0800-0FFF, called from
-`SEARCH_LOOP`/`SETTLE_LOOP`/`TRACK_LOOP`): bytes 1-3 of the current record's
-4-byte BCD value (`CUR_REC`+1..+3) are copied out to `PIO1_PB` (E002),
-`PIO1_PA` (E001) and `PIO2_PA` (F001) in sequence, immediately after
-`PIO2_PB`'s low bits are updated from `CUR_REC`'s status byte. Not yet
-understood *why* - candidates are an analog/parallel output for an external
-recorder (there's a silkscreened `SAMPLER` section and a `TRF` connector on
-the board, see the photo-derived notes below) or some other board beyond this
-one reading the current TD value in binary rather than over the serial link.
-This also means `PIO2_PB` bits 0, 1, 3 (previously "static, meaning unknown")
-are not static - they carry `CUR_REC`'s status-byte bits 0, 1, 3. Needs a full
-trace of `X_0DE3`/`X_0DE6` (see `docs/jump-graph.md`'s worklist).
+EPROM was recovered. They are written, from `REC_TO_FRONTEND` (was `X_0DE6`;
+`CUR_REC_TO_FRONTEND`, was `X_0DE3`, is a thin wrapper into it; 0800-0FFF,
+called from `SEARCH_LOOP`/`SETTLE_LOOP`/`TRACK_LOOP`): bytes 1-3 of the
+current record's 4-byte BCD value (`CUR_REC`+1..+3) are copied out to
+`PIO1_PB` (E002), `PIO1_PA` (E001) and `PIO2_PA` (F001) in sequence,
+immediately after `PIO2_PB`'s low bits are updated from `CUR_REC`'s status
+byte. `REC_TO_FRONTEND` is now fully decoded (see its
+`disasm/nt3321-22.json` comment and `docs/jump-graph.md`'s call-flow
+diagrams) - it's called at every station-selection transition, and again
+once per epoch via `FIND_NEXT_TRACK_SLOT`/`LATCH_REC_TO_PIO2PB`, which stage
+the *next* slot's record ahead of time and commit it precisely at the RST
+6.5 window-end capture. That two-stage timing is strong evidence this is a
+deliberate feed-forward output - candidates for *why* are an analog/parallel
+output for an external recorder (there's a silkscreened `SAMPLER` section and
+a `TRF` connector on the board, see the photo-derived notes below) or some
+other board beyond this one reading the current TD value in binary rather
+than over the serial link - still not confirmed, but no longer just a
+one-off write with no traced caller. This also means `PIO2_PB` bits 0, 1, 3
+(previously "static, meaning unknown") are not static - they carry
+`CUR_REC`'s status-byte bits 0, 1, 3.
 
 ### 8155 #2 (I/O at F000)
 
@@ -215,7 +234,7 @@ Port B bit usage:
 | 2 | 1 | pulsed (`PULSE_PB2`) at INIT, around the window-end capture in the ISR, and in tracking. Likely a counter latch/reset strobe. |
 | 4 | 0 | pulsed 8 times per `SHIFT_IN16`: shift clock for the receiver's serial data |
 | 5 | 0 | pulsed after every RST 6.5 sample: sample acknowledge |
-| 0, 1, 3 | - | **not static** (correction, see 8155 #1 section above): set by `X_0DE6` from `CUR_REC`'s status-byte bits 0, 1, 3 during search/settle/track |
+| 0, 1, 3 | - | **not static** (correction, see 8155 #1 section above): set by `REC_TO_FRONTEND` from `CUR_REC`'s status-byte bits 0, 1, 3 during search/settle/track |
 | 6, 7 | 0, 1 | static, meaning unknown |
 
 Port C bit usage (as read in `SHIFT_IN16` and the ISR):
@@ -259,12 +278,29 @@ arithmetic in packed BCD.
 
 ## Open questions for the hardware owner
 
-1. Crystal frequency (5.000 MHz vs 4.9152 MHz vs 6.144 MHz).
-2. What drives RST 7.5 (8155 #1 timer out is the guess).
-3. What the 8279 CLK is fed from (prescaler 6 implies about 600 kHz).
-4. Whether the display uses BCD-to-7-segment decoders on OUTA/OUTB.
+1. ~~Crystal frequency~~ - **effectively resolved.** The user confirms only one
+   crystal/oscillator can is visible on the board: the 10.000 MHz TCXO
+   documented below. The 8085 divides its XTAL input by 2 internally to form
+   CLK, so a 10 MHz can feeding X1/X2 directly gives exactly **5.000 MHz**,
+   which independently matches the baud-rate divisor table's "better overall
+   fit" already derived from the code. Not yet meter-confirmed that the can
+   connects straight to U40's X1/X2 pins rather than through a divider - see
+   the physical-verification checklist below - but no evidence points to a
+   second, different-frequency source anymore.
+2. What drives RST 7.5 (8155 timer out is the guess; U22 or U35, see below).
+3. What the 8279 (U36) CLK is fed from (prescaler 6 implies about 600 kHz).
+4. Whether the display uses BCD-to-7-segment decoders on OUTA/OUTB - treated
+   as the working conclusion (see the Display section above) but not
+   physically confirmable: the display/keypad panel is a separate unit this
+   project doesn't have access to.
 5. ~~The EPROM type~~ - resolved, see [rom-status.md](rom-status.md): Intel 8332
    masked ROMs.
+6. ~~The address decoder~~ - **resolved.** The user confirms U45 is an 8205
+   (1-of-8 decoder) - exactly the "single 3-to-8 decoder on A14..A12" the
+   address-decoding table above already inferred from software behavior
+   alone. Which decoder output feeds which chip select is still worth a
+   continuity check (see the checklist below) but the decoder's existence
+   and type are now hardware-confirmed, not just inferred.
 
 ## Physical board observations (photographed, not yet fully cross-traced)
 
@@ -287,18 +323,42 @@ earlier photo read of a *different* chip on this board was misidentified as
 just a misread of similar-looking silkscreen; the 8279 command-byte evidence
 in this document is the reliable identification.)
 
-**Possible answer to open question 1 (crystal frequency).** There's a
-precision oscillator can on the board: `MICROSONICS, WEYMOUTH MASS., MODEL
-TX8A/099, FREQ 10.000 MHz, SET AT 25°C`, silkscreened `PROCESSOR BOARD OSC/TP`
-right next to it. This is a TCXO (temperature-compensated), which fits a
-Loran-C timing reference better than an ordinary CPU clock crystal would. It
-does not directly match any of the three candidate CPU-clock frequencies
-above, so it's more likely either (a) feeding a divider chain (there are
-several 74-series counter/divider ICs across the top of the board) down to
-the actual 8085 clock and/or the receiver sample clock, or (b) a separate,
-independent reference for the receiver front end's timing, distinct from
-whatever clocks the CPU. Worth tracing before assuming it answers question 1
-directly.
+**Answer to open question 1 (crystal frequency) - see resolution above.**
+There's a precision oscillator can on the board: `MICROSONICS, WEYMOUTH
+MASS., MODEL TX8A/099, FREQ 10.000 MHz, SET AT 25°C`, silkscreened `PROCESSOR
+BOARD OSC/TP` right next to it - a TCXO (temperature-compensated), which fits
+a Loran-C timing reference better than an ordinary CPU clock crystal would.
+The user confirms it's the *only* crystal/oscillator visible on the board, so
+it's the sole clock source rather than one of several: either it feeds the
+8085 (U40) directly - the 8085's internal /2 turns 10 MHz into exactly
+5.000 MHz CLK, matching the baud-rate table's preferred fit - or it feeds a
+divider chain (there are several 74-series counter/divider ICs across the top
+of the board) that produces 5 MHz for the CPU alongside other derived rates
+for the receiver sample clock and/or the 8279's CLK (open question 3). Which
+of those two it is is exactly item 1 on the physical-verification checklist
+below.
+
+**Chip designators**, from the user's read of the board silkscreen (not yet
+cross-checked against the schematic beyond matching the chip-inventory table
+above):
+
+| Designator | Part | Matches |
+|---|---|---|
+| U22 | 8155 | one of the two RAM/IO chips (E000 or F000 - which is which isn't determined by designator alone, see checklist) |
+| U35 | 8155 | the other one |
+| U32 | 8251A | USART (C000) |
+| U36 | 8279 | keyboard/display controller (D000), matches the `D8279-5` silkscreen read above |
+| U40 | 8085 | CPU |
+| U45 | 8205 | 1-of-8 decoder - confirms open question 6 above |
+| U39 | 8212 | 8-bit I/O latch |
+
+**U39 conflict, unresolved:** the "other chips" note below (from an earlier
+photo pass) placed the unpopulated `OPTION` ROM sockets "near U29 and U39,"
+but U39 is now identified as the 8212 chip itself, not a socket next to it.
+Either the earlier "near U39" read was an approximation (the sockets are near
+the 8212 but not literally at that reference designator) or one of the two
+U39 reads is wrong - worth a second look at the board rather than assuming
+either is right.
 
 **New hardware not visible from the code alone: RS-422/485 differential line
 receiver.** An `AM26LS32DC` (quad differential line receiver) sits near a
@@ -320,10 +380,62 @@ already inferred from the code), `IO/TLS` (connector `P5`), `TRF` (connector
 `P7`, near the oscillator - "time reference frequency" would fit).
 
 **Other chips present, not yet connected to the code analysis:** an `8212`
-(8-bit I/O latch, board reference marked by hand with a paper label rather
-than legible silkscreen) and two unpopulated 24-pin sockets silkscreened
-`OPTION` (references near U29 and U39, on either side of the main ROM
-sockets) plus an 8-pin header `J8 OPTION`. These are plausible physical
+(8-bit I/O latch, now identified as U39 - see the designator table above) and
+two unpopulated 24-pin sockets silkscreened `OPTION` (references near U29 and
+U39, on either side of the main ROM sockets - see the U39 conflict note
+above) plus an 8-pin header `J8 OPTION`. These are plausible physical
 implementations of the `EXTROM_SIG`/expansion-ROM hook already identified in
 the code (see the chip inventory table above), but which physical socket
 corresponds to `2000-2FFF` in the memory map hasn't been confirmed.
+
+## Physical-verification checklist
+
+Concrete things worth checking on the board (not the display/keypad panel,
+which this project doesn't have - see open question 4). Roughly in priority
+order; each ties back to an open question above.
+
+1. **Crystal path (question 1).** With power off, trace continuity from the
+   10 MHz TCXO can's output pin to U40 (8085) pins 1/2 (X1/X2). If it lands
+   there directly, CLK is 5.000 MHz via the 8085's internal /2 and question 1
+   is fully closed. If it instead goes into one of the 74-series
+   counter/divider ICs first, trace that chip's output to X1/X2 instead and
+   note the division ratio - the baud-rate table in this doc predicts 5 MHz
+   at the CPU either way, so a divider would mean the TCXO runs faster than
+   10 MHz effectively multiplied down, or the divider serves the *receiver*
+   sample clock instead and the direct connection to U40 is still the answer.
+2. **RST 7.5 source (question 2).** Trace U22 and U35 (the two 8155s) TOUT
+   (timer output) pins - does either connect to U40's RST 7.5 input (pin 7)?
+   The code sets one 8155's timer to a continuous square wave at INIT
+   (`0CFH` command, count `07D0H` = 2000, mode 01) with its ports otherwise
+   untouched by software, which is the profile expected for "this one drives
+   an interrupt no software ever programs the edge/level of," rather than a
+   general I/O chip - if either 8155's TOUT reaches RST 7.5, this is
+   effectively confirmed; if neither does, it's back to genuinely open.
+3. **Which 8155 is which (needed for #2 and general confidence).** Trace U22
+   and U35's IO/M and chip-select pins back to U45 (the 8205 decoder) to
+   determine which one answers at `E000` (8155 #1, RAM `6F00`) vs `F000`
+   (8155 #2, RAM `7000`) per the address-decoding table above.
+4. **8205 (U45) output mapping (question 6, to fully close it).** Trace each
+   of U45's 8 outputs to confirm the predicted mapping: ROM1 (`0000`), ROM2
+   (`1000`), expansion ROM (`2000`), unused (`3000`), 8251A/U32 (`C000`),
+   8279/U36 (`D000`), 8155/U22 (`E000`), 8155/U35 (`F000`) - or whichever of
+   U22/U35 is which per #3.
+5. **8279 (U36) CLK pin (question 3).** Trace what feeds it - the TCXO
+   directly, a divider output, or something else. Prescaler 6 in the code
+   implies the firmware expects roughly 600 kHz there.
+6. **U39 designator conflict.** Confirm by eye whether the unpopulated
+   `OPTION` ROM sockets are genuinely adjacent to U39 (the 8212) or whether
+   the board's actual silkscreen designator for those sockets is something
+   else that was misread as "U39" in an earlier pass.
+7. **Which `OPTION` socket (if either) is wired to `2000-2FFF`.** Trace
+   address lines A12-A15 and the relevant 8205 output to whichever of the two
+   `OPTION` sockets would be the expansion ROM the code's `EXTROM_SIG` hook
+   expects.
+8. **8212 (U39) purpose.** Trace what it latches and where its output goes -
+   not connected to any code analysis yet; could be status lamps, the
+   `OPTION` ROM's data bus buffer, or something on the `J1`/`P4`/`P5`/`P7`
+   connectors.
+9. **J1 `READOUT` connector pinout.** Even without the display panel itself,
+   tracing which 8279 pins (OUTA/OUTB nibbles, scan lines) reach which `J1`
+   pins would help confirm the two-row BCD display theory (open question 4)
+   and give a head start whenever the panel is available.
