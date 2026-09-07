@@ -243,7 +243,7 @@ control flow inside an already-named routine, not independent things to name.
 | 199F | `SW_ERR_GRI2` | 1 | named |
 | 19A4 | `SW_ERR_GRI3` | 1 | named |
 | 19A9 | `SW_ERR_GRI4` | 1 | named |
-| 19E7 | `X_19E7` | 1 | needs analysis |
+| 19E7 | `DISP_TEST_TICK` | 1 | named |
 | 1C3F | `CHECK_SEL_RANGE` | 4 | named |
 | 1CF3 | `COMMIT_DISP_ROWS` | 1 | named |
 | 1D10 | `APPLY_DISP_BLINK` | 1 | named |
@@ -255,17 +255,22 @@ control flow inside an already-named routine, not independent things to name.
 | 1E4F | `ROM_SELFTEST_2` | 1 | named |
 | 1E52 | `ROM_SELFTEST_3` | 1 | named |
 | 1E55 | `ROM_SELFTEST_BODY` | 1 | named |
-| 1E9B | `SUB_1E9B` | 1 | needs analysis |
-| 1EAA | `SUB_1EAA` | 2 | needs analysis |
-| 1EBB | `SUB_1EBB` | 1 | needs analysis |
-| 1ECF | `SUB_1ECF` | 3 | needs analysis |
-| 1ED9 | `SUB_1ED9` | 1 | needs analysis |
-| 1EED | `SUB_1EED` | 1 | needs analysis |
-| 1F0E | `SUB_1F0E` | 1 | needs analysis |
-| 1F20 | `SUB_1F20` | 1 | needs analysis |
+| 1E9B | `TOGGLE_70C7_BIT` | 1 | named |
+| 1EAA | `SHR4_ROUND` | 2 | named |
+| 1EBB | `SHL4_EHL` | 1 | named |
+| 1ECF | `LOAD3_BC` | 3 | named |
+| 1ED9 | `BCD_COMPL_HL` | 1 | named |
+| 1EED | `BCD_COMPL_ADD_DEHL` | 1 | named |
+| 1F0E | `SWAP_HL_STASH` | 1 | named |
+| 1F20 | `SLOT0_COPY_M70D4` | 1 | named |
 | 2001 | `EXTROM_ENTRY` | 1 | named |
 
-**9 of 137 still need analysis** (down from 77 at the start of this session).
+**0 of 137 still need analysis** - every `CALL`ed address in the ROM now has
+a real name (down from 77 at the start of this session). A handful are
+explicitly flagged as low-confidence in their `disasm/nt3321-22.json`
+comment rather than fully proven (`SLOT_STATE_DISPATCH`, the `1E9B-1F20` BCD
+cluster) - see "What to tackle next" below for what's still genuinely open,
+now reframed as confidence-raising rather than first-pass naming.
 
 ## Variables (all 175 referenced RAM/IO addresses)
 
@@ -458,35 +463,46 @@ kind of artifact, freshly exposed by decoding `PHASE_AB_SELECT` as code - they
 are `LXI H` immediate operands for the phase-code-pair constants, not real
 memory locations at all.
 
-## What to tackle next, by cluster
+## What to tackle next
 
-Down to 9 targets total - the 0800-0FFF arithmetic cluster (36 targets at
-the start of this session) is entirely resolved, including a low-confidence
-`SLOT_STATE_DISPATCH` (was `X_0F31`) flagged as needing a fresh dedicated
-pass rather than more guessing - see its comment in
-`disasm/nt3321-22.json` for exactly what's confirmed vs. not. In priority
-order for what's left:
+Every `CALL`ed jump target now has a name - the remaining work is (a) raising
+confidence on the handful of low-confidence names below, and (b) the 39
+still-generic `M_xxxx` variables.
 
-1. **`X_19E7`** (called every 20 ticks from `TICK_TASK`, touches `M_70BB`) -
-   possibly a display-blink or column-rotation counter; unrelated to the
-   `SW_ERR_*` family despite the nearby address.
-2. **`SUB_1EAA`/`SUB_1EBB`/`SUB_1ECF`/`SUB_1ED9`/`SUB_1EED`/`SUB_1F0E`/`SUB_1F20`**
-   (1E9B-1F20) - all single-caller, small, clustered; likely one coherent
-   feature once traced together.
-3. **Remaining `FFxx`/`8020` single-LXI addresses** (variables list only) -
-   check whether they're BCD constants (operand of `LXI H,<addr>`
-   immediately followed by an arithmetic call) before spending real effort;
-   may not be "variables" at all.
+**Low-confidence names worth a dedicated re-check** (each already has an
+honest confidence note in its `disasm/nt3321-22.json` comment - don't trust
+the name alone, read the comment):
 
-Resolved this session (see git history for the full trail, one entry per
-commit): the entire 0800-0FFF arithmetic cluster, including two corrected
-wrong guesses (`ROM_SELFTEST` was "receiver init"; `INIT_REC_FROM_TOA`/
-`INIT_REC_AND_SEND` were "display fill/clear") and one real bug fix
-(`PHASE_AB_SELECT`/`MUL10_INDEX` were mislabeled dead code but are live);
-`QUEUE_SLOT_SEL`/`DEQUEUE_SLOT_SEL`/`SWAP_SLOT_IDX` (selector queueing); and
-`CHECK_SEL_RANGE`/`COMMIT_DISP_ROWS`/`APPLY_DISP_BLINK`/`BLINK_ROW_BLANK`
-(the SEL_A/SEL_B-driven display-column and blink pipeline,
-`SEL_COL_TBL`/`DISP_ROW_A_FLAG`/`DISP_ROW_B_FLAG` new equates).
+1. **`SLOT_STATE_DISPATCH`** (0F31) - the single hardest routine in the ROM.
+   Structure (a `RAM1_BASE`-keyed 0/1/2 dispatcher relocating a 5-byte block)
+   is confirmed; the *why* is not. Needs fresh eyes, not more guessing.
+2. **The `1E9B-1F20` extended-precision BCD cluster** (`TOGGLE_70C7_BIT`,
+   `SHR4_ROUND`, `SHL4_EHL`, `LOAD3_BC`, `BCD_COMPL_HL`,
+   `BCD_COMPL_ADD_DEHL`, `SWAP_HL_STASH`, `SLOT0_COPY_M70D4`) - named
+   mechanically (what each does, verified) rather than semantically (why).
+   The outer routine at 1F35-1F75 involves `GRI_VAL`, plausibly TD-to-plot-
+   column scaling for `PLOT_VALUES`, but that connection isn't confirmed.
+3. **`DISP_TEST_TICK`** (19E7) - the held-thumbwheel-triggered "88.88.88"
+   display self-test sequence is confirmed; the normal (non-test) path at
+   `L_1A23`, gated on `SW_D2`, isn't traced.
+
+**Variables** - see the table above for the full list of 39. Most of the
+`FFxx`/`8020`/`F9CA`/`AC9F` ones are `LXI`-immediate artifacts, not real
+memory (see the note above the table). The rest are scattered across areas
+already understood structurally (the arithmetic cluster's `M_70Cx` bytes,
+the display-column table's neighbors) - a natural side effect of finishing
+item 2 above, or of a dedicated variable-naming pass using the same
+call-site-tracing method this session used throughout.
+
+Resolved this session (see git history for the full trail, one commit per
+cluster): the entire 0800-0FFF arithmetic cluster (36 targets), the
+print-buffer formatting cluster, the switch-validation error stubs, the
+SEL_A/SEL_B display-column and blink pipeline, selector queueing
+(`QUEUE_SLOT_SEL`/`DEQUEUE_SLOT_SEL`/`SWAP_SLOT_IDX`), and this cluster -
+77 routines total, plus two corrected wrong guesses (`ROM_SELFTEST` was
+"receiver init"; `INIT_REC_FROM_TOA`/`INIT_REC_AND_SEND` were "display
+fill/clear") and one real bug fix (`PHASE_AB_SELECT`/`MUL10_INDEX` were
+mislabeled dead code but are live).
 
 ## Regenerating the tables above
 

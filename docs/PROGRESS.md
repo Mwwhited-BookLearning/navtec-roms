@@ -1,5 +1,49 @@
 # Progress notes / session handoff (2026-09-06, updated same day)
 
+## Update 3: every jump target in the ROM now has a name
+
+Starting from Update 2's worklist (77 of 137 `CALL`ed jump targets generic),
+worked through the entire list cluster by cluster - **0 remain generic.**
+39 of 175 variables still do (mostly scattered `M_xxxx` bytes near the
+now-understood clusters, plus a handful of confirmed `LXI`-immediate
+artifacts that were never real variables at all).
+
+Highlights, in the order they were found (see git log for one commit per
+cluster, each with its own rebuild re-verification):
+
+- Two real bugs, not just renames: `MUL10_INDEX` and `PHASE_AB_SELECT` were
+  both documented as "dead code from an in-place patch," but both have real
+  `CALL` xrefs - a stale forced-`db` override in the hints file was hiding
+  live code as data in both cases.
+- Three wrong guesses corrected across the docs: `ROM_SELFTEST` (was
+  "receiver init" - it's an XOR checksum whose result nothing ever tests),
+  `TICK_CLOCK_CASCADE` (was "display refresh" - it's a BCD clock),
+  `INIT_REC_FROM_TOA`/`INIT_REC_AND_SEND` (were "display fill/clear",
+  repeated in three docs - neither touches the display).
+- The GRI-A/GRI-B phase alternator (`PHASE_AB_SELECT`), the pulse-interval
+  TOA-correction family (`PULSE_ALIGN_ADJ` and friends, corrections in whole
+  multiples of the ~1000us inter-pulse spacing), two saturating phase-quality
+  accumulators that trigger pulse realignment (`PHASE_QUALITY_UPDATE`), and
+  the SEL_A/SEL_B-driven display-column and blink pipeline
+  (`CHECK_SEL_RANGE`/`COMMIT_DISP_ROWS`/`APPLY_DISP_BLINK`/`BLINK_ROW_BLANK`).
+- Found that the firmware pre-stages the *next* tracking slot's station
+  record a full epoch ahead and commits it to `PIO1`/`PIO2` parallel ports
+  precisely at the RST 6.5 sample-window boundary (`FIND_NEXT_TRACK_SLOT`/
+  `LATCH_REC_TO_PIO2PB`/`REC_TO_FRONTEND`) - strong evidence for a
+  feed-forward timing hint to the analog front end, previously only a
+  hedged hypothesis.
+- A held-thumbwheel display self-test sequence (`DISP_TEST_TICK`, flashes
+  "88.88.88").
+- Two names left deliberately low-confidence rather than guessed:
+  `SLOT_STATE_DISPATCH` (the hardest routine in the ROM) and the `1E9B-1F20`
+  extended-precision BCD cluster (named mechanically, not semantically -
+  plausibly TD-to-plot-column scaling, not confirmed).
+
+`docs/jump-graph.md`'s tables and "What to tackle next" section are the
+current worklist - now reframed around raising confidence on the low-
+confidence names and naming the remaining variables, rather than first-pass
+routine naming.
+
 ## Update 2: jump graph, worklist, and a real bug in the old analysis
 
 Built `docs/jump-graph.md`: PlantUML sequence diagrams for the call structure

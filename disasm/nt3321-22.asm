@@ -1733,7 +1733,7 @@ L_0972:
         PUSH B
         LDA SW_D2
         CPI 0AH
-        CNZ SUB_1F20
+        CNZ SLOT0_COPY_M70D4
         POP B
         MOV H,B
         MOV L,C
@@ -3591,7 +3591,7 @@ TICK_TASK:
         DAA
         STA TICK_BCD
         ANI 3FH                     ; '?'
-        CZ X_19E7
+        CZ DISP_TEST_TICK
         RIM
         ANI 10H
         JZ TICK_CHK_KEYS
@@ -4299,7 +4299,16 @@ L_19C1:
         STA DISP_ROW_A_FLAG
         STA DISP_ROW_B_FLAG
         JMP L_1CEA
-X_19E7:
+
+; DISP_TEST_TICK (was X_19E7, called every 20 ticks from TICK_TASK). Only runs while
+; SW_D4 is held at 0BH (the blank thumbwheel position). Counts M_70BB 0..25 (0-19H): while
+; counting, clears DISP_ROW_A_FLAG/DISP_ROW_B_FLAG and fills both DISP_ROW_A and
+; DISP_ROW_B with D_0005's bytes (88H,88H,88H - the classic all-segments-lit LED test
+; pattern) via COMMIT_DISP_ROWS. Once M_70BB reaches 25, counts M_70BC 0..25 the same way
+; but sets both flag bytes to 3FH instead of clearing them. Reads as a display self-test
+; sequence, held-thumbwheel-triggered (flash "88.88.88" then something else for ~25 ticks
+; each) - the SW_D2-gated path at L_1A23 (normal, non-test operation) isn't traced further.
+DISP_TEST_TICK:
         LDA SW_D4
         CPI 0BH
         JZ L_1A23
@@ -4967,7 +4976,7 @@ L_1E73:
         MVI M,00H
         DCX H
         MVI M,00H
-        CALL SUB_1E9B
+        CALL TOGGLE_70C7_BIT
         RRC
         DCX H
         JC L_1E8F
@@ -4987,7 +4996,13 @@ L_1E8F:
         MOV M,A
 L_1E98:
         JMP L_09CB
-SUB_1E9B:
+
+; TOGGLE_70C7_BIT (was SUB_1E9B, sole caller 1E7E - a BCD tick increment/decrement
+; dispatcher unrelated to the shift cluster below). Reads M_70C7, rotates a copy left 3,
+; XORs with the original, then applies another RLC/CMC/RAL pass (the same kind of
+; single-bit-toggle idiom PHASE_AB_SELECT uses) and stores back. Exact bit and purpose
+; not identified - mechanical description only.
+TOGGLE_70C7_BIT:
         LDA M_70C7
         MOV B,A
         RLC
@@ -4999,7 +5014,15 @@ SUB_1E9B:
         RAL
         STA M_70C7
         RET
-SUB_1EAA:
+
+; SHR4_ROUND (was SUB_1EAA). Shifts HL right 4 bits (one packed-BCD digit) via 4
+; carry-cleared RAR passes, then INX H if the last bit shifted out was set - i.e. "divide
+; by 16 with round-to-nearest", or equivalently "drop the lowest BCD digit, rounding".
+; Part of a small extended-precision BCD arithmetic cluster (1E9B-1F20) that is,
+; structurally, clearly building toward a scaled comparison or division involving GRI_VAL
+; (see the caller at 1F35-1F75) - plausibly the TD-to-plot-column scaling PLOT_VALUES
+; needs, but not confirmed. Named mechanically rather than guessing the semantic role.
+SHR4_ROUND:
         MVI D,04H
 L_1EAC:
         STC
@@ -5015,7 +5038,11 @@ L_1EAC:
         RNC
         INX H
         RET
-SUB_1EBB:
+
+; SHL4_EHL (was SUB_1EBB). Shifts the 24-bit value E:H:L left 4 bits via 4 carry-through
+; RAL passes (E first, then L, then H), then INX H if the top bit shifted out was set -
+; the left-shift/round-up counterpart to SHR4_ROUND. See 1EAA for the cluster context.
+SHL4_EHL:
         MVI D,04H
 L_1EBD:
         MOV A,E
@@ -5034,7 +5061,11 @@ L_1EBD:
         RNC
         INX H
         RET
-SUB_1ECF:
+
+; LOAD3_BC (was SUB_1ECF). Loads 3 bytes from (BC), advancing BC each time, into H, L,
+; E respectively. A small loader feeding the SHR4_ROUND/SHL4_EHL arithmetic at 1F35-1F75
+; with 3-byte operands from GRI_VAL, M_70D6 and a caller-supplied pointer.
+LOAD3_BC:
         LDAX B
         MOV H,A
         INX B
@@ -5045,7 +5076,11 @@ SUB_1ECF:
         MOV E,A
         INX B
         RET
-SUB_1ED9:
+
+; BCD_COMPL_HL (was SUB_1ED9). L = 100 - L and H = 100 - H, each an independent packed-
+; BCD ten's-complement (the STC/MVI A,99H/ACI 00H sequence is the standard 8085 idiom for
+; loading A=100 while leaving room for DAA). Part of the 1E9B-1F20 BCD arithmetic cluster.
+BCD_COMPL_HL:
         STC
         MVI A,99H
         ACI 00H
@@ -5060,7 +5095,11 @@ SUB_1ED9:
         DAA
         MOV H,A
         RET
-SUB_1EED:
+
+; BCD_COMPL_ADD_DEHL (was SUB_1EED). L = (100-E)+L and H = (100-D)+H, packed BCD -
+; a complement-then-add step, i.e. effectively "L -= E" and "H -= D" via ten's-complement
+; addition. Same cluster as BCD_COMPL_HL/SHR4_ROUND.
+BCD_COMPL_ADD_DEHL:
         STC
         MVI A,99H
         ACI 00H
@@ -5089,7 +5128,11 @@ L_1F00:
         MOV H,A
         XTHL
         JMP L_1F61
-SUB_1F0E:
+
+; SWAP_HL_STASH (was SUB_1F0E). Swaps H and L, stores the result to BCD_TMP_2, then
+; zeroes 2 bytes at BCD_TMP. A cleanup/reset step at the tail of the 1E9B-1F20 cluster's
+; outer loop (1F35-1F75).
+SWAP_HL_STASH:
         MOV A,L
         MOV L,H
         MOV H,A
@@ -5102,7 +5145,13 @@ SUB_1F0E:
         INX H
         MVI M,00H
         RET
-SUB_1F20:
+
+; SLOT0_COPY_M70D4 (was SUB_1F20, called conditionally from a SW_D2-gated block around
+; 097D). For SLOT_IDX==0 (master): copies 4 bytes from the caller's BC into M_70D4. For
+; other slots: falls into a RESET-based (HL=0000H) path not fully traced. Low confidence -
+; this whole area (the 1E9B-1F20 BCD cluster and its caller here) is plausibly related to
+; PLOT-mode TD scaling but that connection is not confirmed.
+SLOT0_COPY_M70D4:
         LDA SLOT_IDX
         CPI 00H
         JNZ L_1F30
@@ -5114,15 +5163,15 @@ L_1F30:
         PUSH B
         LXI H,RESET
         PUSH H
-        CALL SUB_1ECF
-        CALL SUB_1EBB
+        CALL LOAD3_BC
+        CALL SHL4_EHL
         PUSH H
         LXI B,GRI_VAL
-        CALL SUB_1ECF
-        CALL SUB_1EAA
+        CALL LOAD3_BC
+        CALL SHR4_ROUND
         PUSH H
         LXI B,M_70D6
-        CALL SUB_1ECF
+        CALL LOAD3_BC
         MOV A,H
         RLC
         MVI A,01H
@@ -5130,20 +5179,20 @@ L_1F30:
         JNC L_1F5D
         XRA A
         STA M_70D3
-        CALL SUB_1ED9
+        CALL BCD_COMPL_HL
 L_1F5D:
         PUSH H
         POP B
         POP D
         POP H
 L_1F61:
-        CALL SUB_1EED
+        CALL BCD_COMPL_ADD_DEHL
         JC L_1F6A
         JMP L_1F00
 L_1F6A:
         POP H
-        CALL SUB_1EAA
-        CALL SUB_1F0E
+        CALL SHR4_ROUND
+        CALL SWAP_HL_STASH
         POP B
         LXI H,BCD_TMP
         LDA M_70D3
