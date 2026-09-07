@@ -489,7 +489,7 @@ TRACK_LOOP:
         CALL ACTIVATE_SELECTED_SLOT
         JMP TRACK_UPDATE
 TRACK_DISP1:
-        CALL X_0F31
+        CALL SLOT_STATE_DISPATCH
 TRACK_UPDATE:
         CALL EPOCH_PHASE_UPDATE
 
@@ -2744,7 +2744,19 @@ SET_SLOT_ACTIVE:
         MVI A,20H                   ; ' '
         STA TRACK_STATE
         RET
-X_0F31:
+
+; SLOT_STATE_DISPATCH (was X_0F31, called once per epoch from TRACK_LOOP when
+; DISP_MODE selects it). LOW CONFIDENCE on the name - this is the hardest area in the
+; ROM (firmware.md already flags the window arithmetic near here as "working names, not
+; proven ones"). Confirmed structure: dispatches on RAM1_BASE as a 0/1/2 tri-state
+; variable (overloading its "base of 8155 #1 RAM" role from INIT/FILL_ZERO), each state
+; gating a different check against FIRST_SLOT's flags before relocating a 5-byte block
+; (COPY_E then FILL_ZERO, both length 5) between two possible destinations chosen via a
+; conditional XCHG between M_6F2D and M_6F46. Converges with X_0F6A (reached separately
+; from the ROM1/ROM2 boundary tail at 1024) on a shared continuation (L_0F6F) that clears
+; a flag bit and calls RESET_REC_TAIL. Not fully traced - a good target for a dedicated
+; pass with fresh eyes rather than guessing further.
+SLOT_STATE_DISPATCH:
         LDA SLOT_FLAGS
         MOV B,A
         LXI H,RAM1_BASE
@@ -2761,7 +2773,7 @@ X_0F31:
         RNZ
         MVI M,01H
         LXI H,REC_MASTER
-        CALL X_0FE9
+        CALL RESET_REC_TAIL
 L_0F54:
         LDA FIRST_SLOT
         MOV B,A
@@ -2850,7 +2862,14 @@ X_0FBE:
         CPI 02H
         MOV A,B
         JNZ SLOT_INC_CHK
-X_0FE9:
+
+; RESET_REC_TAIL (was X_0FE9). HL = a 25-byte station record pointer (REC_MASTER from
+; SLOT_STATE_DISPATCH's state-0 path, or whatever SLOTTBL_CHK popped off the stack via its
+; SLOTTBL_ZERO fallthrough at 1010). ORs 82H into the record's status byte (marks it
+; active, sets bit 1), then zeroes the last two bytes of the 25-byte record (offsets +23,
+; +24, reached via LXI D,0018H;DAD H then two MVI M,00H/DCX H) - a record
+; reset/reinitialize step, run when a slot is (re)activated.
+RESET_REC_TAIL:
         MOV A,M
         ORI 82H
         MOV M,A
@@ -2885,7 +2904,7 @@ D_1004       EQU  $+1
         POP H
         JZ SLOTTBL_ZERO
         POP PSW
-        JMP X_0FE9
+        JMP RESET_REC_TAIL
 SLOTTBL_ZERO:
         POP PSW
         MOV A,B

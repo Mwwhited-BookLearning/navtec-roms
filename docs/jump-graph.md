@@ -213,8 +213,8 @@ control flow inside an already-named routine, not independent things to name.
 | 0EEE | `APPLY_NEW_DATA` | 1 | named |
 | 0F08 | `ACTIVATE_SELECTED_SLOT` | 1 | named |
 | 0F23 | `SET_SLOT_ACTIVE` | 1 | named |
-| 0F31 | `X_0F31` | 1 | needs analysis |
-| 0FE9 | `X_0FE9` | 1 | needs analysis |
+| 0F31 | `SLOT_STATE_DISPATCH` | 1 | named |
+| 0FE9 | `RESET_REC_TAIL` | 1 | named |
 | 1028 | `SLOTREC_PHASE` | 1 | named |
 | 105C | `SLOTREC_UPDATE` | 2 | named |
 | 10DB | `CALL_TICK_HOOK` | 1 | named |
@@ -265,7 +265,7 @@ control flow inside an already-named routine, not independent things to name.
 | 1F20 | `SUB_1F20` | 1 | needs analysis |
 | 2001 | `EXTROM_ENTRY` | 1 | named |
 
-**11 of 137 still need analysis** (down from 77 at the start of this session).
+**9 of 137 still need analysis** (down from 77 at the start of this session).
 
 ## Variables (all 175 referenced RAM/IO addresses)
 
@@ -460,32 +460,32 @@ memory locations at all.
 
 ## What to tackle next, by cluster
 
-Roughly in priority order (highest caller-count / most load-bearing first):
+Down to 9 targets total - the 0800-0FFF arithmetic cluster (36 targets at
+the start of this session) is entirely resolved, including a low-confidence
+`SLOT_STATE_DISPATCH` (was `X_0F31`) flagged as needing a fresh dedicated
+pass rather than more guessing - see its comment in
+`disasm/nt3321-22.json` for exactly what's confirmed vs. not. In priority
+order for what's left:
 
-Down to 11 targets total - nearly done. In priority order:
-
-1. **`X_0F31`/`X_0FE9`** (the last two `GET_FLAGS_A`-neighborhood holdouts -
-   the `DISP_MODE`-selected display-format handlers from `TRACK_LOOP`, per
-   firmware.md). Everything else in that once-36-strong cluster is resolved.
-2. **`X_19E7`** (called every 20 ticks from `TICK_TASK`, touches `M_70BB`) -
+1. **`X_19E7`** (called every 20 ticks from `TICK_TASK`, touches `M_70BB`) -
    possibly a display-blink or column-rotation counter; unrelated to the
    `SW_ERR_*` family despite the nearby address.
-3. **`SUB_1EAA`/`SUB_1EBB`/`SUB_1ECF`/`SUB_1ED9`/`SUB_1EED`/`SUB_1F0E`/`SUB_1F20`**
+2. **`SUB_1EAA`/`SUB_1EBB`/`SUB_1ECF`/`SUB_1ED9`/`SUB_1EED`/`SUB_1F0E`/`SUB_1F20`**
    (1E9B-1F20) - all single-caller, small, clustered; likely one coherent
    feature once traced together.
-4. **Remaining `FFxx`/`8020` single-LXI addresses** (variables list only) -
+3. **Remaining `FFxx`/`8020` single-LXI addresses** (variables list only) -
    check whether they're BCD constants (operand of `LXI H,<addr>`
    immediately followed by an arithmetic call) before spending real effort;
    may not be "variables" at all.
 
 Resolved this session (see git history for the full trail, one entry per
-commit): the entire 0800-0FFF arithmetic cluster except item 1 above,
-including two corrected wrong guesses (`ROM_SELFTEST` was "receiver init";
-`INIT_REC_FROM_TOA`/`INIT_REC_AND_SEND` were "display fill/clear") and one
-real bug fix (`PHASE_AB_SELECT`/`MUL10_INDEX` were mislabeled dead code but
-are live); `QUEUE_SLOT_SEL`/`DEQUEUE_SLOT_SEL`/`SWAP_SLOT_IDX` (selector
-queueing); and `CHECK_SEL_RANGE`/`COMMIT_DISP_ROWS`/`APPLY_DISP_BLINK`/
-`BLINK_ROW_BLANK` (the SEL_A/SEL_B-driven display-column and blink pipeline,
+commit): the entire 0800-0FFF arithmetic cluster, including two corrected
+wrong guesses (`ROM_SELFTEST` was "receiver init"; `INIT_REC_FROM_TOA`/
+`INIT_REC_AND_SEND` were "display fill/clear") and one real bug fix
+(`PHASE_AB_SELECT`/`MUL10_INDEX` were mislabeled dead code but are live);
+`QUEUE_SLOT_SEL`/`DEQUEUE_SLOT_SEL`/`SWAP_SLOT_IDX` (selector queueing); and
+`CHECK_SEL_RANGE`/`COMMIT_DISP_ROWS`/`APPLY_DISP_BLINK`/`BLINK_ROW_BLANK`
+(the SEL_A/SEL_B-driven display-column and blink pipeline,
 `SEL_COL_TBL`/`DISP_ROW_A_FLAG`/`DISP_ROW_B_FLAG` new equates).
 
 ## Regenerating the tables above

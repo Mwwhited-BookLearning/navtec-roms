@@ -306,7 +306,7 @@ TRACK_LOOP:                                  ; xref: j024A
 0231  CD 08 0F   CALL ACTIVATE_SELECTED_SLOT
 0234  C3 3A 02   JMP TRACK_UPDATE
 TRACK_DISP1:                                 ; xref: j0229
-0237  CD 31 0F   CALL X_0F31
+0237  CD 31 0F   CALL SLOT_STATE_DISPATCH
 TRACK_UPDATE:                                ; xref: j022E j0234
 023A  CD 17 08   CALL EPOCH_PHASE_UPDATE
 
@@ -2561,7 +2561,19 @@ SET_SLOT_ACTIVE:                             ; xref: c0212
 0F2B  3E 20      MVI A,20H                   ; ' '
 0F2D  32 13 6F   STA TRACK_STATE
 0F30  C9         RET
-X_0F31:                                      ; xref: c0237
+
+; SLOT_STATE_DISPATCH (was X_0F31, called once per epoch from TRACK_LOOP when
+; DISP_MODE selects it). LOW CONFIDENCE on the name - this is the hardest area in the
+; ROM (firmware.md already flags the window arithmetic near here as "working names, not
+; proven ones"). Confirmed structure: dispatches on RAM1_BASE as a 0/1/2 tri-state
+; variable (overloading its "base of 8155 #1 RAM" role from INIT/FILL_ZERO), each state
+; gating a different check against FIRST_SLOT's flags before relocating a 5-byte block
+; (COPY_E then FILL_ZERO, both length 5) between two possible destinations chosen via a
+; conditional XCHG between M_6F2D and M_6F46. Converges with X_0F6A (reached separately
+; from the ROM1/ROM2 boundary tail at 1024) on a shared continuation (L_0F6F) that clears
+; a flag bit and calls RESET_REC_TAIL. Not fully traced - a good target for a dedicated
+; pass with fresh eyes rather than guessing further.
+SLOT_STATE_DISPATCH:                         ; xref: c0237
 0F31  3A 04 6F   LDA SLOT_FLAGS
 0F34  47         MOV B,A
 0F35  21 00 6F   LXI H,RAM1_BASE
@@ -2578,7 +2590,7 @@ X_0F31:                                      ; xref: c0237
 0F4B  C0         RNZ
 0F4C  36 01      MVI M,01H
 0F4E  21 24 6F   LXI H,REC_MASTER
-0F51  CD E9 0F   CALL X_0FE9
+0F51  CD E9 0F   CALL RESET_REC_TAIL
 L_0F54:                                      ; xref: j0FB8
 0F54  3A 02 6F   LDA FIRST_SLOT
 0F57  47         MOV B,A
@@ -2667,7 +2679,14 @@ X_0FBE:                                      ; xref: j101E
 0FE3  FE 02      CPI 02H
 0FE5  78         MOV A,B
 0FE6  C2 19 10   JNZ SLOT_INC_CHK
-X_0FE9:                                      ; xref: j1010 c0F51
+
+; RESET_REC_TAIL (was X_0FE9). HL = a 25-byte station record pointer (REC_MASTER from
+; SLOT_STATE_DISPATCH's state-0 path, or whatever SLOTTBL_CHK popped off the stack via its
+; SLOTTBL_ZERO fallthrough at 1010). ORs 82H into the record's status byte (marks it
+; active, sets bit 1), then zeroes the last two bytes of the 25-byte record (offsets +23,
+; +24, reached via LXI D,0018H;DAD H then two MVI M,00H/DCX H) - a record
+; reset/reinitialize step, run when a slot is (re)activated.
+RESET_REC_TAIL:                              ; xref: j1010 c0F51
 0FE9  7E         MOV A,M
 0FEA  F6 82      ORI 82H
 0FEC  77         MOV M,A
@@ -2702,7 +2721,7 @@ D_1004:                                      ; = 1004, inside the next instructi
 100B  E1         POP H
 100C  CA 13 10   JZ SLOTTBL_ZERO
 100F  F1         POP PSW
-1010  C3 E9 0F   JMP X_0FE9
+1010  C3 E9 0F   JMP RESET_REC_TAIL
 SLOTTBL_ZERO:                                ; xref: j100C
 1013  F1         POP PSW
 1014  78         MOV A,B
