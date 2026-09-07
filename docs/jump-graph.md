@@ -213,7 +213,7 @@ control flow inside an already-named routine, not independent things to name.
 | 0EEE | `APPLY_NEW_DATA` | 1 | named |
 | 0F08 | `ACTIVATE_SELECTED_SLOT` | 1 | named |
 | 0F23 | `SET_SLOT_ACTIVE` | 1 | named |
-| 0F31 | `SLOT_STATE_DISPATCH` | 1 | named |
+| 0F31 | `MASTER_SEC_PULSE_HANDOFF` | 1 | named |
 | 0FE9 | `RESET_REC_TAIL` | 1 | named |
 | 1028 | `SLOTREC_PHASE` | 1 | named |
 | 105C | `SLOTREC_UPDATE` | 2 | named |
@@ -255,14 +255,14 @@ control flow inside an already-named routine, not independent things to name.
 | 1E4F | `ROM_SELFTEST_2` | 1 | named |
 | 1E52 | `ROM_SELFTEST_3` | 1 | named |
 | 1E55 | `ROM_SELFTEST_BODY` | 1 | named |
-| 1E9B | `TOGGLE_70C7_BIT` | 1 | named |
+| 1E9B | `SELECT_INCDEC` | 1 | named |
 | 1EAA | `SHR4_ROUND` | 2 | named |
 | 1EBB | `SHL4_EHL` | 1 | named |
 | 1ECF | `LOAD3_BC` | 3 | named |
 | 1ED9 | `BCD_COMPL_HL` | 1 | named |
 | 1EED | `BCD_COMPL_ADD_DEHL` | 1 | named |
 | 1F0E | `SWAP_HL_STASH` | 1 | named |
-| 1F20 | `SLOT0_COPY_M70D4` | 1 | named |
+| 1F20 | `SLOT0_SNAPSHOT_TOA` | 1 | named |
 | 2001 | `EXTROM_ENTRY` | 1 | named |
 
 **0 of 137 still need analysis** - every `CALL`ed address in the ROM now has
@@ -280,8 +280,8 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | Addr | Name | R | W | LXI | Status |
 |---|---|---|---|---|---|
 | 2000 | `EXTROM_SIG` | 1 | 0 | 0 | named |
-| 2002 | `M_2002` | 0 | 0 | 1 | needs analysis |
-| 2010 | `M_2010` | 0 | 0 | 1 | needs analysis |
+| 2002 | `TAG_2002` | 0 | 0 | 1 | named |
+| 2010 | `TAG_2010` | 0 | 0 | 1 | named |
 | 6F00 | `RAM1_BASE` | 1 | 0 | 2 | named |
 | 6F01 | `ACQ_COUNT` | 2 | 0 | 1 | named |
 | 6F02 | `FIRST_SLOT` | 5 | 2 | 1 | named |
@@ -304,29 +304,29 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 6F20 | `BCD_ACC` | 0 | 0 | 5 | named |
 | 6F23 | `BCD_ACC_HI` | 0 | 0 | 1 | named |
 | 6F24 | `REC_MASTER` | 4 | 0 | 8 | named |
-| 6F28 | `M_6F28` | 0 | 0 | 1 | needs analysis |
-| 6F2D | `M_6F2D` | 0 | 0 | 1 | needs analysis |
-| 6F36 | `M_6F36` | 1 | 0 | 0 | needs analysis |
+| 6F28 | `REC_MASTER_4` | 0 | 0 | 1 | named |
+| 6F2D | `REC_MASTER_9` | 0 | 0 | 1 | named |
+| 6F36 | `REC_MASTER_18` | 1 | 0 | 0 | named |
 | 6F38 | `REC_MASTER_14` | 0 | 0 | 1 | named |
 | 6F3A | `REC_MASTER_16` | 0 | 1 | 0 | named |
 | 6F3D | `REC_SEC` | 0 | 0 | 3 | named |
 | 6F41 | `REC_SEC_TOA` | 0 | 0 | 1 | named |
-| 6F46 | `M_6F46` | 0 | 0 | 1 | needs analysis |
+| 6F46 | `REC_SEC_9` | 0 | 0 | 1 | named |
 | 6F51 | `REC_SEC_14` | 0 | 0 | 1 | named |
 | 6F54 | `SETTLE_CNT` | 0 | 1 | 1 | named |
 | 6FA1 | `CUR_REC` | 11 | 4 | 10 | named |
 | 6FA5 | `CUR_TOA` | 0 | 0 | 11 | named |
 | 6FA6 | `CUR_TOA_1` | 2 | 1 | 0 | named |
-| 6FA8 | `M_6FA8` | 1 | 0 | 0 | needs analysis |
+| 6FA8 | `CUR_TOA_3` | 1 | 0 | 0 | named |
 | 6FA9 | `CUR_NPULSE` | 5 | 3 | 7 | named |
 | 6FAA | `CUR_PULSES` | 0 | 0 | 7 | named |
 | 6FAB | `CUR_PULSES_1` | 2 | 2 | 0 | named |
 | 6FAD | `CUR_PULSES_3` | 1 | 2 | 0 | named |
 | 6FAF | `CUR_PULSE_PTR` | 2 | 4 | 1 | named |
-| 6FB0 | `M_6FB0` | 0 | 0 | 1 | needs analysis |
-| 6FB1 | `M_6FB1` | 0 | 0 | 1 | needs analysis |
-| 6FB2 | `M_6FB2` | 0 | 3 | 1 | needs analysis |
-| 6FB3 | `M_6FB3` | 3 | 1 | 0 | needs analysis |
+| 6FB0 | `PHASE_QUAL_UPDATE_CNT` | 0 | 0 | 1 | named |
+| 6FB1 | `QUAL_STREAK_DIV5` | 0 | 0 | 1 | named |
+| 6FB2 | `MATCH_SCORE_HI` | 0 | 3 | 1 | named |
+| 6FB3 | `QUAL_STREAK_CNT` | 3 | 1 | 0 | named |
 | 6FB5 | `PHASE_QUAL_A` | 4 | 4 | 0 | named |
 | 6FB6 | `PHASE_QUAL_A_HI` | 1 | 0 | 0 | named |
 | 6FB7 | `CUR_MODE` | 0 | 3 | 1 | named |
@@ -334,7 +334,7 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 6FB9 | `PHASE_QUAL_B_HI` | 1 | 0 | 0 | named |
 | 6FBA | `CUR_FLAGS` | 11 | 3 | 5 | named |
 | 6FBB | `PHASE_REF` | 1 | 2 | 1 | named |
-| 6FBC | `M_6FBC` | 1 | 0 | 0 | needs analysis |
+| 6FBC | `PHASE_REF_HI` | 1 | 0 | 0 | named |
 | 6FBD | `PHASE_QUAL_FLAGS` | 1 | 1 | 2 | named |
 | 6FBE | `PULSE_ALIGN_FLAGS` | 2 | 1 | 1 | named |
 | 6FBF | `PHASE_CODE` | 4 | 0 | 1 | named |
@@ -362,13 +362,13 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 6FE6 | `VAR_6FE6` | 0 | 2 | 0 | named |
 | 6FE7 | `VAR_6FE7` | 3 | 2 | 0 | named |
 | 6FE9 | `BCD_TMP` | 0 | 0 | 7 | named |
-| 6FEA | `M_6FEA` | 0 | 0 | 1 | needs analysis |
+| 6FEA | `BCD_TMP_1` | 0 | 0 | 1 | named |
 | 6FEB | `BCD_TMP_2` | 0 | 1 | 2 | named |
 | 6FEE | `SLOTREC_CNT` | 0 | 0 | 2 | named |
-| 6FEF | `M_6FEF` | 0 | 0 | 3 | needs analysis |
+| 6FEF | `SLOTREC_1` | 0 | 0 | 3 | named |
 | 6FF1 | `SLOTREC_3` | 0 | 0 | 1 | named |
 | 6FF3 | `SLOTREC_5` | 0 | 0 | 1 | named |
-| 6FF4 | `M_6FF4` | 0 | 0 | 2 | needs analysis |
+| 6FF4 | `SLOTREC_6` | 0 | 0 | 2 | named |
 | 7000 | `RAM2_BASE` | 0 | 0 | 1 | named |
 | 7034 | `DISP_ROW_A` | 0 | 3 | 9 | named |
 | 7035 | `DISP_ROW_A_1` | 0 | 6 | 0 | named |
@@ -401,7 +401,7 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 70C1 | `SEL_QUEUE_1` | 3 | 3 | 0 | named |
 | 70C2 | `SEL_QUEUE_2` | 3 | 3 | 0 | named |
 | 70C3 | `MASTER_TOA_CORR` | 0 | 0 | 4 | named |
-| 70C7 | `M_70C7` | 1 | 1 | 0 | needs analysis |
+| 70C7 | `INCDEC_TOGGLE` | 1 | 1 | 0 | named |
 | 70C8 | `SW_D1` | 6 | 1 | 0 | named |
 | 70C9 | `SW_D2` | 5 | 1 | 0 | named |
 | 70CA | `SW_D3` | 4 | 1 | 0 | named |
@@ -413,8 +413,8 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 70D0 | `RPT_STATE` | 11 | 3 | 0 | named |
 | 70D1 | `PRTBUF_PTR` | 2 | 4 | 0 | named |
 | 70D3 | `BCD_RESULT_SIGN` | 1 | 2 | 0 | named |
-| 70D4 | `M_70D4` | 0 | 0 | 1 | needs analysis |
-| 70D6 | `M_70D6` | 0 | 0 | 1 | needs analysis |
+| 70D4 | `SLOT0_TOA_SNAPSHOT` | 0 | 0 | 1 | named |
+| 70D6 | `M70D6_OPERAND` | 0 | 0 | 1 | named |
 | 70D8 | `QUAL_LO` | 2 | 1 | 0 | named |
 | 70DA | `TICK_HOOK` | 2 | 0 | 0 | named |
 | 70DC | `OUT_MODE` | 2 | 6 | 0 | named |
@@ -431,8 +431,8 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 70E7 | `MON_LAST` | 1 | 1 | 0 | named |
 | 70E8 | `PLOT_BASE` | 1 | 1 | 0 | named |
 | 7100 | `STACK_TOP` | 0 | 0 | 1 | named |
-| 8020 | `M_8020` | 0 | 0 | 1 | needs analysis |
-| AC9F | `M_AC9F` | 0 | 0 | 1 | needs analysis |
+| 8020 | `PAIR_80_20` | 0 | 0 | 1 | named |
+| AC9F | `PHASE_PAIR_B` | 0 | 0 | 1 | named |
 | C000 | `USART_DATA` | 1 | 6 | 0 | named |
 | C001 | `USART_CTRL` | 5 | 2 | 0 | named |
 | D000 | `KDC_DATA` | 14 | 3 | 0 | named |
@@ -449,65 +449,64 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | F003 | `PIO2_PC` | 3 | 0 | 0 | named |
 | F004 | `PIO2_TMRLO` | 0 | 5 | 0 | named |
 | F005 | `PIO2_TMRHI` | 0 | 1 | 0 | named |
-| F9CA | `M_F9CA` | 0 | 0 | 1 | needs analysis |
-| FF38 | `M_FF38` | 0 | 0 | 1 | needs analysis |
-| FF80 | `M_FF80` | 0 | 0 | 1 | needs analysis |
-| FF9C | `M_FF9C` | 0 | 0 | 1 | needs analysis |
-| FFC0 | `M_FFC0` | 0 | 0 | 1 | needs analysis |
+| F9CA | `PHASE_PAIR_A` | 0 | 0 | 1 | named |
+| FF38 | `NEG_200` | 0 | 0 | 1 | named |
+| FF80 | `NEG_128` | 0 | 0 | 1 | named |
+| FF9C | `NEG_100` | 0 | 0 | 1 | named |
+| FFC0 | `NEG_64` | 0 | 0 | 1 | named |
 
-**25 of 175 still need analysis** (down from 39 earlier this session; the
-`FFxx`/`F9CA`/`AC9F`/`8020` group - 6 of the 25 - are confirmed `LXI`-immediate
-arithmetic constants, not real variables at all, documented in their own
-`disasm/nt3321-22.json` comments rather than renamed - see the note at 0AAA,
-0C3A and 0A4A). `M_2002`/`M_2010` (also in the 25) are likely the same kind of
-incidental-constant artifact, at low confidence. That leaves roughly 17
-genuine unresolved variables, mostly in the two low-confidence clusters below
-(`SLOT_STATE_DISPATCH`'s neighborhood and the 1E9B-1F20 BCD cluster) plus a
-few isolated ones (`M_6F28`, `M_6F2D`, `M_6F36`, `M_6F46`, `M_6FA8`,
-`M_6FEA`, `M_6FEF`, `M_6FF4`, `M_70C7`, `M_70D4`, `M_70D6`) not yet traced.
+**0 of 175 still need analysis.** Every referenced RAM/IO address in the ROM
+now has a real name, including a group of confirmed `LXI`-immediate
+arithmetic constants (`NEG_200`, `NEG_128`, `NEG_64`, `NEG_100`,
+`PAIR_80_20`, `PHASE_PAIR_A`, `PHASE_PAIR_B`) and two likely-incidental
+16-bit tag constants (`TAG_2002`, `TAG_2010`) that are named for clarity but
+are **not real memory locations** - their own `disasm/nt3321-22.json`
+comments say so explicitly; don't read a name like `NEG_200` as "a variable
+called NEG_200 exists in RAM."
 
 ## What to tackle next
 
-Every `CALL`ed jump target has a name. Remaining work is (a) raising
-confidence on three low-confidence routine names, and (b) roughly 17
-genuine unresolved variables (of 25 still flagged - the rest are confirmed
-or likely `LXI`-immediate constants, not real memory, see above).
+Every `CALL`ed jump target and every referenced variable now has a name -
+**0 of 137 and 0 of 175 generic**. What's left is raising confidence on a
+handful of names that are honestly flagged low- or medium-confidence in
+their `disasm/nt3321-22.json` comment rather than fully proven. Don't trust
+any of these four names alone - read the comment:
 
-**Low-confidence names worth a dedicated re-check** (each already has an
-honest confidence note in its `disasm/nt3321-22.json` comment - don't trust
-the name alone, read the comment):
-
-1. **`SLOT_STATE_DISPATCH`** (0F31) - the single hardest routine in the ROM.
-   Structure (a `RAM1_BASE`-keyed 0/1/2 dispatcher relocating a 5-byte block)
-   is confirmed; the *why* is not. Needs fresh eyes, not more guessing.
-   `M_6F28`, `M_6F2D`, `M_6F36`, `M_6F46`, `M_6FA8` and the
-   `M_6FB0`-`M_6FB3`/`M_70C7` quality-threshold neighborhood (see the 0AAA
-   comment) are all in this same low-confidence orbit.
-2. **The `1E9B-1F20` extended-precision BCD cluster** (`TOGGLE_70C7_BIT`,
+1. **`MASTER_SEC_PULSE_HANDOFF`** (0F31, was the low-confidence
+   `SLOT_STATE_DISPATCH`) - raised to high confidence on a second pass: it's
+   a 2-3 stage handoff of pulse-position data (`REC_MASTER_9`/`REC_SEC_9`)
+   between the master and the first tracked secondary, gated on specific
+   flag-bit milestones and a `REC_MASTER_18` threshold test whose own
+   meaning (a count? a quality score?) is the one piece still open.
+2. **The `1E9B-1F20` extended-precision BCD cluster** (`SELECT_INCDEC`,
    `SHR4_ROUND`, `SHL4_EHL`, `LOAD3_BC`, `BCD_COMPL_HL`,
-   `BCD_COMPL_ADD_DEHL`, `SWAP_HL_STASH`, `SLOT0_COPY_M70D4`) - named
+   `BCD_COMPL_ADD_DEHL`, `SWAP_HL_STASH`, `SLOT0_SNAPSHOT_TOA`) - named
    mechanically (what each does, verified) rather than semantically (why).
    The outer routine at 1F35-1F75 involves `GRI_VAL`, plausibly TD-to-plot-
    column scaling for `PLOT_VALUES`, but that connection isn't confirmed.
-   `M_70D4`/`M_70D6` (operands of this cluster) and `M_6FEA`/`M_6FEF`/
-   `M_6FF4` (small pointer targets nearby) belong here too.
-3. **`DISP_TEST_TICK`** (19E7) - the held-thumbwheel-triggered "88.88.88"
+3. **The channel-2 quality-streak cluster** (`PHASE_QUAL_UPDATE_CNT`,
+   `QUAL_STREAK_DIV5`, `MATCH_SCORE_HI`, `QUAL_STREAK_CNT`, in
+   `PHASE_QUALITY_UPDATE`'s own body) - a consecutive-good/bad-epoch
+   counter for the channel-2 signal, checked every 5th pass; the exact
+   pass/fail semantics of `CUR_FLAGS` bits 5/7 in that path aren't nailed
+   down, and a chunk of the code (`SUI 40H` on `MATCH_SCORE_HI`) turned out
+   to be dead - computed but never used.
+4. **`DISP_TEST_TICK`** (19E7) - the held-thumbwheel-triggered "88.88.88"
    display self-test sequence is confirmed; the normal (non-test) path at
    `L_1A23`, gated on `SW_D2`, isn't traced.
 
-Resolved this session (see git history for the full trail, one commit per
-cluster): the entire 0800-0FFF arithmetic cluster (36 targets), the
-print-buffer formatting cluster, the switch-validation error stubs, the
-SEL_A/SEL_B display-column and blink pipeline, selector queueing
-(`QUEUE_SLOT_SEL`/`DEQUEUE_SLOT_SEL`/`SWAP_SLOT_IDX`), and the BCD/display-
-test cluster - 77 routines total (0 left generic), plus two corrected wrong
-guesses (`ROM_SELFTEST` was "receiver init"; `INIT_REC_FROM_TOA`/
-`INIT_REC_AND_SEND` were "display fill/clear") and one real bug fix
-(`PHASE_AB_SELECT`/`MUL10_INDEX` were mislabeled dead code but are live).
-A first variable-naming pass afterward resolved 14 more (`PIO1_PA`/
-`PIO1_PB`/`PIO2_PA`, `ACCUM_TOA_TBL`, the `DISP_ROW_A`/`B` sub-bytes,
-`DISP_SCAN_SLOT`/`DISP_SCAN_START`, `DISP_TEST_CNT1`/`DISP_TEST_CNT2`,
-`PENDING_PIO2_BYTE`, `BCD_RESULT_SIGN`), taking variables from 39 to 25.
+Everything else - every routine, every variable - is at medium-or-higher
+confidence with call-site evidence in its comment. See git history for the
+full trail (one commit per cluster): the entire 0800-0FFF arithmetic
+cluster (36 targets), the print-buffer formatting cluster, the switch-
+validation error stubs, the SEL_A/SEL_B display-column and blink pipeline,
+selector queueing, the BCD/display-test cluster, two full variable-naming
+passes, and the `MASTER_SEC_PULSE_HANDOFF`/channel-2-quality breakthrough
+that closed out the last 17 variables - 137 routines and 175 variables
+total, all named, plus two corrected wrong guesses (`ROM_SELFTEST` was
+"receiver init"; `INIT_REC_FROM_TOA`/`INIT_REC_AND_SEND` were "display
+fill/clear") and one real bug fix (`PHASE_AB_SELECT`/`MUL10_INDEX` were
+mislabeled dead code but are live).
 
 ## Regenerating the tables above
 

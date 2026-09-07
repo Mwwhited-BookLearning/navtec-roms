@@ -10,15 +10,14 @@ a memory monitor and a strip-chart plot mode.
 **Status:** both EPROMs are now fully recovered (they're Intel 8332 masked ROMs,
 not generic 2732s - see [originals/README.md](originals/README.md) for the
 read procedure), the rebuild is re-verified against the assembler (0
-differences over 8192 bytes), and every `CALL`ed jump target in the ROM now
-has a real name (see [docs/jump-graph.md](docs/jump-graph.md)) - a handful
-are honestly flagged as low-confidence rather than guessed. See
-[docs/rom-status.md](docs/rom-status.md) for the ROM recovery story and
-[docs/PROGRESS.md](docs/PROGRESS.md) for a session handoff summary and
-what's next (naming the remaining ~39 variables, raising confidence on the
-low-confidence routines, and the physical-board cross-check notes in
-[docs/hardware.md](docs/hardware.md) that still need meter verification
-against the schematic).
+differences over 8192 bytes), and **every jump target and every variable in
+the ROM now has a real name** (see [docs/jump-graph.md](docs/jump-graph.md))
+- a handful are honestly flagged as low- or medium-confidence rather than
+guessed. See [docs/rom-status.md](docs/rom-status.md) for the ROM recovery
+story and [docs/PROGRESS.md](docs/PROGRESS.md) for a session handoff summary
+and what's next (raising confidence on the four flagged names, and the
+physical-board cross-check notes in [docs/hardware.md](docs/hardware.md)
+that still need meter verification against the schematic).
 
 ## Layout
 

@@ -306,7 +306,7 @@ TRACK_LOOP:                                  ; xref: j024A
 0231  CD 08 0F   CALL ACTIVATE_SELECTED_SLOT
 0234  C3 3A 02   JMP TRACK_UPDATE
 TRACK_DISP1:                                 ; xref: j0229
-0237  CD 31 0F   CALL SLOT_STATE_DISPATCH
+0237  CD 31 0F   CALL MASTER_SEC_PULSE_HANDOFF
 TRACK_UPDATE:                                ; xref: j022E j0234
 023A  CD 17 08   CALL EPOCH_PHASE_UPDATE
 
@@ -851,13 +851,15 @@ CLEAR_PULSES:                                ; xref: c01B5 c057A c040C c036B
 ; MUL10_INDEX, 0515) - it has a real caller (EPOCH_PHASE_UPDATE, 0817) and a forced db
 ; override was hiding it. Toggles bit 7 of SLOT_FLAGS[0] (RLC/CMC/RAR is a 3-instruction
 ; idiom for "invert bit 7, leave the rest alone"), stores it back, then returns one of
-; two hard-coded 16-bit constants in HL depending on the new bit 7: 0F9CAH if set,
-; 00AC9FH if clear. Byte-split, those are exactly the master/secondary GRI-A and GRI-B
-; phase-code pairs from firmware.md (CA/F9 and 9F/AC) - this is the real-time GRI-A/
-; GRI-B alternator Loran-C phase coding requires, hence the name. NOT actually a data
-; table (the previous "followed by the phase-code table" reading of these same bytes
-; was a coincidence of the guess, not a real second structure - 0594 has zero xrefs of
-; its own; it's the fallthrough continuation of this routine's own code).
+; two hard-coded 16-bit constants in HL depending on the new bit 7: PHASE_PAIR_A (0F9CAH,
+; was M_F9CA) if set, PHASE_PAIR_B (00AC9FH, was M_AC9F) if clear. Byte-split, those are
+; exactly the master/secondary GRI-A and GRI-B phase-code pairs from firmware.md (CA/F9 and
+; 9F/AC) - this is the real-time GRI-A/GRI-B alternator Loran-C phase coding requires, hence
+; the routine name. NOT actually a data table (the previous "followed by the phase-code
+; table" reading of these same bytes was a coincidence of the guess, not a real second
+; structure - 0594 has zero xrefs of its own; it's the fallthrough continuation of this
+; routine's own code). PHASE_PAIR_A/B are single-use LXI-immediate constants, named for
+; clarity, not real memory locations.
 PHASE_AB_SELECT:                             ; xref: c0817
 058C  21 04 6F   LXI H,SLOT_FLAGS
 058F  7E         MOV A,M
@@ -866,9 +868,9 @@ PHASE_AB_SELECT:                             ; xref: c0817
 0592  1F         RAR
 0593  77         MOV M,A
 0594  07         RLC
-0595  21 CA F9   LXI H,M_F9CA
+0595  21 CA F9   LXI H,PHASE_PAIR_A
 0598  D8         RC
-0599  21 9F AC   LXI H,M_AC9F
+0599  21 9F AC   LXI H,PHASE_PAIR_B
 059C  C9         RET
 
 ; PHASE_MISMATCH: B = popcount(PHASE_REF XOR B) = number of phase-code bit errors.
@@ -1321,17 +1323,23 @@ L_0810:                                      ; xref: j0813
 
 ; EPOCH_PHASE_UPDATE (was X_0817; old rom-status.md guess "per-epoch update, likely
 ; display of TDs" - the display part was wrong, no display code anywhere in this routine).
-; CONFIRMED: calls PHASE_AB_SELECT and stores its alternating result into PHASE_REF, then
-; CALL LOAD_CUR_REC. Then a conditional block gated on PULSE_ALIGN_FLAGS bit 0, running
-; PULSE_ALIGN_ADJ and conditionally TOA_ADD_1000/TOA_SUB_1000/TOA_SUB_3000 (now resolved -
-; see PULSE_ALIGN_ADJ, 0E6D). After that block (taken or not), PHASE_REF is OVERWRITTEN
-; AGAIN from M_6FBC (so PHASE_AB_SELECT's value only lasts transiently during the
-; PULSE_ALIGN_ADJ-family calls, not as this routine's lasting effect) and PULSE_ALIGN_FLAGS
-; is refreshed from PHASE_QUAL_FLAGS (set by PHASE_QUALITY_UPDATE, 0BC5, when a phase-code
-; quality accumulator saturates - see there for the full picture). Finally: if
-; RESTART_REQ==1, a SEL_A/BUTTONS-driven block updates CUR_REC/CUR_FLAGS bits (looks like
-; manual override / re-sync when the operator changes the selector during set-up) before
-; falling into SAVE_CUR_REC. M_6FBC's own role is still untraced.
+; CONFIRMED: calls PHASE_AB_SELECT and SHLD's its alternating 16-bit result into PHASE_REF -
+; this is a single 16-bit store, so it sets BOTH PHASE_REF (low byte, e.g. CAH) AND
+; PHASE_REF_HI (high byte, e.g. F9H) in one instruction. Then CALL LOAD_CUR_REC, then a
+; conditional block gated on PULSE_ALIGN_FLAGS bit 0, running PULSE_ALIGN_ADJ and
+; conditionally TOA_ADD_1000/TOA_SUB_1000/TOA_SUB_3000. After that block (taken or not),
+; PHASE_REF's LOW byte only is overwritten with PHASE_REF_HI's value (LDA PHASE_REF_HI;
+; STA PHASE_REF - previously misread as an independent "M_6FBC" variable with an
+; unreconciled role; it's PHASE_REF's own second byte, not separate state). Net effect: after
+; this routine, PHASE_REF's low and high bytes both equal whatever PHASE_AB_SELECT's high
+; byte was for this epoch (channel-1's reference is overwritten with channel-2's value,
+; matching PHASE_CODE/PHASE_CODE_HI's two-channel structure per hardware.md) - why the two
+; channels get FORCED equal here isn't identified, only that the mechanism is now fully
+; traced. PULSE_ALIGN_FLAGS is also refreshed from PHASE_QUAL_FLAGS (set by
+; PHASE_QUALITY_UPDATE, 0BC5, when a phase-code quality accumulator saturates - see there for
+; the full picture). Finally: if RESTART_REQ==1, a SEL_A/BUTTONS-driven block updates
+; CUR_REC/CUR_FLAGS bits (looks like manual override / re-sync when the operator changes the
+; selector during set-up) before falling into SAVE_CUR_REC.
 EPOCH_PHASE_UPDATE:                          ; xref: c01E7 c023A
 0817  CD 8C 05   CALL PHASE_AB_SELECT
 081A  22 BB 6F   SHLD PHASE_REF
@@ -1351,7 +1359,7 @@ EPOCH_PHASE_UPDATE:                          ; xref: c01E7 c023A
 0837  DC B2 0E   CC TOA_SUB_3000
 L_083A:                                      ; xref: j0825
 083A  CD 1B 09   CALL ACCUM_SLOT_TOA
-083D  3A BC 6F   LDA M_6FBC
+083D  3A BC 6F   LDA PHASE_REF_HI
 0840  32 BB 6F   STA PHASE_REF
 0843  3A BD 6F   LDA PHASE_QUAL_FLAGS
 0846  32 BE 6F   STA PULSE_ALIGN_FLAGS
@@ -1489,13 +1497,13 @@ SLOT_STALE_CHECK:                            ; xref: c08A9
 
 ; ACCUM_SLOT_TOA (was SUB_091B). HL = ACCUM_TOA_TBL + 10*SLOT_IDX via MUL10_INDEX
 ; (confirming ACCUM_TOA_TBL is a 10-byte-stride per-slot table, like SEL_COL_TBL). For
-; slot 0 (master): record[0..3] += M_6F28. For other slots: record[0..3] += CUR_TOA, then
-; += MASTER_TOA_CORR too (two BCD_ADD4 calls into the same destination - an accumulator,
-; not a single add). If REC_MASTER's status byte bit 7 is clear (master not "active"),
-; zeroes MASTER_TOA_CORR first. Finally increments record+5 - a sample counter alongside
-; the running sum, consistent with computing a smoothed/averaged TOA per slot for the
-; report or display rather than using the raw per-epoch value directly. M_6F28's role
-; isn't traced further (only referenced here).
+; slot 0 (master): record[0..3] += REC_MASTER_4 (REC_MASTER's own CUR_TOA-equivalent field,
+; confirmed by address arithmetic: 6F24+4=6F28). For other slots: record[0..3] += CUR_TOA,
+; then += MASTER_TOA_CORR too (two BCD_ADD4 calls into the same destination - an
+; accumulator, not a single add). If REC_MASTER's status byte bit 7 is clear (master not
+; "active"), zeroes MASTER_TOA_CORR first. Finally increments record+5 - a sample counter
+; alongside the running sum, consistent with computing a smoothed/averaged TOA per slot for
+; the report or display rather than using the raw per-epoch value directly.
 ACCUM_SLOT_TOA:                              ; xref: j0903 j0909 j0913 c083A
 091B  C5         PUSH B
 091C  3A 11 6F   LDA SLOT_IDX
@@ -1513,7 +1521,7 @@ ACCUM_SLOT_TOA:                              ; xref: j0903 j0909 j0913 c083A
 0939  CD 82 07   CALL BCD_ADD4
 093C  C3 45 09   JMP L_0945
 L_093F:                                      ; xref: j0930
-093F  21 28 6F   LXI H,M_6F28
+093F  21 28 6F   LXI H,REC_MASTER_4
 0942  CD 82 07   CALL BCD_ADD4
 L_0945:                                      ; xref: j093C
 0945  3A 24 6F   LDA REC_MASTER
@@ -1550,7 +1558,7 @@ L_0972:                                      ; xref: j096B
 0977  C5         PUSH B
 0978  3A C9 70   LDA SW_D2
 097B  FE 0A      CPI 0AH
-097D  C4 20 1F   CNZ SLOT0_COPY_M70D4
+097D  C4 20 1F   CNZ SLOT0_SNAPSHOT_TOA
 0980  C1         POP B
 0981  60         MOV H,B
 0982  69         MOV L,C
@@ -1626,7 +1634,7 @@ L_09D9:                                      ; xref: j09D3
 09ED  B1         ORA C
 09EE  57         MOV D,A
 09EF  3A 11 6F   LDA SLOT_IDX
-09F2  21 F4 6F   LXI H,M_6FF4
+09F2  21 F4 6F   LXI H,SLOTREC_6
 09F5  CD 0B 05   CALL MUL9_INDEX
 09F8  EE 80      XRI 80H
 09FA  E6 80      ANI 80H
@@ -1672,14 +1680,14 @@ L_0A22:                                      ; xref: j0A1B
 0A44  CA 6E 0A   JZ L_0A6E
 0A47  21 04 10   LXI H,D_1004
 
-; M_2002 (0A4A) and M_2010 (0C6E), despite the addresses falling in the optional-
-; expansion-ROM range (2000-2FFF), do not appear to be calls into it - 0A4A's DE=2002H
-; gets conditionally XCHG'd with HL and stored into VAR_6FE6 as one of two 16-bit tag
-; values (the other being D_1004, itself a known instruction-boundary artifact), and
-; 0C6E's BC=2010H is never obviously consumed nearby. Likely incidental 16-bit constants
-; reused for their distinctive bit pattern, not deliberate expansion-ROM addresses -
-; low confidence, not fully traced.
-0A4A  11 02 20   LXI D,M_2002
+; TAG_2002 (0A4A) and TAG_2010 (0C6E), despite the addresses falling in the optional-
+; expansion-ROM range (2000-2FFF), do not appear to be calls into it - 0A4A's DE=2002H gets
+; conditionally XCHG'd with HL and stored into VAR_6FE6 as one of two 16-bit tag values (the
+; other being D_1004, itself a known instruction-boundary artifact), and 0C6E's BC=2010H is
+; never obviously consumed nearby. Likely incidental 16-bit constants reused for their
+; distinctive bit pattern, not deliberate expansion-ROM addresses - low confidence, not fully
+; traced. Named for clarity, not because they're confirmed real memory references.
+0A4A  11 02 20   LXI D,TAG_2002
 0A4D  3A A1 6F   LDA CUR_REC
 0A50  47         MOV B,A
 0A51  3A BA 6F   LDA CUR_FLAGS
@@ -1731,17 +1739,17 @@ L_0A9E:                                      ; xref: j0A99
 0AA4  B0         ORA B
 0AA5  77         MOV M,A
 0AA6  47         MOV B,A
-0AA7  2A B3 6F   LHLD M_6FB3
+0AA7  2A B3 6F   LHLD QUAL_STREAK_CNT
 
-; M_FF38/M_FF80/M_FFC0 (0AAA/0ABC/0AD5) are not real variables - each is an
-; LXI-immediate 16-bit negative constant (-200, -128, -64) added via DAD to test PHASE_QUAL_A
-; or M_6FB3 against a magnitude threshold (sign of the sum = below/above threshold), in the
-; SLOT_TRACKING-area code around 0A9E-0AE6 that also uses D_0040/D_0080 (+64/+128) the same
-; way against PHASE_QUAL_B. Reads as multi-band confidence-threshold testing on the two
-; phase-quality accumulators, feeding a CUR_REC/CUR_FLAGS bit update - not traced bit-by-bit.
-; M_6FB1/M_6FB2/M_6FB3 (touched in the same area, and by CLAMP_HL_BC's caller at 0D24) are
-; part of this same quality-tracking neighborhood; not individually resolved.
-0AAA  11 38 FF   LXI D,M_FF38
+; NEG_200/NEG_128/NEG_64 (0AAA/0ABC/0AD5, were M_FF38/M_FF80/M_FFC0) are not real
+; memory locations - each is an LXI-immediate 16-bit negative constant added via DAD to test
+; PHASE_QUAL_A or QUAL_STREAK_CNT against a magnitude threshold (sign of the sum = below/
+; above threshold), in the SLOT_TRACKING-area code around 0A9E-0AE6 that also uses
+; D_0040/D_0080 (+64/+128) the same way against PHASE_QUAL_B. Confidence-band testing on the
+; two phase-quality accumulators, feeding a CUR_REC/CUR_FLAGS bit update. NEG_100 (0FA2, was
+; M_FF9C) is the same kind of constant but unrelated to this cluster - it's
+; MASTER_SEC_PULSE_HANDOFF's state-2 threshold test against REC_MASTER_18 (0F9E).
+0AAA  11 38 FF   LXI D,NEG_200
 0AAD  19         DAD D
 0AAE  7C         MOV A,H
 0AAF  07         RLC
@@ -1751,7 +1759,7 @@ L_0A9E:                                      ; xref: j0A99
 0AB6  32 A1 6F   STA CUR_REC
 L_0AB9:                                      ; xref: j0AB0
 0AB9  2A B5 6F   LHLD PHASE_QUAL_A
-0ABC  01 80 FF   LXI B,M_FF80
+0ABC  01 80 FF   LXI B,NEG_128
 0ABF  09         DAD B
 0AC0  7C         MOV A,H
 0AC1  07         RLC
@@ -1765,7 +1773,7 @@ L_0AB9:                                      ; xref: j0AB0
 0AD1  C9         RET
 L_0AD2:                                      ; xref: j0AC2
 0AD2  2A B5 6F   LHLD PHASE_QUAL_A
-0AD5  01 C0 FF   LXI B,M_FFC0
+0AD5  01 C0 FF   LXI B,NEG_64
 0AD8  09         DAD B
 0AD9  7C         MOV A,H
 0ADA  07         RLC
@@ -1960,7 +1968,7 @@ PHASE_QUALITY_UPDATE:                        ; xref: c0A68
 0BC8  3A CB 70   LDA SW_D4
 0BCB  FE 09      CPI 09H
 0BCD  D4 5C 10   CNC SLOTREC_UPDATE
-0BD0  21 B0 6F   LXI H,M_6FB0
+0BD0  21 B0 6F   LXI H,PHASE_QUAL_UPDATE_CNT
 0BD3  34         INR M
 0BD4  2A B5 6F   LHLD PHASE_QUAL_A
 0BD7  3A BF 6F   LDA PHASE_CODE
@@ -2010,10 +2018,10 @@ L_0C2E:                                      ; xref: j0C21
 L_0C37:                                      ; xref: j0A5F
 0C37  CD 07 0B   CALL PULSE_SCORE_UPDATE
 
-; M_8020 (0C3A) is not a real variable - LXI B,8020H loads two independent byte
-; constants (B=80H, C=20H) in one instruction, a common code-golf trick; used a few
-; instructions later inside SET_QUAL_FLAGS's B/C parameter pair. Not a memory reference.
-0C3A  01 20 80   LXI B,M_8020
+; PAIR_80_20 (0C3A, was M_8020) is not a real variable - LXI B,8020H loads two
+; independent byte constants (B=80H, C=20H) in one instruction, a common code-golf trick;
+; used a few instructions later inside SET_QUAL_FLAGS's B/C parameter pair.
+0C3A  01 20 80   LXI B,PAIR_80_20
 0C3D  21 BA 6F   LXI H,CUR_FLAGS
 0C40  7E         MOV A,M
 0C41  E6 20      ANI 20H                     ; ' '
@@ -2045,7 +2053,7 @@ L_0C50:                                      ; xref: j0C48
 0C68  FE 00      CPI 00H
 0C6A  CA B0 0C   JZ L_0CB0
 0C6D  1C         INR E
-0C6E  01 10 20   LXI B,M_2010
+0C6E  01 10 20   LXI B,TAG_2010
 0C71  FE 01      CPI 01H
 0C73  CA 96 0C   JZ L_0C96
 0C76  FE 02      CPI 02H
@@ -2081,7 +2089,7 @@ L_0C96:                                      ; xref: j0C73
 ; not traced branch-by-branch).
 SET_QUAL_FLAGS:                              ; xref: c0CB1
 0CA4  AF         XRA A
-0CA5  32 B2 6F   STA M_6FB2
+0CA5  32 B2 6F   STA MATCH_SCORE_HI
 0CA8  21 BD 6F   LXI H,PHASE_QUAL_FLAGS
 0CAB  7E         MOV A,M
 0CAC  B1         ORA C
@@ -2141,8 +2149,26 @@ L_0CFE:                                      ; xref: j0B8A
 0D04  E6 80      ANI 80H
 0D06  C2 0C 0D   JNZ L_0D0C
 0D09  CD 5C 10   CALL SLOTREC_UPDATE
+
+; PHASE_QUAL_UPDATE_CNT (6FB0, was M_6FB0): incremented as the first thing
+; PHASE_QUALITY_UPDATE does; never read anywhere in the ROM. Likely a diagnostic counter for
+; inspection via the serial monitor's memory-dump command rather than firmware-consumed state.
+; MATCH_SCORE_HI (6FB2, was M_6FB2, this block): a signed, +-95-clamped accumulator (sign-
+; extended, adjusted by POPCOUNT_ADJ_HL on the COMPLEMENT of PHASE_CODE_HI - i.e. by match
+; count rather than PHASE_QUALITY_UPDATE's mismatch count - then CLAMP_HL_BC'd against a
+; D_005F/95 constant) - a second, faster/narrower-range quality indicator for channel 2,
+; alongside PHASE_QUAL_B's slower +-511-range one. If MATCH_SCORE_HI is non-negative: reads
+; CUR_FLAGS bit 7 to decide whether to reset QUAL_STREAK_CNT (6FB3, was M_6FB3, a 16-bit
+; counter) to 0 or increment it, and sets/clears CUR_FLAGS bit 5 to match. (The preceding
+; "A -= 40H" on MATCH_SCORE_HI's value is computed but its result and flags are then
+; overwritten by the CUR_FLAGS read before ever being used - dead computation, not acted on.)
+; QUAL_STREAK_DIV5 (6FB1, was M_6FB1): increments every pass; reset to 0 once it reaches 5,
+; otherwise returns - a mod-5 rate limiter or periodic trigger, gating whatever follows this
+; block. Overall: a consecutive-good/bad-epoch streak counter for the channel-2 quality
+; signal, checked every 5th pass. SELECT_INCDEC's own INCDEC_TOGGLE (6FC7) is a separate
+; single-bit-toggle flag nearby (see 1E9B), not part of this mechanism.
 L_0D0C:                                      ; xref: j0D06
-0D0C  21 B2 6F   LXI H,M_6FB2
+0D0C  21 B2 6F   LXI H,MATCH_SCORE_HI
 0D0F  E5         PUSH H
 0D10  7E         MOV A,M
 0D11  26 00      MVI H,00H
@@ -2157,12 +2183,12 @@ L_0D1A:                                      ; xref: j0D15
 0D21  01 5F 00   LXI B,D_005F
 0D24  CD 8D 0B   CALL CLAMP_HL_BC
 0D27  7D         MOV A,L
-0D28  32 B2 6F   STA M_6FB2
+0D28  32 B2 6F   STA MATCH_SCORE_HI
 0D2B  07         RLC
 0D2C  DA 6F 0D   JC L_0D6F
 0D2F  7D         MOV A,L
 0D30  D6 40      SUI 40H                     ; '@'
-0D32  2A B3 6F   LHLD M_6FB3
+0D32  2A B3 6F   LHLD QUAL_STREAK_CNT
 0D35  11 BA 6F   LXI D,CUR_FLAGS
 0D38  1A         LDAX D
 0D39  FA 44 0D   JM L_0D44
@@ -2174,8 +2200,8 @@ L_0D44:                                      ; xref: j0D39 j0D76
 0D46  23         INX H
 L_0D47:                                      ; xref: j0D41
 0D47  12         STAX D
-0D48  22 B3 6F   SHLD M_6FB3
-0D4B  21 B1 6F   LXI H,M_6FB1
+0D48  22 B3 6F   SHLD QUAL_STREAK_CNT
+0D4B  21 B1 6F   LXI H,QUAL_STREAK_DIV5
 0D4E  34         INR M
 0D4F  7E         MOV A,M
 0D50  FE 05      CPI 05H
@@ -2202,7 +2228,7 @@ L_0D6A:                                      ; xref: j0D5C
 0D6D  02         STAX B
 0D6E  C9         RET
 L_0D6F:                                      ; xref: j0D2C
-0D6F  2A B3 6F   LHLD M_6FB3
+0D6F  2A B3 6F   LHLD QUAL_STREAK_CNT
 0D72  11 BA 6F   LXI D,CUR_FLAGS
 0D75  1A         LDAX D
 0D76  C3 44 0D   JMP L_0D44
@@ -2218,17 +2244,18 @@ INIT_REC_AND_SEND:                           ; xref: c019C
 0D7C  C3 E6 0D   JMP REC_TO_FRONTEND
 
 ; SAVE_REC_SYNC (was SUB_0D7F, called only from SAVE_CUR_REC - runs on every record
-; save). For slot 0 (master): BCD_TO_BIN's M_6FA8 into VAR_6FE2, then SEED_REC_STATUS.
-; For other slots: if VAR_6FE2's bits 1,0 (tested via two RRC) are both clear, just
-; SEED_REC_STATUS; otherwise temporarily bumps CUR_TOA by VAR_6FE3, reseeds CUR_REC from
-; that bumped value, then subtracts VAR_6FE3 back out - the same "offset, reseed, undo"
-; pattern CALC_TD/TOA_SUB_CONST uses elsewhere. Keeps some CUR_REC field in sync with
-; CUR_TOA/M_6FA8 after every save; VAR_6FE2/VAR_6FE3's deeper roles aren't traced further.
+; save). For slot 0 (master): BCD_TO_BIN's CUR_TOA_3 (CUR_TOA's last byte, 6FA5+3=6FA8,
+; confirmed by address arithmetic) into VAR_6FE2, then SEED_REC_STATUS. For other slots: if
+; VAR_6FE2's bits 1,0 (tested via two RRC) are both clear, just SEED_REC_STATUS; otherwise
+; temporarily bumps CUR_TOA by VAR_6FE3, reseeds CUR_REC from that bumped value, then
+; subtracts VAR_6FE3 back out - the same "offset, reseed, undo" pattern CALC_TD/
+; TOA_SUB_CONST uses elsewhere. Keeps some CUR_REC field in sync with CUR_TOA's last byte
+; after every save; VAR_6FE2/VAR_6FE3's deeper roles aren't traced further.
 SAVE_REC_SYNC:                               ; xref: c0875
 0D7F  3A 11 6F   LDA SLOT_IDX
 0D82  FE 00      CPI 00H
 0D84  C2 93 0D   JNZ L_0D93
-0D87  3A A8 6F   LDA M_6FA8
+0D87  3A A8 6F   LDA CUR_TOA_3
 0D8A  CD D9 07   CALL BCD_TO_BIN
 0D8D  32 E2 6F   STA VAR_6FE2
 0D90  C3 B0 0D   JMP SEED_REC_STATUS
@@ -2455,15 +2482,15 @@ PULSE_ALIGN_ADJ2_AND_CLEAR:                  ; xref: c0872 j0C34
 
 ; CLEAR_TRACK_VARS: zero PHASE_QUAL_A, PHASE_QUAL_B (via SHLD of the RESET vector's
 ; 0000H, a code-golf reuse of an existing zero word rather than a fresh 00,00 immediate)
-; and M_6FB2. PULSE_ALIGN_ADJ2_AND_CLEAR (0E92) is CALL PULSE_ALIGN_ADJ2 falling straight
-; through into this same body (no RET in between) - the two are almost always used
+; and MATCH_SCORE_HI. PULSE_ALIGN_ADJ2_AND_CLEAR (0E92) is CALL PULSE_ALIGN_ADJ2 falling
+; straight through into this same body (no RET in between) - the two are almost always used
 ; as one combined operation; this entry point alone is only reached directly from 08EB.
 CLEAR_TRACK_VARS:                            ; xref: c08EB
 0E95  21 00 00   LXI H,RESET
 0E98  22 B5 6F   SHLD PHASE_QUAL_A
 0E9B  22 B8 6F   SHLD PHASE_QUAL_B
 0E9E  7C         MOV A,H
-0E9F  32 B2 6F   STA M_6FB2
+0E9F  32 B2 6F   STA MATCH_SCORE_HI
 0EA2  C9         RET
 TOA_SUB_1000:                                ; xref: c0E89 c0E6F c0832
 0EA3  21 11 00   LXI H,TOA_ADJ_1000
@@ -2583,18 +2610,37 @@ SET_SLOT_ACTIVE:                             ; xref: c0212
 0F2D  32 13 6F   STA TRACK_STATE
 0F30  C9         RET
 
-; SLOT_STATE_DISPATCH (was X_0F31, called once per epoch from TRACK_LOOP when
-; DISP_MODE selects it). LOW CONFIDENCE on the name - this is the hardest area in the
-; ROM (firmware.md already flags the window arithmetic near here as "working names, not
-; proven ones"). Confirmed structure: dispatches on RAM1_BASE as a 0/1/2 tri-state
-; variable (overloading its "base of 8155 #1 RAM" role from INIT/FILL_ZERO), each state
-; gating a different check against FIRST_SLOT's flags before relocating a 5-byte block
-; (COPY_E then FILL_ZERO, both length 5) between two possible destinations chosen via a
-; conditional XCHG between M_6F2D and M_6F46. Converges with X_0F6A (reached separately
-; from the ROM1/ROM2 boundary tail at 1024) on a shared continuation (L_0F6F) that clears
-; a flag bit and calls RESET_REC_TAIL. Not fully traced - a good target for a dedicated
-; pass with fresh eyes rather than guessing further.
-SLOT_STATE_DISPATCH:                         ; xref: c0237
+; MASTER_SEC_PULSE_HANDOFF (was X_0F31/SLOT_STATE_DISPATCH, called once per epoch from
+; TRACK_LOOP when DISP_MODE selects it). RESOLVED on a second pass - confidence raised from
+; low to high. REC_MASTER_9 (6F2D) is exactly REC_MASTER+9 = REC_MASTER's CUR_PULSES field;
+; REC_SEC_9 (6F46) is exactly REC_SEC[0]+9 = REC_SEC[0]'s CUR_PULSES field (both verified by
+; address arithmetic). Dispatches on RAM1_BASE as a 0/1/2 tri-state variable (overloading
+; its "base of 8155 #1 RAM" role from INIT/FILL_ZERO):
+;   State 0: if FIRST_SLOT's flags have bits 5 AND 6 both set, sets RAM1_BASE=1, calls
+;     RESET_REC_TAIL(REC_MASTER) (marks it active, clears its tail), then falls through
+;     with (B,A) = (FIRST_SLOT, 0).
+;   State 1: if the master's OWN flags (SLOT_FLAGS[0]) have bit 4 set, sets RAM1_BASE=2 and
+;     falls through with (B,A) = (0, FIRST_SLOT); otherwise defers to X_0FBE's slot search
+;     instead (RAM1_BASE stays 1).
+;   State 2 (L_0F9E): tests REC_MASTER_18 (a 16-bit field in REC_MASTER's otherwise-unnamed
+;     +16..+21 gap, between CUR_PULSE_PTR and CUR_MODE) against a threshold of 100 via
+;     DAD-with-(-100). If the master's own flags bit 3 is clear, defers to the shared
+;     CHK_H_NEG/X_0FBE slot-search tail regardless of the threshold result. If bit 3 is set:
+;     below 100 also defers to X_0FBE (via L_0FBC); at or above 100, tests FIRST_SLOT's flags
+;     bit 6 and, if set, loops back into the state-0/1 shared tail at L_0F54 (re-running the
+;     handoff), otherwise just returns. Reads as "once REC_MASTER_18 reaches 100, keep
+;     re-running the handoff while FIRST_SLOT stays in its bit-6 condition" - REC_MASTER_18's
+;     own meaning (a count? a quality score?) isn't identified, only that it's tested as a
+;     16-bit magnitude.
+;   Shared tail (L_0F6F): clears bit 3 of slot A's flags, sets bit 3 of slot B's flags, then
+;     COPY_E's 5 bytes from one of {REC_MASTER_9, REC_SEC_9} to the other and FILL_ZEROs the
+;     source - state 0's path copies REC_MASTER_9 -> REC_SEC_9 (master's accumulated pulse
+;     positions seed the first secondary's slot), state 1's path copies it back
+;     REC_SEC_9 -> REC_MASTER_9. A two-stage pulse-position handoff between the master and
+;     the first tracked secondary, gated on specific flag-bit milestones, with X_0F6A
+;     (reached separately from the ROM1/ROM2 boundary tail at 1024) as an alternate entry
+;     into the same state-1-style handoff with B=0 forced.
+MASTER_SEC_PULSE_HANDOFF:                    ; xref: c0237
 0F31  3A 04 6F   LDA SLOT_FLAGS
 0F34  47         MOV B,A
 0F35  21 00 6F   LXI H,RAM1_BASE
@@ -2637,8 +2683,8 @@ L_0F6F:                                      ; xref: j0F59
 0F77  77         MOV M,A
 0F78  F1         POP PSW
 0F79  FE 00      CPI 00H
-0F7B  21 2D 6F   LXI H,M_6F2D
-0F7E  11 46 6F   LXI D,M_6F46
+0F7B  21 2D 6F   LXI H,REC_MASTER_9
+0F7E  11 46 6F   LXI D,REC_SEC_9
 0F81  CA 85 0F   JZ L_0F85
 0F84  EB         XCHG
 L_0F85:                                      ; xref: j0F81
@@ -2660,8 +2706,8 @@ L_0F85:                                      ; xref: j0F81
 0F9B  C3 0F 08   JMP FILL_ZERO
 L_0F9E:                                      ; xref: j0F5F
 0F9E  78         MOV A,B
-0F9F  2A 36 6F   LHLD M_6F36
-0FA2  11 9C FF   LXI D,M_FF9C
+0F9F  2A 36 6F   LHLD REC_MASTER_18
+0FA2  11 9C FF   LXI D,NEG_100
 0FA5  19         DAD D
 0FA6  E6 08      ANI 08H
 0FA8  CA 22 10   JZ CHK_H_NEG
@@ -2818,7 +2864,12 @@ SLOTREC_UPDATE:                              ; xref: c0BCD c0D09
 SRU_SUB:                                     ; xref: j106C
 1076  E1         POP H
 1077  E5         PUSH H
-1078  01 EA 6F   LXI B,M_6FEA
+
+; BCD_TMP_1 (was M_6FEA): BCD_TMP+1, addressed directly via LXI B rather than through
+; BCD_TMP+offset arithmetic. BCD_TMP is a general-purpose scratch buffer reused across
+; different computations, so this byte's meaning varies by call site rather than having one
+; fixed role.
+1078  01 EA 6F   LXI B,BCD_TMP_1
 107B  CD BB 07   CALL COPY4
 107E  21 E9 6F   LXI H,BCD_TMP
 1081  36 00      MVI M,00H
@@ -3854,7 +3905,7 @@ RPT_FMT_TD3:                                 ; xref: j17FB
 1821  E6 20      ANI 20H                     ; ' '
 1823  CA 36 18   JZ L_1836
 1826  3A D0 70   LDA RPT_STATE
-1829  21 F4 6F   LXI H,M_6FF4
+1829  21 F4 6F   LXI H,SLOTREC_6
 182C  CD 0B 05   CALL MUL9_INDEX
 182F  FE 00      CPI 00H
 1831  3E 42      MVI A,42H                   ; 'B'
@@ -4439,7 +4490,7 @@ L_1C4F:                                      ; xref: j1C48
 1C50  C9         RET
 L_1C51:                                      ; xref: j1BA5
 1C51  3A C5 6F   LDA SEL_A
-1C54  21 EF 6F   LXI H,M_6FEF
+1C54  21 EF 6F   LXI H,SLOTREC_1
 1C57  CD 0B 05   CALL MUL9_INDEX
 1C5A  44         MOV B,H
 1C5B  4D         MOV C,L
@@ -4491,7 +4542,7 @@ L_1C91:                                      ; xref: j1C89
 1CA6  C3 80 1C   JMP L_1C80
 L_1CA9:                                      ; xref: j1C6F j1C77 j1C9E
 1CA9  7B         MOV A,E
-1CAA  21 EF 6F   LXI H,M_6FEF
+1CAA  21 EF 6F   LXI H,SLOTREC_1
 1CAD  CD 0B 05   CALL MUL9_INDEX
 1CB0  E5         PUSH H
 1CB1  7B         MOV A,E
@@ -4516,7 +4567,7 @@ L_1CC5:                                      ; xref: j1B19
 1CD8  CA 65 1C   JZ L_1C65
 1CDB  C3 AD 1B   JMP L_1BAD
 L_1CDE:                                      ; xref: j1CD3
-1CDE  01 EF 6F   LXI B,M_6FEF
+1CDE  01 EF 6F   LXI B,SLOTREC_1
 1CE1  3E 40      MVI A,40H                   ; '@'
 1CE3  32 B8 70   STA DISP_ROW_B_FLAG
 1CE6  E1         POP H
@@ -4823,7 +4874,7 @@ L_1E73:                                      ; xref: j098E
 1E79  36 00      MVI M,00H
 1E7B  2B         DCX H
 1E7C  36 00      MVI M,00H
-1E7E  CD 9B 1E   CALL TOGGLE_70C7_BIT
+1E7E  CD 9B 1E   CALL SELECT_INCDEC
 1E81  0F         RRC
 1E82  2B         DCX H
 1E83  DA 8F 1E   JC L_1E8F
@@ -4844,13 +4895,19 @@ L_1E8F:                                      ; xref: j1E83
 L_1E98:                                      ; xref: j1E8C
 1E98  C3 CB 09   JMP L_09CB
 
-; TOGGLE_70C7_BIT (was SUB_1E9B, sole caller 1E7E - a BCD tick increment/decrement
-; dispatcher unrelated to the shift cluster below). Reads M_70C7, rotates a copy left 3,
-; XORs with the original, then applies another RLC/CMC/RAL pass (the same kind of
-; single-bit-toggle idiom PHASE_AB_SELECT uses) and stores back. Exact bit and purpose
-; not identified - mechanical description only.
-TOGGLE_70C7_BIT:                             ; xref: c1E7E
-1E9B  3A C7 70   LDA M_70C7
+; SELECT_INCDEC (was SUB_1E9B/TOGGLE_70C7_BIT, sole caller 1E7E). Reads INCDEC_TOGGLE
+; (6FC7, was M_70C7), rotates a copy left 3, XORs with the original, applies another
+; RLC/CMC/RAL toggle pass (the same idiom PHASE_AB_SELECT uses to flip one bit) and stores
+; back - so this flips one specific bit of INCDEC_TOGGLE each call. Confirmed effect at the
+; call site (1E7E-1E98): the caller zeroes a 4-byte BCD field, calls this, then tests bit 0
+; of ITS return value (via RRC) to choose between incrementing (ADI 01H;DAA) or
+; BCD-decrementing (99H+carry+M;DAA, the ten's-complement-minus-1 idiom) that same field -
+; i.e. INCDEC_TOGGLE's state picks increment-vs-decrement direction for a BCD counter,
+; alternating (or otherwise varying) each time SELECT_INCDEC runs. Which specific bit and
+; why it should alternate isn't identified - the caller (reached from 098E, inside
+; ACCUM_SLOT_TOA's neighborhood, gated on CUR_REC status bit 7) isn't traced further either.
+SELECT_INCDEC:                               ; xref: c1E7E
+1E9B  3A C7 70   LDA INCDEC_TOGGLE
 1E9E  47         MOV B,A
 1E9F  07         RLC
 1EA0  07         RLC
@@ -4859,7 +4916,7 @@ TOGGLE_70C7_BIT:                             ; xref: c1E7E
 1EA3  07         RLC
 1EA4  3F         CMC
 1EA5  17         RAL
-1EA6  32 C7 70   STA M_70C7
+1EA6  32 C7 70   STA INCDEC_TOGGLE
 1EA9  C9         RET
 
 ; SHR4_ROUND (was SUB_1EAA). Shifts HL right 4 bits (one packed-BCD digit) via 4
@@ -4993,18 +5050,22 @@ SWAP_HL_STASH:                               ; xref: c1F6E
 1F1D  36 00      MVI M,00H
 1F1F  C9         RET
 
-; SLOT0_COPY_M70D4 (was SUB_1F20, called conditionally from a SW_D2-gated block around
-; 097D). For SLOT_IDX==0 (master): copies 4 bytes from the caller's BC into M_70D4. For
-; other slots: falls into a RESET-based (HL=0000H) path not fully traced. Low confidence -
-; this whole area (the 1E9B-1F20 BCD cluster and its caller here) is plausibly related to
-; PLOT-mode TD scaling but that connection is not confirmed.
-SLOT0_COPY_M70D4:                            ; xref: c097D
+; SLOT0_SNAPSHOT_TOA (was SUB_1F20/SLOT0_COPY_M70D4, called conditionally from a
+; SW_D2-gated block around 097D). For SLOT_IDX==0 (master): copies 4 bytes from the caller's
+; BC into SLOT0_TOA_SNAPSHOT (70D4, was M_70D4) - 4 bytes strongly suggests a TOA-shaped
+; value, hence the name, though the caller's BC isn't confirmed to be CUR_TOA specifically.
+; For other slots: falls into a RESET-based (HL=0000H) path not fully traced. Medium
+; confidence - this whole area (the SELECT_INCDEC/1E9B-1F20 BCD cluster and its caller here)
+; is plausibly related to PLOT-mode TD scaling (the outer routine at 1F35-1F75 uses GRI_VAL
+; and M70D6_OPERAND, another 3-byte LOAD3_BC operand, was M_70D6) but that connection is
+; not confirmed.
+SLOT0_SNAPSHOT_TOA:                          ; xref: c097D
 1F20  3A 11 6F   LDA SLOT_IDX
 1F23  FE 00      CPI 00H
 1F25  C2 30 1F   JNZ L_1F30
 1F28  C5         PUSH B
 1F29  E1         POP H
-1F2A  01 D4 70   LXI B,M_70D4
+1F2A  01 D4 70   LXI B,SLOT0_TOA_SNAPSHOT
 1F2D  C3 BB 07   JMP COPY4
 L_1F30:                                      ; xref: j1F25
 1F30  C5         PUSH B
@@ -5017,7 +5078,7 @@ L_1F30:                                      ; xref: j1F25
 1F3F  CD CF 1E   CALL LOAD3_BC
 1F42  CD AA 1E   CALL SHR4_ROUND
 1F45  E5         PUSH H
-1F46  01 D6 70   LXI B,M_70D6
+1F46  01 D6 70   LXI B,M70D6_OPERAND
 1F49  CD CF 1E   CALL LOAD3_BC
 1F4C  7C         MOV A,H
 1F4D  07         RLC

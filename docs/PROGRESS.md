@@ -1,4 +1,49 @@
-# Progress notes / session handoff (2026-09-06, updated same day)
+# Progress notes / session handoff (2026-09-06/07)
+
+## Update 4: every jump target AND every variable in the ROM now has a name
+
+Finished what Update 3 started: **0 of 137 routines and 0 of 175 variables
+remain generically named.** Two more passes closed out the last 25
+variables:
+
+- A breakthrough on the previously-lowest-confidence routine,
+  `SLOT_STATE_DISPATCH` (now `MASTER_SEC_PULSE_HANDOFF`): its two mystery
+  operands turned out to be exactly `REC_MASTER`+9 and `REC_SEC[0]`+9 (both
+  confirmed by address arithmetic) - the master's and first secondary's
+  `CUR_PULSES` fields. The routine is a 2-3 stage pulse-position handoff
+  between them, gated on flag-bit milestones. Raised from low to high
+  confidence. The same pass resolved `REC_MASTER_4`, `REC_MASTER_18`,
+  `CUR_TOA_3`, `SLOTREC_1`, `SLOTREC_6` - all confirmed record-offset
+  aliases, following the existing `REC_MASTER_14`/`REC_SEC_14` naming
+  convention already in the codebase.
+- A second breakthrough: `M_6FBC`, flagged "role untraced" earlier in the
+  session, turned out not to be an independent variable at all - it's
+  `PHASE_REF`'s own high byte (`PHASE_REF_HI`, confirmed by address
+  arithmetic: `PHASE_REF` is 2 bytes at 6FBB-6FBC). `EPOCH_PHASE_UPDATE`
+  copies it into `PHASE_REF`'s low byte every epoch, meaning the two
+  channel references end up forced equal each epoch - the *why* is still
+  open, but the mechanism is now fully traced instead of mysterious.
+- A quality-tracking cluster inside `PHASE_QUALITY_UPDATE`'s own body
+  (`PHASE_QUAL_UPDATE_CNT`, `QUAL_STREAK_DIV5`, `MATCH_SCORE_HI`,
+  `QUAL_STREAK_CNT`) - a second, faster-response confidence accumulator for
+  channel 2, paralleling `PHASE_QUAL_A`/`PHASE_QUAL_B`.
+- The last handful of confirmed `LXI`-immediate arithmetic constants got
+  descriptive names too (`NEG_200`, `NEG_128`, `NEG_64`, `NEG_100`,
+  `PAIR_80_20`, `PHASE_PAIR_A`, `PHASE_PAIR_B`, `TAG_2002`, `TAG_2010`) -
+  named for readability even though their own comments are explicit that
+  they are not real memory locations, just single-use immediate operands.
+
+Four names remain honestly flagged low/medium-confidence rather than fully
+proven (`MASTER_SEC_PULSE_HANDOFF`'s `REC_MASTER_18` threshold, the
+`1E9B-1F20` BCD cluster's semantic purpose, the channel-2 quality-streak
+cluster's exact pass/fail semantics, `DISP_TEST_TICK`'s non-test path) - see
+`docs/jump-graph.md`'s "What to tackle next" for specifics. Every one of
+them already has real names and a comment describing exactly what's
+confirmed vs. not; there is no more "needs analysis" backlog, only
+confidence-raising on an explicitly-marked handful.
+
+Rebuild re-verified after every change in both passes: still 0 differences
+over 8192 bytes.
 
 ## Update 3: every jump target in the ROM now has a name
 

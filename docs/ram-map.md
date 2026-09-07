@@ -10,7 +10,8 @@ M = consistent reading, L = placeholder name).
 
 | Addr | Name | Size | Conf | Description |
 |---|---|---|---|---|
-| 6F01 | `ACQ_COUNT` | 1 | M | number of secondaries acquired; 0 triggers `X_0E1A` |
+| 6F00 | `RAM1_BASE` | 1 | H | dual role: base address INIT's `FILL_ZERO` clears from, and a 0/1/2 tri-state dispatch variable `MASTER_SEC_PULSE_HANDOFF` uses to sequence its master/secondary pulse-position handoff |
+| 6F01 | `ACQ_COUNT` | 1 | M | number of secondaries acquired; 0 triggers `PREP_NEXT_SLOT_FRONTEND` |
 | 6F02 | `FIRST_SLOT` | 1 | M | slot of the first acquired / selected station (init from `SEL_A`) |
 | 6F03 | `SLOT_RESULT` | 1 | L | value returned by `X_1E05` |
 | 6F04 | `SLOT_FLAGS` | 10 | H | one flag byte per slot: bit 7 active, bit 6 acquiring, bits 1..0 secondary record index, bits 3/4/5 report & settle gates (master = C8H) |
@@ -27,11 +28,15 @@ M = consistent reading, L = placeholder name).
 | 6F1C | `GRI_BCD` | 4 | H | 4-byte BCD GRI; `GRI_VAL` (6F1D/6F1E) holds the 4 dialled digits |
 | 6F20 | `BCD_ACC` | 4 | H | 4-byte BCD accumulator for `BCD_ADD4`/`BCD_SUB4` (`BCD_ACC_HI` = 6F23) |
 | 6F24 | `REC_MASTER` | 25 | H | master station record |
+| 6F28 | `REC_MASTER_4` | 4 | H | `REC_MASTER`+4 = its own `CUR_TOA`-equivalent field; added into `ACCUM_TOA_TBL`'s slot-0 entry by `ACCUM_SLOT_TOA` |
+| 6F2D | `REC_MASTER_9` | 5 | H | `REC_MASTER`+9 = its `CUR_PULSES` field; relocated to/from `REC_SEC_9` by `MASTER_SEC_PULSE_HANDOFF` |
+| 6F36 | `REC_MASTER_18` | 2 | M | `REC_MASTER`+18 (the otherwise-unnamed +16..+21 gap); tested against a threshold of 100 by `MASTER_SEC_PULSE_HANDOFF`'s state-2 path - meaning not identified |
 | 6F3D | `REC_SEC` | 4 x 25 | H | secondary station records (6F3D, 6F56, 6F6F, 6F88) |
 | 6F41 | `REC_SEC_TOA` | - | H | TOA field (+4) of `REC_SEC[0]` |
+| 6F46 | `REC_SEC_9` | 5 | H | `REC_SEC[0]`+9 = its `CUR_PULSES` field; see `REC_MASTER_9` |
 | 6F54 | `SETTLE_CNT` | 1 | H | 20-pass settle counter (aliases `REC_SEC[0]`+23, only used before secondaries exist) |
 | 6FA1 | `CUR_REC` | 25 | H | working copy of the current slot record |
-| 6FA5 | `CUR_TOA` | 4 | H | +4: 4-byte BCD time of arrival / TD |
+| 6FA5 | `CUR_TOA` | 4 | H | +4: 4-byte BCD time of arrival / TD (`CUR_TOA_1`=+1, `CUR_TOA_3`=+3 individually named where code addresses them directly) |
 | 6FA9 | `CUR_NPULSE` | 1 | H | +8: pulse counters |
 | 6FAA | `CUR_PULSES` | 5 | H | +9: matched sample positions |
 | 6FAF | `CUR_PULSE_PTR` | 2 | H | +14: write pointer into `CUR_PULSES` |
@@ -39,7 +44,8 @@ M = consistent reading, L = placeholder name).
 | 6FB7 | `CUR_MODE` | 1 | M | +22: 1 settling, 3 re-acquiring |
 | 6FB8 | `PHASE_QUAL_B` | 2 | M | same as `PHASE_QUAL_A` but for `PHASE_CODE_HI` (`PHASE_QUAL_B_HI` = 6FB9) |
 | 6FBA | `CUR_FLAGS` | 1 | H | copy of `SLOT_FLAGS[SLOT_IDX]` |
-| 6FBB | `PHASE_REF` | 2 | H | XOR reference for the shift-register words |
+| 6FBB | `PHASE_REF` | 1 | H | XOR reference for `PHASE_CODE` (channel 1) |
+| 6FBC | `PHASE_REF_HI` | 1 | H | XOR reference for `PHASE_CODE_HI` (channel 2); `EPOCH_PHASE_UPDATE` copies this into `PHASE_REF` after the alternator runs, forcing both channels to the same reference each epoch - why is unresolved |
 | 6FBD | `PHASE_QUAL_FLAGS` | 1 | M | set by `PHASE_QUALITY_UPDATE` when a quality accumulator saturates; copied into `PULSE_ALIGN_FLAGS` each epoch |
 | 6FBE | `PULSE_ALIGN_FLAGS` | 1 | M | refreshed from `PHASE_QUAL_FLAGS` every epoch by `EPOCH_PHASE_UPDATE`; consumed by `PULSE_ALIGN_ADJ` to correct `CUR_TOA` by whole pulse-intervals |
 | 6FBF | `PHASE_CODE` | 2 | H | last shift-register words after XOR (`PHASE_CODE_HI` = 6FC0) |
@@ -65,7 +71,7 @@ M = consistent reading, L = placeholder name).
 | 6FE6 | `VAR_6FE6` | 1 | L | 4 after master lock |
 | 6FE7 | `VAR_6FE7` | 2 | L | 03,04 after master lock; 10H later |
 | 6FE9 | `BCD_TMP` | 4 | H | 4-byte BCD scratch for `SLOTREC_UPDATE` |
-| 6FEE | `SLOTREC_CNT` | 9 x n | H | per-slot 9-byte records; fields +3 `SLOTREC_3`, +5 `SLOTREC_5` |
+| 6FEE | `SLOTREC_CNT` | 9 x n | H | per-slot 9-byte records; fields +1 `SLOTREC_1`, +3 `SLOTREC_3`, +5 `SLOTREC_5`, +6 `SLOTREC_6` |
 
 ## 7000-70FF (8155 #2)
 
