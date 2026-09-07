@@ -275,7 +275,7 @@ D_005C:
         PUSH D
 D_005F       EQU  $+1
         CALL PULSE_PB2
-        CALL X_0E1D
+        CALL LATCH_REC_TO_PIO2PB
         MVI A,20H                   ; ' '
         CALL PULSE_PB
         MVI A,01H
@@ -527,7 +527,7 @@ SLOT_PROCESS:
         MVI M,01H
         LDA ACQ_COUNT
         CPI 00H
-        CZ X_0E1A
+        CZ PREP_NEXT_SLOT_FRONTEND
         MVI A,64H                   ; 'd'
         STA MISS_LIMIT
         LDA SLOT_IDX
@@ -615,7 +615,7 @@ SLOT_SAVE_NEXT:
 ; SLOT_TRACKING: state 80H. Verify the pulse group; count misses (MISS_CNT / MISS_LIMIT).
 SLOT_TRACKING:
         CALL WAIT_SAMPLE
-        CALL X_0E2D
+        CALL FIND_NEXT_TRACK_SLOT
         CALL FIRST_SAMPLE
         STC
         CMC
@@ -625,7 +625,7 @@ SLOT_TRACKING:
         RRC
         JC SLOT_TRK_RESULT
         CALL PULSE_PB2
-        CALL X_0E1D
+        CALL LATCH_REC_TO_PIO2PB
         MVI A,20H                   ; ' '
         CALL PULSE_PB
 SLOT_TRK_RESULT:
@@ -673,7 +673,7 @@ SLOT_ACQUIRE:
         XRA A
         STA SAMPLE_CNT
         CALL WAIT_SAMPLE
-        CALL X_0E1A
+        CALL PREP_NEXT_SLOT_FRONTEND
         CALL READ_PHASE
         LDA PHASE_CODE
         LXI H,CUR_NPULSE
@@ -1845,7 +1845,7 @@ L_0A22:
         ORA D
         MOV M,A
         CALL WAIT_SAMPLE
-        CALL X_0E1A
+        CALL PREP_NEXT_SLOT_FRONTEND
         XRA A
         STA SAMPLE_CNT
         STA PHASE_QUAL_FLAGS
@@ -2465,14 +2465,16 @@ CUR_REC_TO_FRONTEND:
 ; Bytes 1-3 (the record's actual BCD digits) are written raw, one each, to
 ; PIO1_PB (E002), PIO1_PA (E001), PIO2_PA (F001) - ports previously documented as
 ; "never touched" before this ROM half was recovered. Then PIO2_PB bit 7 is set.
-; Called only at station-selection transitions - SEARCH_LOOP start (BC=REC_MASTER),
-; after SLOT_ACQUIRE's secondary search starts (BC=REC_MASTER), and SETTLE_LOOP
-; start via CUR_REC_TO_FRONTEND (BC=CUR_REC) - never every epoch inside a loop.
-; Hypothesis (not certain): this broadcasts the newly-selected station's current
-; BCD value to the analog front end in parallel, as a feed-forward timing hint for
-; the "pulse-group timing" hardware.md already infers lives on that board -
-; consistent with the board's silkscreened SAMPLER/TRF sections. Needs the
-; physical board to confirm.
+; Called at station-selection transitions - SEARCH_LOOP start (BC=REC_MASTER), after
+; SLOT_ACQUIRE's secondary search starts (BC=REC_MASTER), SETTLE_LOOP start via
+; CUR_REC_TO_FRONTEND (BC=CUR_REC) - and, via a second continuation entered at L_0E0B
+; (same byte-1/2/3 output, but byte 0's merge is deferred into M_6FDB instead of applied
+; immediately), once per epoch from FIND_NEXT_TRACK_SLOT, with LATCH_REC_TO_PIO2PB
+; committing the deferred byte precisely at the RST 6.5 window-end capture. The two-stage
+; version (pre-stage now, commit at the window boundary) is strong evidence for the
+; feed-forward-to-the-analog-front-end hypothesis - broadcasting the NEXT slot's station
+; record in parallel, timed to the sample window, rather than a low-priority side effect.
+; Still not board-confirmed, but the deliberate timing argues against coincidence.
 REC_TO_FRONTEND:
         LDA PIO2_PB
         ANI 74H                     ; 't'
@@ -2502,9 +2504,22 @@ L_0E0B:
         LDAX B
         STA M_6FDB
         JMP L_0DF3
-X_0E1A:
-        CALL X_0E2D
-X_0E1D:
+
+; PREP_NEXT_SLOT_FRONTEND (was X_0E1A): a one-instruction trampoline, just
+; CALL FIND_NEXT_TRACK_SLOT (its RET returns straight to X_0E1A's own caller).
+PREP_NEXT_SLOT_FRONTEND:
+        CALL FIND_NEXT_TRACK_SLOT
+
+; LATCH_REC_TO_PIO2PB (was X_0E1D). Merges M_6FDB's bits 0,1,3 into PIO2_PB (keeping
+; PIO2_PB's other bits), exactly the same bit-merge REC_TO_FRONTEND does for a record's
+; status byte - this is that same merge, deferred. Called from RST65_ISR right at the
+; window-end capture (matches firmware.md's ISR description) and from the tolerant-match
+; path in SLOT_TRACKING. Closes the loop with FIND_NEXT_TRACK_SLOT/L_0E0B: that search
+; pre-stages the NEXT slot's status byte into M_6FDB (clearing PIO2_PB bit 7 immediately
+; but deferring the bits-0/1/3 merge), and this routine commits it precisely at the
+; sample-window boundary instead of mid-window - avoiding a glitch on whatever hardware
+; PIO2_PB's low bits drive.
+LATCH_REC_TO_PIO2PB:
         LDA PIO2_PB
         ANI 0F4H
         MOV L,A
@@ -2513,7 +2528,16 @@ X_0E1D:
         ORA L
         STA PIO2_PB
         RET
-X_0E2D:
+
+; FIND_NEXT_TRACK_SLOT (was X_0E2D; the old "prepare tracking window" guess was in the
+; right direction). Starting from SLOT_IDX+1, searches forward (wrapping via SLOT_COUNT)
+; for the next slot whose flags have bit 7 set and either bit 6 set or TRACK_STATE
+; 80H/40H; if none found before wrapping, defaults to REC_MASTER. Loads that slot's
+; record pointer (REC_MASTER or via GET_SEC_REC) into BC and falls into L_0E0B - the
+; same REC_TO_FRONTEND continuation LATCH_REC_TO_PIO2PB later commits - i.e. this decides
+; *which* station's record gets pre-staged to the front end for the upcoming window,
+; peeking ahead in the slot rotation rather than just using the current slot.
+FIND_NEXT_TRACK_SLOT:
         LXI H,SLOT_COUNT
         LDA SLOT_IDX
 L_0E33:
