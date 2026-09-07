@@ -221,7 +221,7 @@ SEARCH_LOOP:                                 ; xref: j018B
 0169  CD 59 04   CALL WAIT_SAMPLE
 016C  AF         XRA A
 016D  32 15 6F   STA SAMPLE_CNT
-0170  CD D9 0E   CALL X_0ED9
+0170  CD D9 0E   CALL TICK_DISP_AND_RESTART
 0173  CD AF 05   CALL FIRST_SAMPLE
 0176  37         STC
 0177  CD C2 05   CALL MATCH_PULSES
@@ -274,7 +274,7 @@ SETTLE_LOOP:                                 ; xref: j01F4
 01E4  CD 9B 04   CALL WAIT_EPOCH
 01E7  CD 17 08   CALL EPOCH_PHASE_UPDATE
 01EA  CD 12 04   CALL QUAL_UPDATE
-01ED  CD D9 0E   CALL X_0ED9
+01ED  CD D9 0E   CALL TICK_DISP_AND_RESTART
 01F0  21 54 6F   LXI H,SETTLE_CNT
 01F3  35         DCR M
 01F4  C2 E1 01   JNZ SETTLE_LOOP
@@ -289,21 +289,21 @@ D_01FF:                                      ; refs: lxi0BDD lxi0BEF
 020A  3E 10      MVI A,10H
 020C  32 E7 6F   STA VAR_6FE7
 020F  CD 05 1E   CALL X_1E05
-0212  CD 23 0F   CALL X_0F23
+0212  CD 23 0F   CALL SET_SLOT_ACTIVE
 0215  01 24 6F   LXI B,REC_MASTER
 0218  CD E6 0D   CALL REC_TO_FRONTEND
 
 ; TRACK_LOOP: steady-state tracking loop, one pass per GRI epoch.
 TRACK_LOOP:                                  ; xref: j024A
 021B  CD 9B 04   CALL WAIT_EPOCH
-021E  CD EE 0E   CALL X_0EEE
-0221  CD D9 0E   CALL X_0ED9
+021E  CD EE 0E   CALL APPLY_NEW_DATA
+0221  CD D9 0E   CALL TICK_DISP_AND_RESTART
 0224  3A C1 6F   LDA DISP_MODE
 0227  FE 01      CPI 01H
 0229  CA 37 02   JZ TRACK_DISP1
 022C  FE 02      CPI 02H
 022E  C2 3A 02   JNZ TRACK_UPDATE
-0231  CD 08 0F   CALL X_0F08
+0231  CD 08 0F   CALL ACTIVATE_SELECTED_SLOT
 0234  C3 3A 02   JMP TRACK_UPDATE
 TRACK_DISP1:                                 ; xref: j0229
 0237  CD 31 0F   CALL X_0F31
@@ -2482,7 +2482,12 @@ TOA_ADD_3000:                                ; xref: c0C9F
 TOA_ADD_6000:                                ; xref: c0E7B
 0ED3  21 0E 00   LXI H,TOA_ADJ_6000
 0ED6  C3 C1 0E   JMP TOA_ADD_CONST
-X_0ED9:                                      ; xref: c0170 c01ED c0221
+
+; TICK_DISP_AND_RESTART (was X_0ED9, called once per epoch from TRACK_LOOP).
+; Cycles DISP_MODE 0..9, wrapping back to 0 at 10 - a display animation/rotation counter.
+; Then decays RESTART_REQ toward 0 by 1 per epoch if nonzero - a settle/debounce delay
+; after RESTART_REQ is set to 2 by a button press (front-panel.md).
+TICK_DISP_AND_RESTART:                       ; xref: c0170 c01ED c0221
 0ED9  21 C1 6F   LXI H,DISP_MODE
 0EDC  34         INR M
 0EDD  7E         MOV A,M
@@ -2496,7 +2501,15 @@ L_0EE5:                                      ; xref: j0EE0
 0EEB  C8         RZ
 0EEC  35         DCR M
 0EED  C9         RET
-X_0EEE:                                      ; xref: c021E
+
+; APPLY_NEW_DATA (was X_0EEE, called once per epoch from TRACK_LOOP, before
+; TICK_DISP_AND_RESTART). Clears NEW_DATA and, only if it had been set ("set when a slot
+; acquires or the selectors change", ram-map.md), resets TRACK_STATE to 01H (window
+; search) and, if SLOT_IDX_B's slot flags are exactly 80H (active but not acquiring),
+; clears that slot's flags entirely. Reads as: when the operator changes the selector or
+; a new acquisition lands, restart the tracking state machine and evict the previously-
+; selected slot if it was just sitting idle.
+APPLY_NEW_DATA:                              ; xref: c021E
 0EEE  21 DC 6F   LXI H,NEW_DATA
 0EF1  7E         MOV A,M
 0EF2  36 00      MVI M,00H
@@ -2512,7 +2525,13 @@ X_0EEE:                                      ; xref: c021E
 0F04  C0         RNZ
 0F05  36 00      MVI M,00H
 0F07  C9         RET
-X_0F08:                                      ; xref: c0231
+
+; ACTIVATE_SELECTED_SLOT (was X_0F08, called once per epoch from TRACK_LOOP). Only
+; proceeds if TRACK_STATE==01H (window search), ACQ_COUNT<4, and SLOT_RESULT!=0
+; (X_1E05's output). If the slot named by SLOT_RESULT is not already active (flags bit
+; 7 clear), falls into SET_SLOT_ACTIVE(A=SLOT_RESULT). Brings an operator-selected slot
+; into tracking once conditions allow.
+ACTIVATE_SELECTED_SLOT:                      ; xref: c0231
 0F08  3A 13 6F   LDA TRACK_STATE
 0F0B  FE 01      CPI 01H
 0F0D  C0         RNZ
@@ -2529,7 +2548,13 @@ X_0F08:                                      ; xref: c0231
 0F20  07         RLC
 0F21  D8         RC
 0F22  7A         MOV A,D
-X_0F23:                                      ; xref: c0212
+
+; SET_SLOT_ACTIVE (was X_0F23). A = slot number. Sets SLOT_IDX_B=A, that slot's flags
+; to 80H (active, not acquiring), and TRACK_STATE to 20H - a state value not previously
+; catalogued in ram-map.md's TRACK_STATE list (01/40H/80H/06/07). Called directly (A
+; already set by the caller, e.g. right after X_1E05 at 0212, matching the old "after
+; master lock, start secondary search" guess) or via ACTIVATE_SELECTED_SLOT's gate.
+SET_SLOT_ACTIVE:                             ; xref: c0212
 0F23  32 12 6F   STA SLOT_IDX_B
 0F26  CD E4 04   CALL GET_FLAGS_A
 0F29  36 80      MVI M,80H

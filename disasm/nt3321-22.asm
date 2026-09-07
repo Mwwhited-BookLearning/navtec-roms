@@ -404,7 +404,7 @@ SEARCH_LOOP:
         CALL WAIT_SAMPLE
         XRA A
         STA SAMPLE_CNT
-        CALL X_0ED9
+        CALL TICK_DISP_AND_RESTART
         CALL FIRST_SAMPLE
         STC
         CALL MATCH_PULSES
@@ -457,7 +457,7 @@ SETTLE_LOOP:
         CALL WAIT_EPOCH
         CALL EPOCH_PHASE_UPDATE
         CALL QUAL_UPDATE
-        CALL X_0ED9
+        CALL TICK_DISP_AND_RESTART
         LXI H,SETTLE_CNT
         DCR M
         JNZ SETTLE_LOOP
@@ -472,21 +472,21 @@ D_01FF:
         MVI A,10H
         STA VAR_6FE7
         CALL X_1E05
-        CALL X_0F23
+        CALL SET_SLOT_ACTIVE
         LXI B,REC_MASTER
         CALL REC_TO_FRONTEND
 
 ; TRACK_LOOP: steady-state tracking loop, one pass per GRI epoch.
 TRACK_LOOP:
         CALL WAIT_EPOCH
-        CALL X_0EEE
-        CALL X_0ED9
+        CALL APPLY_NEW_DATA
+        CALL TICK_DISP_AND_RESTART
         LDA DISP_MODE
         CPI 01H
         JZ TRACK_DISP1
         CPI 02H
         JNZ TRACK_UPDATE
-        CALL X_0F08
+        CALL ACTIVATE_SELECTED_SLOT
         JMP TRACK_UPDATE
 TRACK_DISP1:
         CALL X_0F31
@@ -2665,7 +2665,12 @@ TOA_ADD_3000:
 TOA_ADD_6000:
         LXI H,TOA_ADJ_6000
         JMP TOA_ADD_CONST
-X_0ED9:
+
+; TICK_DISP_AND_RESTART (was X_0ED9, called once per epoch from TRACK_LOOP).
+; Cycles DISP_MODE 0..9, wrapping back to 0 at 10 - a display animation/rotation counter.
+; Then decays RESTART_REQ toward 0 by 1 per epoch if nonzero - a settle/debounce delay
+; after RESTART_REQ is set to 2 by a button press (front-panel.md).
+TICK_DISP_AND_RESTART:
         LXI H,DISP_MODE
         INR M
         MOV A,M
@@ -2679,7 +2684,15 @@ L_0EE5:
         RZ
         DCR M
         RET
-X_0EEE:
+
+; APPLY_NEW_DATA (was X_0EEE, called once per epoch from TRACK_LOOP, before
+; TICK_DISP_AND_RESTART). Clears NEW_DATA and, only if it had been set ("set when a slot
+; acquires or the selectors change", ram-map.md), resets TRACK_STATE to 01H (window
+; search) and, if SLOT_IDX_B's slot flags are exactly 80H (active but not acquiring),
+; clears that slot's flags entirely. Reads as: when the operator changes the selector or
+; a new acquisition lands, restart the tracking state machine and evict the previously-
+; selected slot if it was just sitting idle.
+APPLY_NEW_DATA:
         LXI H,NEW_DATA
         MOV A,M
         MVI M,00H
@@ -2695,7 +2708,13 @@ X_0EEE:
         RNZ
         MVI M,00H
         RET
-X_0F08:
+
+; ACTIVATE_SELECTED_SLOT (was X_0F08, called once per epoch from TRACK_LOOP). Only
+; proceeds if TRACK_STATE==01H (window search), ACQ_COUNT<4, and SLOT_RESULT!=0
+; (X_1E05's output). If the slot named by SLOT_RESULT is not already active (flags bit
+; 7 clear), falls into SET_SLOT_ACTIVE(A=SLOT_RESULT). Brings an operator-selected slot
+; into tracking once conditions allow.
+ACTIVATE_SELECTED_SLOT:
         LDA TRACK_STATE
         CPI 01H
         RNZ
@@ -2712,7 +2731,13 @@ X_0F08:
         RLC
         RC
         MOV A,D
-X_0F23:
+
+; SET_SLOT_ACTIVE (was X_0F23). A = slot number. Sets SLOT_IDX_B=A, that slot's flags
+; to 80H (active, not acquiring), and TRACK_STATE to 20H - a state value not previously
+; catalogued in ram-map.md's TRACK_STATE list (01/40H/80H/06/07). Called directly (A
+; already set by the caller, e.g. right after X_1E05 at 0212, matching the old "after
+; master lock, start secondary search" guess) or via ACTIVATE_SELECTED_SLOT's gate.
+SET_SLOT_ACTIVE:
         STA SLOT_IDX_B
         CALL GET_FLAGS_A
         MVI M,80H

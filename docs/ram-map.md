@@ -18,7 +18,7 @@ M = consistent reading, L = placeholder name).
 | 6F0F | `TRACK_MASK` | 1 | H | bit per secondary (1 << (flags & 3)) currently tracked |
 | 6F11 | `SLOT_IDX` | 1 | H | current slot 0..`SLOT_COUNT`-1 |
 | 6F12 | `SLOT_IDX_B` | 1 | L | slot index used by the switch-scan path |
-| 6F13 | `TRACK_STATE` | 1 | H | 01 window search, 40H acquiring, 80H tracking, 06/07 done codes |
+| 6F13 | `TRACK_STATE` | 1 | H | 01 window search, 20H set by `SET_SLOT_ACTIVE` when a slot is brought into tracking, 40H acquiring, 80H tracking, 06/07 done codes |
 | 6F14 | `SLOT_COUNT` | 1 | H | slots per GRI, derived from GRI at INIT |
 | 6F15 | `SAMPLE_CNT` | 1 | H | samples since epoch (starts at 8 in `FIRST_SAMPLE`) |
 | 6F16 | `SAMPLE_LO` | 1 | M | second shift-register byte from `FIRST_SAMPLE` |

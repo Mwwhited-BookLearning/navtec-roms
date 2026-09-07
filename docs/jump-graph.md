@@ -209,10 +209,10 @@ control flow inside an already-named routine, not independent things to name.
 | 0EC1 | `TOA_ADD_CONST` | 5 | named |
 | 0ECD | `TOA_ADD_3000` | 1 | named |
 | 0ED3 | `TOA_ADD_6000` | 1 | named |
-| 0ED9 | `X_0ED9` | 3 | needs analysis |
-| 0EEE | `X_0EEE` | 1 | needs analysis |
-| 0F08 | `X_0F08` | 1 | needs analysis |
-| 0F23 | `X_0F23` | 1 | needs analysis |
+| 0ED9 | `TICK_DISP_AND_RESTART` | 3 | named |
+| 0EEE | `APPLY_NEW_DATA` | 1 | named |
+| 0F08 | `ACTIVATE_SELECTED_SLOT` | 1 | named |
+| 0F23 | `SET_SLOT_ACTIVE` | 1 | named |
 | 0F31 | `X_0F31` | 1 | needs analysis |
 | 0FE9 | `X_0FE9` | 1 | needs analysis |
 | 1028 | `SLOTREC_PHASE` | 1 | named |
@@ -265,7 +265,7 @@ control flow inside an already-named routine, not independent things to name.
 | 1F20 | `SUB_1F20` | 1 | needs analysis |
 | 2001 | `EXTROM_ENTRY` | 1 | named |
 
-**22 of 137 still need analysis** (down from 77 at the start of this session).
+**18 of 137 still need analysis** (down from 77 at the start of this session).
 
 ## Variables (all 175 referenced RAM/IO addresses)
 
@@ -463,43 +463,31 @@ memory locations at all.
 Roughly in priority order (highest caller-count / most load-bearing first):
 
 1. **`GET_FLAGS_A` neighborhood (0800-0FFF): the slot-tracking arithmetic
-   helpers.** ~8 targets remain (`X_0ED9` through `X_0FE9`) plus their
-   associated `M_70Cx` variables. This is the window/timing arithmetic that
-   `firmware.md` already flags as "working names, not proven ones" - the
-   hardest but highest-value cluster, needs careful numeric tracing of each
-   routine against the `TRACK_LOOP`/`SLOT_PROCESS` state machine. Resolved so
-   far: `EPOCH_PHASE_UPDATE`/`PHASE_AB_SELECT` (the GRI-A/GRI-B phase
-   alternator), `GET_ITEM_REC`/`GET_SEC_REC`/`TOA1_SLOT_NIB` (record lookups),
-   the `PULSE_ALIGN_ADJ`/`TOA_ADD_CONST`/`TOA_SUB_CONST` family (CUR_TOA
-   corrections in whole multiples of the ~1000us inter-pulse spacing),
-   `HANDLE_ACQUIRING_SLOT`/`SLOT_STALE_CHECK`/`ACCUM_SLOT_TOA` (a
-   slot-staleness watchdog plus a per-slot TOA accumulator at `M_7057`),
-   `PULSE_SCORE_UPDATE`/`CLAMP_HL_BC`/`POPCOUNT_ADJ_HL`/`PHASE_QUALITY_UPDATE`
-   (two saturating quality accumulators that trigger a pulse realignment),
-   `SET_QUAL_FLAGS`/`MASTER_CORR_ADJ`/`MASTER_CORR_ADD_3000` (`MASTER_TOA_CORR`,
-   a master-only correction term folded into `ACCUM_SLOT_TOA`'s sum),
-   `INIT_REC_AND_SEND`/`SAVE_REC_SYNC`/`SEED_REC_STATUS`/`INIT_REC_FROM_TOA`
-   (seed a station record from `CUR_TOA` - corrected a wrong "display
-   fill/clear" guess along the way), and `PREP_NEXT_SLOT_FRONTEND`/
-   `LATCH_REC_TO_PIO2PB`/`FIND_NEXT_TRACK_SLOT` (peeks ahead to the next
-   active slot each epoch and stages/commits its record to `REC_TO_FRONTEND`
-   precisely at the RST 6.5 window-end capture - strong evidence for the
-   feed-forward-to-analog-front-end hypothesis on that routine).
-   `X_0ED9`/`X_0EEE` (the last two before the display-format handlers) is
-   a reasonable next target.
-2. **`SUB_1C3F` / `SUB_1CF3` / `SUB_1D10` / `SUB_1D45` (1C00-1D50) and the
+   helpers.** Down to 2 targets: `X_0F31`/`X_0FE9` (the `DISP_MODE`-selected
+   display-format handlers, per firmware.md's `TRACK_LOOP` diagram) plus
+   their associated `M_70Cx` variables. Everything else in this cluster is
+   now resolved this session, including two corrected wrong guesses
+   (`ROM_SELFTEST` was "receiver init"; `INIT_REC_FROM_TOA`/`INIT_REC_AND_SEND`
+   were "display fill/clear") and one real bug fix (`PHASE_AB_SELECT`/
+   `MUL10_INDEX` were mislabeled dead code but are live) - see the table
+   above and the git history for the full trail. `X_0F31` is next.
+2. **`X_1DBD`/`X_1E05`/`SUB_1E23`** (selector validation and slot-selection
+   result, called from `front-panel.md`'s switch-scan path - `X_1DBD`,
+   `X_1E05 -> SLOT_RESULT` per that doc). `SLOT_RESULT` already feeds the
+   now-resolved `ACTIVATE_SELECTED_SLOT`, so this is a natural next step.
+3. **`SUB_1C3F` / `SUB_1CF3` / `SUB_1D10` / `SUB_1D45` (1C00-1D50) and the
    `M_70B7`-`M_70C7` display-column variables.** These feed `L_1CEA`'s
    display-commit path (same one `SW_ERR_SHOW` uses) and are keyed off
    `SEL_A`/`SEL_B` - likely "which secondary's TD to show in row A/B".
-   `M_7053`/`M_7057` (the 10-byte-stride tables `MUL10_INDEX` indexes,
-   `M_7057` now known to be `ACCUM_SLOT_TOA`'s per-slot table) belong here too.
-3. **`X_19E7`** (called every 20 ticks from `TICK_TASK`, touches `M_70BB`) -
+   `M_7053` (the other 10-byte-stride table `MUL10_INDEX` indexes, alongside
+   the now-resolved `ACCUM_SLOT_TOA`'s `M_7057`) belongs here too.
+4. **`X_19E7`** (called every 20 ticks from `TICK_TASK`, touches `M_70BB`) -
    possibly a display-blink or column-rotation counter; unrelated to the
    `SW_ERR_*` family despite the nearby address.
-4. **`SUB_1EAA`/`SUB_1EBB`/`SUB_1ECF`/`SUB_1ED9`/`SUB_1EED`/`SUB_1F0E`/`SUB_1F20`**
+5. **`SUB_1EAA`/`SUB_1EBB`/`SUB_1ECF`/`SUB_1ED9`/`SUB_1EED`/`SUB_1F0E`/`SUB_1F20`**
    (1E9B-1F20) - all single-caller, small, clustered; likely one coherent
    feature once traced together.
-5. **Remaining `FFxx`/`8020` single-LXI addresses** - check whether they're
+6. **Remaining `FFxx`/`8020` single-LXI addresses** - check whether they're
    BCD constants (operand of `LXI H,<addr>` immediately followed by an
    arithmetic call) before spending real effort; may not be "variables" at
    all.
