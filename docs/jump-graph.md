@@ -184,9 +184,9 @@ control flow inside an already-named routine, not independent things to name.
 | 0B8D | `CLAMP_HL_BC` | 4 | named |
 | 0BB5 | `POPCOUNT_ADJ_HL` | 3 | named |
 | 0BC5 | `PHASE_QUALITY_UPDATE` | 1 | named |
-| 0CA4 | `SUB_0CA4` | 1 | needs analysis |
-| 0CBE | `SUB_0CBE` | 1 | needs analysis |
-| 0CE8 | `SUB_0CE8` | 1 | needs analysis |
+| 0CA4 | `SET_QUAL_FLAGS` | 1 | named |
+| 0CBE | `MASTER_CORR_ADJ` | 1 | named |
+| 0CE8 | `MASTER_CORR_ADD_3000` | 1 | named |
 | 0D79 | `X_0D79` | 1 | needs analysis |
 | 0D7F | `SUB_0D7F` | 1 | needs analysis |
 | 0DB0 | `SUB_0DB0` | 1 | needs analysis |
@@ -207,7 +207,7 @@ control flow inside an already-named routine, not independent things to name.
 | 0EB2 | `TOA_SUB_3000` | 2 | named |
 | 0EBE | `TOA_ADD_1000` | 3 | named |
 | 0EC1 | `TOA_ADD_CONST` | 5 | named |
-| 0ECD | `SUB_0ECD` | 1 | needs analysis |
+| 0ECD | `TOA_ADD_3000` | 1 | named |
 | 0ED3 | `TOA_ADD_6000` | 1 | named |
 | 0ED9 | `X_0ED9` | 3 | needs analysis |
 | 0EEE | `X_0EEE` | 1 | needs analysis |
@@ -265,7 +265,7 @@ control flow inside an already-named routine, not independent things to name.
 | 1F20 | `SUB_1F20` | 1 | needs analysis |
 | 2001 | `EXTROM_ENTRY` | 1 | named |
 
-**33 of 137 still need analysis** (down from 77 at the start of this session).
+**29 of 137 still need analysis** (down from 77 at the start of this session).
 
 ## Variables (all 175 referenced RAM/IO addresses)
 
@@ -395,7 +395,7 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 70C0 | `M_70C0` | 3 | 3 | 0 | needs analysis |
 | 70C1 | `M_70C1` | 3 | 3 | 0 | needs analysis |
 | 70C2 | `M_70C2` | 3 | 3 | 0 | needs analysis |
-| 70C3 | `M_70C3` | 0 | 0 | 4 | needs analysis |
+| 70C3 | `MASTER_TOA_CORR` | 0 | 0 | 4 | named |
 | 70C7 | `M_70C7` | 1 | 1 | 0 | needs analysis |
 | 70C8 | `SW_D1` | 6 | 1 | 0 | named |
 | 70C9 | `SW_D2` | 5 | 1 | 0 | named |
@@ -450,7 +450,7 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | FF9C | `M_FF9C` | 0 | 0 | 1 | needs analysis |
 | FFC0 | `M_FFC0` | 0 | 0 | 1 | needs analysis |
 
-**46 of 175 still need analysis.** Most of the `FFxx` ones (FF38, FF80, FF9C,
+**45 of 175 still need analysis.** Most of the `FFxx` ones (FF38, FF80, FF9C,
 FFC0) and `8020` are single `LXI`-only references with no read/write - almost
 certainly operands of arithmetic (e.g. negative BCD limit constants) rather
 than real variables; low priority. Two more (`M_F9CA`, `M_AC9F`) are the same
@@ -463,7 +463,7 @@ memory locations at all.
 Roughly in priority order (highest caller-count / most load-bearing first):
 
 1. **`GET_FLAGS_A` neighborhood (0800-0FFF): the slot-tracking arithmetic
-   helpers.** ~18 targets remain (`SUB_0C9C`-ish through `X_0FE9`) plus their
+   helpers.** ~15 targets remain (`X_0D79` through `X_0FE9`) plus their
    associated `M_70Cx` variables. This is the window/timing arithmetic that
    `firmware.md` already flags as "working names, not proven ones" - the
    hardest but highest-value cluster, needs careful numeric tracing of each
@@ -473,12 +473,16 @@ Roughly in priority order (highest caller-count / most load-bearing first):
    the `PULSE_ALIGN_ADJ`/`TOA_ADD_CONST`/`TOA_SUB_CONST` family (CUR_TOA
    corrections in whole multiples of the ~1000us inter-pulse spacing),
    `HANDLE_ACQUIRING_SLOT`/`SLOT_STALE_CHECK`/`ACCUM_SLOT_TOA` (a
-   slot-staleness watchdog plus a per-slot TOA accumulator at `M_7057`), and
+   slot-staleness watchdog plus a per-slot TOA accumulator at `M_7057`),
    `PULSE_SCORE_UPDATE`/`CLAMP_HL_BC`/`POPCOUNT_ADJ_HL`/`PHASE_QUALITY_UPDATE`
    (0B07-0C34 - two saturating quality accumulators, `PHASE_QUAL_A`/`_B`, that
-   trigger a pulse realignment when either drifts too far). `SUB_0CA4`/
-   `SUB_0CBE` (called right after `PHASE_QUALITY_UPDATE`, touching the same
-   `PHASE_QUAL_FLAGS`/`M_70C3` area) is a reasonable next target.
+   trigger a pulse realignment when either drifts too far), and
+   `SET_QUAL_FLAGS`/`MASTER_CORR_ADJ`/`MASTER_CORR_ADD_3000` (0CA4-0CFD -
+   `MASTER_TOA_CORR`, a master-only correction term folded into
+   `ACCUM_SLOT_TOA`'s sum). `X_0D79`/`SUB_0D7F`/`SUB_0DB0`/`X_0DB3` (the
+   display-fill-code group, right after the arithmetic helpers) is a
+   reasonable next target - it likely connects to `docs/front-panel.md`'s
+   display-clear codes 0EH/0FH.
 2. **`SUB_1C3F` / `SUB_1CF3` / `SUB_1D10` / `SUB_1D45` (1C00-1D50) and the
    `M_70B7`-`M_70C7` display-column variables.** These feed `L_1CEA`'s
    display-commit path (same one `SW_ERR_SHOW` uses) and are keyed off

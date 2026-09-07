@@ -83,6 +83,7 @@ M = consistent reading, L = placeholder name).
 | 7054 | `SLOT_TBL` | n | L | one byte per slot, tested at 1000 |
 | 70BD | `VAR_70BD` | 2 | L | cleared with `VAR_7050`; also cascaded by `TICK_CLOCK_CASCADE`'s second clock when `STATUS_BITS` bit 7 is clear |
 | 70BF | `STATUS_BITS` | 1 | M | bit 7 set/cleared by button edges in set-up |
+| 70C3 | `MASTER_TOA_CORR` | 4 | M | master-only pulse-interval correction term, adjusted by `MASTER_CORR_ADJ`/`MASTER_CORR_ADD_3000`, added into the master's running sum by `ACCUM_SLOT_TOA` |
 | 70C8 | `SW_D1`..`SW_D4` | 4 | H | GRI wheels as read (0BH = blank) |
 | 70CC | `SW_HI`, `SW_LO` | 2 | H | latched wheels as two packed BCD bytes; also cascaded as BCD clock digits by `TICK_CLOCK_CASCADE` (unreconciled dual use, see firmware.md) |
 | 70CE | `SW_LATCHED` | 1 | H | 1 after latching in set-up |

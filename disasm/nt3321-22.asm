@@ -125,7 +125,7 @@ STATUS_BITS  EQU  70BFH  ; rd=3 wr=2 lxi=0
 M_70C0       EQU  70C0H  ; rd=3 wr=3 lxi=0
 M_70C1       EQU  70C1H  ; rd=3 wr=3 lxi=0
 M_70C2       EQU  70C2H  ; rd=3 wr=3 lxi=0
-M_70C3       EQU  70C3H  ; rd=0 wr=0 lxi=4
+MASTER_TOA_CORR EQU  70C3H  ; rd=0 wr=0 lxi=4
 M_70C7       EQU  70C7H  ; rd=1 wr=1 lxi=0
 SW_D1        EQU  70C8H  ; rd=6 wr=1 lxi=0
 SW_D2        EQU  70C9H  ; rd=5 wr=1 lxi=0
@@ -1692,7 +1692,7 @@ ACCUM_SLOT_TOA:
         CPI 00H
         JZ L_093F
         CALL BCD_ADD4
-        LXI H,M_70C3
+        LXI H,MASTER_TOA_CORR
         CALL BCD_ADD4
         JMP L_0945
 L_093F:
@@ -1703,7 +1703,7 @@ L_0945:
         ANI 80H
         JNZ L_0955
         MVI B,04H
-        LXI H,M_70C3
+        LXI H,MASTER_TOA_CORR
         CALL FILL_ZERO
 L_0955:
         POP B
@@ -2229,10 +2229,19 @@ L_0C96:
         MVI A,01H
         STA CUR_MODE
         MOV M,E
-        CALL SUB_0CE8
-        CALL SUB_0ECD
+        CALL MASTER_CORR_ADD_3000
+        CALL TOA_ADD_3000
         MVI C,02H
-SUB_0CA4:
+
+; SET_QUAL_FLAGS (was SUB_0CA4). Clears M_6FB2, ORs C's bits into PHASE_QUAL_FLAGS,
+; returns B in A. A small "apply a (status, flag-bits) pair" utility called from the
+; CUR_FLAGS/PHASE_CODE decision tree at L_0C37-0C96 (not independently named - it's not
+; a call target, just inline flow reached by a jump - but see its shape: it tests CUR_FLAGS
+; bits and PHASE_CODE bits 20H/80H to choose which (B,C) pair to hand to SET_QUAL_FLAGS,
+; including a full PHASE_QUAL_A/PHASE_QUAL_B/CUR_PULSE_PTR reset for at least one case -
+; looks like a fuller quality/lock-state classifier than PHASE_QUALITY_UPDATE alone,
+; not traced branch-by-branch).
+SET_QUAL_FLAGS:
         XRA A
         STA M_6FB2
         LXI H,PHASE_QUAL_FLAGS
@@ -2244,15 +2253,23 @@ SUB_0CA4:
 L_0CB0:
         MOV M,E
 L_0CB1:
-        CALL SUB_0CA4
+        CALL SET_QUAL_FLAGS
         RLC
-        CALL SUB_0CBE
+        CALL MASTER_CORR_ADJ
         JC TOA_SUB_6000
         JMP L_0EC7
-SUB_0CBE:
+
+; MASTER_CORR_ADJ (was SUB_0CBE). Only acts when SLOT_IDX==0 (master): adds
+; TOA_ADJ_2000 or subtracts TOA_ADJ_6000 to/from MASTER_TOA_CORR (M_70C3) depending on a
+; carry flag passed in from the caller. MASTER_CORR_ADD_3000 (0CE8) is the same shape,
+; always adding TOA_ADJ_3000, no carry test. Both correct MASTER_TOA_CORR rather than
+; CUR_TOA directly - MASTER_TOA_CORR is the term ACCUM_SLOT_TOA (091B) adds into the
+; master's running sum, so these are indirect, master-only pulse-interval corrections
+; that only take effect on the next accumulation pass.
+MASTER_CORR_ADJ:
         PUSH PSW
         PUSH B
-        LXI B,M_70C3
+        LXI B,MASTER_TOA_CORR
         JC L_0CD7
         LDA SLOT_IDX
         CPI 00H
@@ -2267,10 +2284,10 @@ L_0CD7:
         LXI H,TOA_ADJ_6000
         CALL BCD_SUB4
         JMP L_0CFB
-SUB_0CE8:
+MASTER_CORR_ADD_3000:
         PUSH PSW
         PUSH B
-        LXI B,M_70C3
+        LXI B,MASTER_TOA_CORR
         LDA SLOT_IDX
         CPI 00H
         JNZ L_0CFB
@@ -2579,8 +2596,8 @@ TOA_ADD_1000:
 
 ; TOA_ADD_CONST (was X_0EC1; the old rom-status.md guess "add BCD constant to CUR_TOA"
 ; was exactly right). HL = pointer to a 4-byte BCD constant. CUR_TOA += (HL).
-; TOA_ADD_1000/_6000 are fixed-constant entry points into this same tail (see
-; PULSE_ALIGN_ADJ, 0E6D); the other 5 callers pass BCD_K_00080980 or BCD_K_00000110
+; TOA_ADD_1000/_3000/_6000 are fixed-constant entry points into this same tail (see
+; PULSE_ALIGN_ADJ, 0E6D); the other 4 callers pass BCD_K_00080980 or BCD_K_00000110
 ; (0004's table) or another caller-chosen constant, not yet individually traced.
 TOA_ADD_CONST:
         LXI B,CUR_TOA
@@ -2588,7 +2605,7 @@ TOA_ADD_CONST:
 L_0EC7:
         LXI H,TOA_ADJ_2000
         JMP TOA_ADD_CONST
-SUB_0ECD:
+TOA_ADD_3000:
         LXI H,TOA_ADJ_3000
         JMP TOA_ADD_CONST
 TOA_ADD_6000:
