@@ -36,8 +36,10 @@ complement of the dialled digit in binary. A blank/unused position reads as
 `READ_SWITCHES` at power-up insists on valid settings: selector wheels must read
 0..8 (stored as 1..9), the first GRI digit must be 4..9, digits 2..4 may be 0..9
 and digit 4 may also be blank (taken as 0). Any violation calls one of six error
-stubs in the missing ROM half (`X_1990`..`X_19A9`, most likely "show error code
-1..6 on the display") and re-reads.
+stubs - `SW_ERR_SEL_A`, `SW_ERR_SEL_B`, `SW_ERR_GRI1`..`SW_ERR_GRI4` (1990-19A9,
+confirmed by tracing every call site) - which show dashes with the field number
+in the middle of both display rows (see firmware.md's "Switch-validation error
+display" section), then re-read.
 
 ## Run-time switch handling
 
@@ -110,8 +112,12 @@ periodic serial report, see [serial-protocol.md](serial-protocol.md).
 
 ## Display
 
-`DISP_REFRESH` (13E7, reached only from the missing half) writes seven bytes of
-8279 display RAM with auto-increment from address 0:
+`DISP_REFRESH` (13E7) writes seven bytes of 8279 display RAM with
+auto-increment from address 0. It's reached by a plain `JMP` from `L_1CEA`,
+the shared "commit the display buffer" tail used by `SW_ERR_SHOW` and
+the other digit-formatting stubs in ROM 2 - not through `TICK_HOOK` as earlier
+guessed (nothing in the fully-recovered ROM ever writes `TICK_HOOK`; it's set,
+if at all, by the serial monitor's memory-write command).
 
 | Display byte | High nibble (OUTA) | Low nibble (OUTB) |
 |---|---|---|
@@ -129,8 +135,9 @@ position 6 provides two extra digits or indicators. That matches a classic
 two-line Loran-C TD readout (TD-A over TD-B, five digits plus tenths each).
 
 Display codes 0EH and 0FH are passed to the display routines `X_0DB3` and
-`X_0D79` in the missing half; on 7447/7448-style decoders these codes produce
-partial-segment and blank patterns, which is consistent with "clear display"
+`X_0D79` (still generically named - not yet individually analyzed); on
+7447/7448-style decoders these codes produce partial-segment and blank
+patterns, which is consistent with "clear display"
 during acquisition.
 
 ## Not yet known

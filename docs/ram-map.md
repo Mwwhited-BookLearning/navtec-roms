@@ -66,21 +66,21 @@ M = consistent reading, L = placeholder name).
 
 | Addr | Name | Size | Conf | Description |
 |---|---|---|---|---|
-| 7034 | (display) | 3 | M | packed BCD digits for display row A (written by the missing half) |
-| 7037 | (display) | 3 | M | packed BCD digits for display row B |
-| 703A | (display) | 1 | M | display position 6 |
+| 7034 | `DISP_ROW_A` | 3 | H | packed BCD digits for display row A; also written by `ERR_DASH_TBL`'s copy loop |
+| 7037 | `DISP_ROW_B` | 3 | H | packed BCD digits for display row B |
+| 703A | `DISP_EXTRA` | 1 | M | display position 6 |
 | 703B | `KEY_CHANGED` | 1 | H | 8279 reported a sensor change |
 | 703C | `BTN_STATE` | 1 | H | bit 7 toggles per press of button row-6/bit-7; bit 6 mirrors row-7/bit-7 |
 | 703D | `TICK_BCD` | 1 | H | BCD tick counter, +2 per RST 7.5 |
 | 703E | `PRTBUF` | ~16 | H | serial print buffer; `PRTBUF_PTR` (70D1) points at the last char, drained downwards |
 | 704E | `TX_PENDING` | 1 | H | set when the print buffer ran dry, cleared by the report sequencer |
-| 704F | `VAR_704F` | 1 | L | cleared when set-up latches; gates the report |
+| 704F | `VAR_704F` | 1 | L | cleared when set-up latches; gates the report; also cascaded as a BCD clock digit by `TICK_CLOCK_CASCADE` (unreconciled dual use, see firmware.md) |
 | 7050 | `VAR_7050` | 2 | L | cleared by second button press in set-up |
 | 7054 | `SLOT_TBL` | n | L | one byte per slot, tested at 1000 |
-| 70BD | `VAR_70BD` | 2 | L | cleared with `VAR_7050` |
+| 70BD | `VAR_70BD` | 2 | L | cleared with `VAR_7050`; also cascaded by `TICK_CLOCK_CASCADE`'s second clock when `STATUS_BITS` bit 7 is clear |
 | 70BF | `STATUS_BITS` | 1 | M | bit 7 set/cleared by button edges in set-up |
 | 70C8 | `SW_D1`..`SW_D4` | 4 | H | GRI wheels as read (0BH = blank) |
-| 70CC | `SW_HI`, `SW_LO` | 2 | H | latched wheels as two packed BCD bytes |
+| 70CC | `SW_HI`, `SW_LO` | 2 | H | latched wheels as two packed BCD bytes; also cascaded as BCD clock digits by `TICK_CLOCK_CASCADE` (unreconciled dual use, see firmware.md) |
 | 70CE | `SW_LATCHED` | 1 | H | 1 after latching in set-up |
 | 70CF | `PLOT_COL` | 1 | H | plot-mode column counter |
 | 70D0 | `RPT_STATE` | 1 | H | report sequencer: FEH idle, FFH armed, 0..8 item |

@@ -95,13 +95,13 @@ SLOTREC_3    EQU  6FF1H  ; rd=0 wr=0 lxi=1
 SLOTREC_5    EQU  6FF3H  ; rd=0 wr=0 lxi=1
 M_6FF4       EQU  6FF4H  ; rd=0 wr=0 lxi=2
 RAM2_BASE    EQU  7000H  ; rd=0 wr=0 lxi=1
-M_7034       EQU  7034H  ; rd=0 wr=3 lxi=9
+DISP_ROW_A   EQU  7034H  ; rd=0 wr=3 lxi=9
 M_7035       EQU  7035H  ; rd=0 wr=6 lxi=0
 M_7036       EQU  7036H  ; rd=0 wr=3 lxi=0
-M_7037       EQU  7037H  ; rd=0 wr=2 lxi=7
+DISP_ROW_B   EQU  7037H  ; rd=0 wr=2 lxi=7
 M_7038       EQU  7038H  ; rd=0 wr=5 lxi=0
 M_7039       EQU  7039H  ; rd=0 wr=2 lxi=0
-M_703A       EQU  703AH  ; rd=3 wr=2 lxi=0
+DISP_EXTRA   EQU  703AH  ; rd=3 wr=2 lxi=0
 KEY_CHANGED  EQU  703BH  ; rd=1 wr=2 lxi=0
 BTN_STATE    EQU  703CH  ; rd=8 wr=3 lxi=0
 TICK_BCD     EQU  703DH  ; rd=7 wr=1 lxi=0
@@ -189,7 +189,7 @@ D_0003       EQU  $+2
         JMP INIT
 
 ; Table of six 4-byte packed-BCD constants (little-endian, LS byte first).
-; BCD_K_00080980 and BCD_K_00000110 are passed to X_0EC1 (missing half).
+; BCD_K_00080980 and BCD_K_00000110 are passed to X_0EC1 (still generically named).
 BCD_CONST_TBL:
         DB   08H
 D_0005:
@@ -230,7 +230,9 @@ CPY4_TO_TOA:
         LXI B,CUR_TOA
         JMP COPY4
 
-; Three orphan bytes (never reached).
+; Not code: first byte (30H, ASCII '0') is read by LDA at 1A33 and copied into
+; M_7034, paired with D_1A4D's matching 30H -> M_7036 (see 1A4D). The other two
+; bytes, 18H and 3AH, have no references anywhere and are genuine orphans.
 ORPHAN_0031:
         DB   30H,18H,3AH
 
@@ -802,7 +804,7 @@ WAIT_SAMPLE:
         CPI 00H
         CNZ CALL_TICK_HOOK
         CALL REPORT_TASK
-        CALL X_18C0
+        CALL TICK_CLOCK_CASCADE
         CALL TICK_TASK
 WAIT_SAMPLE_END:
         POP D
@@ -901,7 +903,9 @@ REC_INDEX_LOOP:
         DAD D
         JMP REC_INDEX_LOOP
 
-; MUL9_INDEX: A = (HL + 9*A). Patched: the original x10 body survives at OLD_MUL10.
+; MUL9_INDEX: A = (HL + 9*A), for the 9-byte-stride SLOTREC_CNT records.
+; Falls into the shared MUL_IDX_TAIL. NOT a patch remnant: MUL10_INDEX (0515) is a live
+; sibling entry point for 10-byte-stride tables, not dead code (see 0515).
 MUL9_INDEX:
         PUSH B
         MOV B,A
@@ -910,12 +914,23 @@ MUL9_INDEX:
         MOV B,A
         RLC
         ADD B
-        JMP MUL9_INDEX_2
+        JMP MUL_IDX_TAIL
 
-; OLD_MUL10: dead code left by an in-place patch (PUSH B / RLC / MOV C,A / RLC / RLC / ADD C).
-OLD_MUL10:
-        DB   0C5H,07H,4FH,07H,07H,81H
-MUL9_INDEX_2:
+; MUL10_INDEX: A = (HL + 10*A), then falls into the shared MUL_IDX_TAIL (loads
+; M[HL] into A, HL left pointing at it). Previously mislabeled OLD_MUL10/"dead code from
+; a patch" - it is in fact live, with 11 real callers (0922, 0A28, 1B1F, 1B36, 1B54,
+; 1BB0, 1BC7, 1BEB, 1CB5, 1801, 1E2F), all indexing 10-byte-stride tables (M_7053,
+; M_7057, the 7056H report-item table) that are unrelated to the 9-byte SLOTREC_CNT.
+; The earlier "dead code left by an in-place patch" comment was simply wrong; a
+; forced db override was hiding this as data. See docs/firmware.md for the correction.
+MUL10_INDEX:
+        PUSH B
+        RLC
+        MOV C,A
+        RLC
+        RLC
+        ADD C
+MUL_IDX_TAIL:
         MOV C,A
         MVI B,00H
         DAD B
@@ -994,7 +1009,7 @@ RESET_PULSES:
         SHLD CUR_PULSE_PTR
         RET
 
-; CLEAR_PULSES: zero 17 bytes from CUR_NPULSE (falls into FILL_ZERO in the missing half).
+; CLEAR_PULSES: zero 17 bytes from CUR_NPULSE (falls into FILL_ZERO).
 CLEAR_PULSES:
         MVI B,11H
         LXI H,CUR_NPULSE
@@ -1395,7 +1410,7 @@ MUL8_SHIFT:
         MOV B,A
         JMP MUL8_LOOP
 
-; BCD_TO_BIN: A = binary value of packed-BCD byte A (uses HI_NIBBLE in the missing half).
+; BCD_TO_BIN: A = binary value of packed-BCD byte A (uses HI_NIBBLE).
 BCD_TO_BIN:
         MOV B,A
         CALL HI_NIBBLE
@@ -1414,7 +1429,7 @@ B2B_DONE:
         ADD C
         RET
 
-; BIN_TO_BCD: A = packed BCD of binary A (0..99). Continues at 0800 in the missing half:
+; BIN_TO_BCD: A = packed BCD of binary A (0..99). Continues at 0800:
 ; RLC RLC RLC / ADD H / RET.
 BIN_TO_BCD:
         MVI E,00H
@@ -1587,7 +1602,7 @@ SUB_091B:
         PUSH B
         LDA SLOT_IDX
         LXI H,M_7057
-        CALL OLD_MUL10
+        CALL MUL10_INDEX
         MOV B,H
         MOV C,L
         PUSH B
@@ -1744,7 +1759,7 @@ L_0A14:
 L_0A22:
         LDA SLOT_IDX
         LXI H,M_7053
-        CALL OLD_MUL10
+        CALL MUL10_INDEX
         ANI 0F0H
         ORA D
         MOV M,A
@@ -2593,7 +2608,7 @@ L_0FF7:
         RLC
         ADD C
 
-; SLOTTBL_CHK: tail of a routine from the missing half (entered from 0FFxH):
+; SLOTTBL_CHK: tail of a routine spanning the ROM 1/ROM 2 boundary (entered from 0FFxH):
 ; test SLOT_TBL[A]; clean up stack and continue at X_0FE9 or SLOT_INC_CHK.
 SLOTTBL_CHK:
         MOV C,A
@@ -2613,7 +2628,7 @@ SLOTTBL_ZERO:
         MOV A,B
         JMP SLOT_INC_CHK
 L_1018:
-        DB   0F1H
+        POP PSW
 SLOT_INC_CHK:
         INR A
         LXI H,SLOT_COUNT
@@ -2740,7 +2755,9 @@ SRU_ZERO:
         STAX B
         RET
 
-; CALL_TICK_HOOK: jump through TICK_HOOK (set by the missing half or the monitor).
+; CALL_TICK_HOOK: jump through TICK_HOOK. Nothing in the fully-recovered ROM ever writes
+; TICK_HOOK, so in practice it's only ever set (if at all) by the serial monitor's
+; memory-write command - this is a runtime debug hook, not used by the firmware itself.
 CALL_TICK_HOOK:
         LHLD TICK_HOOK
         PCHL
@@ -3147,12 +3164,13 @@ PV_SCALE:
 
 ; DISP_REFRESH: write the 8279 display RAM (cmd 90H = write, auto-inc, addr 0).
 ; 7 bytes: 3 pairs interleaving high nibbles of 7034..7036 with 7037..7039, then 703A.
-; Never reached from the dumped halves; called from the missing half.
+; Reached by a plain JMP from L_1CEA, the shared display-commit tail used by
+; SW_ERR_SHOW and friends.
 DISP_REFRESH:
         MVI A,90H
         STA KDC_CMD
-        LXI B,M_7037
-        LXI H,M_7034
+        LXI B,DISP_ROW_B
+        LXI H,DISP_ROW_A
         MVI E,03H
 DISP_LOOP:
         MOV A,M
@@ -3181,13 +3199,13 @@ DISP_LOOP:
         INX B
         DCR E
         JNZ DISP_LOOP
-        LDA M_703A
+        LDA DISP_EXTRA
         STA KDC_DATA
         RET
 
 ; READ_SWITCHES: read the 6 thumbwheel rows via the 8279 sensor RAM (cmd 50H).
 ; Rows 0,1 -> SEL_A/SEL_B (digit+1, must be 1..9); rows 2..5 -> GRI (first digit >= 4).
-; Invalid settings call the X_199x error handlers in the missing half and retry.
+; Invalid settings call SW_ERR_SEL_A/SW_ERR_SEL_B/SW_ERR_GRI1..4 and retry.
 READ_SWITCHES:
         MVI A,0E0H
         STA KDC_CMD                 ; 8279: end interrupt
@@ -3198,7 +3216,7 @@ READ_SWITCHES:
         INR A
         CPI 0AH
         JC RSW_SELB
-        CALL X_1990
+        CALL SW_ERR_SEL_A
         JMP READ_SWITCHES
 RSW_SELB:
         STA SEL_A
@@ -3207,19 +3225,19 @@ RSW_SELB:
         INR A
         CPI 0AH
         JC RSW_GRI1
-        CALL X_1995
+        CALL SW_ERR_SEL_B
         JMP READ_SWITCHES
 RSW_GRI1:
         STA SEL_B
         LDA KDC_DATA
         CALL SW_TO_DIGIT
         JC RSW_GRI1_CHK
-        CALL X_199A
+        CALL SW_ERR_GRI1
         JMP READ_SWITCHES
 RSW_GRI1_CHK:
         CPI 04H
         JNC RSW_GRI2                ; GRI first digit must be 4..9
-        CALL X_199A
+        CALL SW_ERR_GRI1
         JMP READ_SWITCHES
 RSW_GRI2:
         RLC
@@ -3230,7 +3248,7 @@ RSW_GRI2:
         LDA KDC_DATA
         CALL SW_TO_DIGIT
         JC RSW_GRI3
-        CALL X_199F
+        CALL SW_ERR_GRI2
         JMP READ_SWITCHES
 RSW_GRI3:
         ORA L
@@ -3238,7 +3256,7 @@ RSW_GRI3:
         LDA KDC_DATA
         CALL SW_TO_DIGIT
         JC RSW_GRI4
-        CALL X_19A4
+        CALL SW_ERR_GRI3
         JMP READ_SWITCHES
 RSW_GRI4:
         RLC
@@ -3251,7 +3269,7 @@ RSW_GRI4:
         JC RSW_STORE_GRI
         CPI 0BH
         JZ RSW_GRI4_BLANK
-        CALL X_19A9
+        CALL SW_ERR_GRI4
         JMP READ_SWITCHES
 RSW_GRI4_BLANK:
         MVI A,00H
@@ -3587,7 +3605,9 @@ PRTBUF_POP:
         RET
 
 ; REPORT_TASK: sequence the periodic data report over the serial port (RPT_STATE 0..8,
-; 0FEH = idle, 0FFH = armed). Items are formatted by X_189B / X_1878 in the missing half.
+; 0FEH = idle, 0FFH = armed). Items are formatted by PRT_HEX_HI_SP / PRT_HEX_BYTE and,
+; for item 0 (GRI) or the 7056H-indexed items, by RPT_FMT_TD3; see 186D for the whole
+; print-buffer formatting cluster (186D-19E7).
 REPORT_TASK:
         LDA RPT_STATE
         CPI 0FEH
@@ -3659,7 +3679,7 @@ RPT_RUNNING:
         INR A
         STA RPT_STATE
         CPI 09H
-        JZ X_1940
+        JZ RPT_HEADER_LINE
         JMP RPT_NEXT_ITEM
 RPT_FINISH:
         MVI A,0FEH
@@ -3689,20 +3709,20 @@ RPT_FORMAT:
         LDA RPT_STATE
         LXI H,SLOTREC_3
         CALL MUL9_INDEX             ; HL = SLOTREC_3 + 9 * item
-        CALL X_189B
-        CALL X_1878
+        CALL PRT_HEX_HI_SP
+        CALL PRT_HEX_BYTE
         LDA RPT_STATE
         CPI 00H
         JNZ RPT_ITEM_OFS
         LXI H,GRI_BCD_HI
-        JMP X_1804
+        JMP RPT_FMT_TD3
 RPT_ITEM_OFS:
         LXI H,7056H                 ; operand high byte is at 1800 in the undumped half: real value unknown (dump shows 0FFH)
-        CALL OLD_MUL10
-X_1804:
-        CALL SUB_1885
-        CALL X_1878
-        CALL X_1878
+        CALL MUL10_INDEX
+RPT_FMT_TD3:
+        CALL PRT_TD_DOT
+        CALL PRT_HEX_BYTE
+        CALL PRT_HEX_BYTE
         LDA RPT_STATE
         CALL SUB_04EE
         MOV A,M
@@ -3722,7 +3742,7 @@ X_1804:
 L_1836:
         MVI A,20H                   ; ' '
 L_1838:
-        CALL SUB_186D
+        CALL PRTBUF_PUT
         LDA RPT_STATE
         MOV C,A
         MVI B,00H
@@ -3732,21 +3752,45 @@ L_1838:
         ANI 20H                     ; ' '
         CPI 20H                     ; ' '
         MVI A,4CH                   ; 'L'
-        JNZ SUB_186D
+        JNZ PRTBUF_PUT
         LDA RPT_STATE
         CALL SUB_04EE
         MOV A,M
         ANI 20H                     ; ' '
         CPI 00H
         MVI A,55H                   ; 'U'
-        JZ SUB_186D
+        JZ PRTBUF_PUT
         LDA REC_MASTER
         ANI 20H                     ; ' '
         CPI 00H
         MVI A,4DH                   ; 'M'
-        JZ SUB_186D
+        JZ PRTBUF_PUT
         MVI A,20H                   ; ' '
-SUB_186D:
+
+; Print-buffer formatting cluster (186D-19E7), fully decoded this session:
+; PRTBUF_PUT (186D): append A to PRTBUF via PRTBUF_PTR (mirrors PRTBUF_GET at 1708).
+; NIBBLE_TO_HEX (18B4): low nibble of A -> ASCII hex/BCD digit ('0'-'9','A'-'F').
+; BYTE_TO_HEX2 (18AA): byte in A -> two hex chars; falls into NIBBLE_TO_HEX for the low
+;   nibble, so on return A = low-nibble char, B = high-nibble char.
+; PRT_HEX_BYTE (1878): print byte at (HL) as 2 hex chars (low char first, then high),
+;   then HL--; used to format record bytes walking downward through memory.
+; PRT_HEX_HI_SP (189B): print ' ' then just the high-nibble hex char of byte at (HL),
+;   then HL--; a single-digit field with a leading space.
+; PRT_TD_DOT (1885): print ' ', then byte at HL as "lo.hi" (decimal point between the
+;   two hex chars), then HL--; used for the first byte of a 3-byte value (RPT_FMT_TD3).
+; RPT_FMT_TD3 (1804): PRT_TD_DOT then PRT_HEX_BYTE x2 - formats a 3-byte value ending
+;   at HL as ' D.DDDDDD'-shaped text (a TD-style report field). Reached both from
+;   RPT_FORMAT (item 0, HL=GRI_BCD_HI) and by falling through RPT_ITEM_OFS's
+;   MUL10_INDEX call (other items, HL indexed into the 7056H table).
+; PRT_HEX_BYTE_A (197A) / PRT_DIGIT_LO (1984): same idea as PRT_HEX_BYTE/BYTE_TO_HEX2
+;   but operate on a value already in A (no HL, no pointer walk): PRT_HEX_BYTE_A prints
+;   both hex chars, PRT_DIGIT_LO prints only the low-nibble char (for values that are
+;   already a single BCD digit, e.g. SW_D1/SEL_A/SEL_B).
+; RPT_HEADER_LINE (1940, xref j17B1, the last REPORT_TASK item): emits LF then CR
+;   (printed in that order because PRTBUF drains downward, so they transmit CR,LF), a
+;   status digit from BTN_STATE bits 6-7, then SW_D1/SEL_B/SEL_A as single digits and
+;   VAR_704F/SW_LO/SW_HI as hex-byte pairs - a header/status line for the report.
+PRTBUF_PUT:
         PUSH H
         LHLD PRTBUF_PTR
         MOV M,A
@@ -3754,44 +3798,44 @@ SUB_186D:
         SHLD PRTBUF_PTR
         POP H
         RET
-X_1878:
+PRT_HEX_BYTE:
         MOV A,M
-        CALL SUB_18AA
-        CALL SUB_186D
+        CALL BYTE_TO_HEX2
+        CALL PRTBUF_PUT
         MOV A,B
-        CALL SUB_186D
+        CALL PRTBUF_PUT
         DCX H
         RET
-SUB_1885:
+PRT_TD_DOT:
         MVI A,20H                   ; ' '
-        CALL SUB_186D
+        CALL PRTBUF_PUT
         MOV A,M
         DCX H
-        CALL SUB_18AA
-        CALL SUB_186D
+        CALL BYTE_TO_HEX2
+        CALL PRTBUF_PUT
         MVI A,2EH                   ; '.'
-        CALL SUB_186D
+        CALL PRTBUF_PUT
         MOV A,B
-        JMP SUB_186D
-X_189B:
+        JMP PRTBUF_PUT
+PRT_HEX_HI_SP:
         MVI A,20H                   ; ' '
-        CALL SUB_186D
+        CALL PRTBUF_PUT
         MOV A,M
-        CALL SUB_18AA
+        CALL BYTE_TO_HEX2
         MOV A,B
-        CALL SUB_186D
+        CALL PRTBUF_PUT
         DCX H
         RET
-SUB_18AA:
+BYTE_TO_HEX2:
         MOV C,A
         RRC
         RRC
         RRC
         RRC
-        CALL SUB_18B4
+        CALL NIBBLE_TO_HEX
         MOV B,A
         MOV A,C
-SUB_18B4:
+NIBBLE_TO_HEX:
         ANI 0FH
         CPI 0AH
         JM L_18BD
@@ -3799,7 +3843,17 @@ SUB_18B4:
 L_18BD:
         ADI 30H                     ; '0'
         RET
-X_18C0:
+
+; TICK_CLOCK_CASCADE: NOT a display refresh (firmware.md's old guess for this
+; background task was wrong - fixed there too). Only runs once TICK_BCD wraps to 0.
+; Increments VAR_704F (mod 60H BCD), carrying into SW_LO (mod 60H) then SW_HI (mod 24H) -
+; an HH:MM:SS-shaped cascading BCD clock in SW_HI:SW_LO:VAR_704F. If STATUS_BITS bit 7
+; is clear, also cascades a second HH:MM:SS-shaped clock in VAR_7051:VAR_7050:VAR_70BD.
+; Not yet reconciled with SW_LO/SW_HI/VAR_704F's other documented role as latched
+; thumbwheel values (front-panel.md) - either these cells are genuinely dual-purpose
+; (set-up-mode latch vs. run-mode clock digit), or one of the two roles is misread;
+; needs the physical unit's display behavior to settle which.
+TICK_CLOCK_CASCADE:
         LDA TICK_BCD
         CPI 00H
         JNZ L_18FE
@@ -3863,64 +3917,84 @@ L_18FE:
         MVI A,00H
         STA VAR_7051
         RET
-X_1940:
+RPT_HEADER_LINE:
         MVI A,0AH
-        CALL SUB_186D
+        CALL PRTBUF_PUT
         MVI A,0DH
-        CALL SUB_186D
+        CALL PRTBUF_PUT
         LDA BTN_STATE
         RLC
         RLC
         ANI 03H
         ORI 30H                     ; '0'
-        CALL SUB_186D
+        CALL PRTBUF_PUT
         LDA SW_D1
-        CALL SUB_1984
+        CALL PRT_DIGIT_LO
         LDA SEL_B
-        CALL SUB_1984
+        CALL PRT_DIGIT_LO
         LDA SEL_A
-        CALL SUB_1984
+        CALL PRT_DIGIT_LO
         LDA VAR_704F
-        CALL SUB_197A
+        CALL PRT_HEX_BYTE_A
         LDA SW_LO
-        CALL SUB_197A
+        CALL PRT_HEX_BYTE_A
         LDA SW_HI
-        JMP SUB_197A
-SUB_197A:
-        CALL SUB_18AA
-        CALL SUB_186D
+        JMP PRT_HEX_BYTE_A
+PRT_HEX_BYTE_A:
+        CALL BYTE_TO_HEX2
+        CALL PRTBUF_PUT
         MOV A,B
-        JMP SUB_186D
-SUB_1984:
-        CALL SUB_18AA
-        JMP SUB_186D
-D_198A:
+        JMP PRTBUF_PUT
+PRT_DIGIT_LO:
+        CALL BYTE_TO_HEX2
+        JMP PRTBUF_PUT
+
+; ERR_DASH_TBL: 6-byte dash pattern (0AAH,0ABH,0BBH x2) copied by SW_ERR_SHOW's
+; loop into M_7034..M_7039 (both display rows); read only via the BC pointer loaded
+; at 19BE, never as code. Confirmed purpose: SW_ERR_SEL_A..SW_ERR_GRI4 (1990-19A9)
+; are the six switch-validation error stubs named in front-panel.md - each does
+; MVI B,<field 1..6> / JMP SW_ERR_SHOW, which fills both display rows with this dash
+; pattern, then BCD-formats B into M_7038 and M_7035 (both rows' middle digit) so the
+; field number shows through the dashes, e.g. "--N--" over "--N--".
+ERR_DASH_TBL:
         DB   0AAH,0ABH,0BBH,0AAH,0ABH,0BBH
-X_1990:
+SW_ERR_SEL_A:
         MVI B,01H
-        JMP L_19B8
-X_1995:
+        JMP SW_ERR_SHOW
+SW_ERR_SEL_B:
         MVI B,02H
-        JMP L_19B8
-X_199A:
+        JMP SW_ERR_SHOW
+SW_ERR_GRI1:
         MVI B,03H
-        JMP L_19B8
-X_199F:
+        JMP SW_ERR_SHOW
+SW_ERR_GRI2:
         MVI B,04H
-        JMP L_19B8
-X_19A4:
+        JMP SW_ERR_SHOW
+SW_ERR_GRI3:
         MVI B,05H
-        JMP L_19B8
-X_19A9:
+        JMP SW_ERR_SHOW
+SW_ERR_GRI4:
         MVI B,06H
-        JMP L_19B8
-        DB   06H,07H,0C3H,0B8H,19H,06H,08H,0C3H
-        DB   0B8H,19H
-L_19B8:
+        JMP SW_ERR_SHOW
+
+; Dead code: two more MVI B,nn / JMP SW_ERR_SHOW stubs (nn=07H, then 08H at 19B3)
+; continuing the SW_ERR_SEL_A..SW_ERR_GRI4 pattern, but with no callers - READ_SWITCHES
+; only validates 6 fields (SEL_A, SEL_B, GRI digits 1-4), so error codes 7 and 8 are
+; never raised.
+X_19AE:
+        DB   06H,07H,0C3H,0B8H,19H
+X_19B3:
+        DB   06H,08H,0C3H,0B8H,19H
+
+; SW_ERR_SHOW: B = error field number (1..6, see ERR_DASH_TBL). Copies the 6-byte
+; ERR_DASH_TBL into M_7034..M_7039 (both display rows), then BCD-formats B into
+; M_7038 and M_7035 (middle digit of each row) and loads a 3-byte pointer/base into
+; M_70B7/M_70B8 ("'3'") before falling into the shared display-commit path at 1CEA.
+SW_ERR_SHOW:
         PUSH B
         MVI E,06H
-        LXI H,M_7034
-        LXI B,D_198A
+        LXI H,DISP_ROW_A
+        LXI B,ERR_DASH_TBL
 L_19C1:
         LDAX B
         MOV M,A
@@ -3937,8 +4011,8 @@ L_19C1:
         MOV A,B
         DAA
         STA M_7035
-        LXI H,M_7034
-        LXI B,M_7037
+        LXI H,DISP_ROW_A
+        LXI B,DISP_ROW_B
         MVI A,33H                   ; '3'
         STA M_70B7
         STA M_70B8
@@ -3978,14 +4052,19 @@ L_1A23:
         STA M_70B7
         STA M_70B8
         LDA ORPHAN_0031
-        STA M_7034
+        STA DISP_ROW_A
         MVI A,0FFH
         STA M_7035
         LDA D_1A4D
         STA M_7036
-        LXI H,M_7034
+        LXI H,DISP_ROW_A
         LXI B,D_1A4E
         JMP L_1CEA
+
+; D_1A4D: single byte 30H (ASCII '0'), read at 1A3E and copied into M_7036
+; (companion to ORPHAN_0031's byte -> M_7034; see 0031).
+; D_1A4E: 3-byte table {11H,0FFH,78H}; its address is loaded into BC at 1A47
+; and consumed by SUB_1CF3 (via L_1CEA), which copies it into M_7037..M_7039.
 D_1A4D:
         DB   30H
 D_1A4E:
@@ -4001,19 +4080,19 @@ L_1A5E:
         STA M_70B7
         STA M_70B8
         LDA SEL_A
-        STA M_7034
+        STA DISP_ROW_A
         LDA SEL_B
         STA M_7035
         LDA SW_D1
         STA M_7036
         LDA SW_D2
-        STA M_7037
+        STA DISP_ROW_B
         LDA SW_D3
         STA M_7038
         LDA SW_D4
         STA M_7039
-        LXI H,M_7034
-        LXI B,M_7037
+        LXI H,DISP_ROW_A
+        LXI B,DISP_ROW_B
         LDA BTN_STATE
         ANI 80H
         JNZ L_19FB
@@ -4053,7 +4132,7 @@ L_1AD5:
         MVI A,40H                   ; '@'
         STA M_70B8
         LDA SW_HI
-        STA M_7034
+        STA DISP_ROW_A
         LDA SW_LO
         STA M_7035
         LDA VAR_704F
@@ -4063,16 +4142,16 @@ L_1AD5:
         LDA VAR_7050
         STA M_7038
         LDA VAR_7051
-        STA M_7037
-        LXI H,M_7034
-        LXI B,M_7037
+        STA DISP_ROW_B
+        LXI H,DISP_ROW_A
+        LXI B,DISP_ROW_B
         JMP L_1CEA
 L_1B14:
         LDA SEL_A
         CPI 0AH
         JP L_1CC5
         LXI H,M_7053
-        CALL OLD_MUL10
+        CALL MUL10_INDEX
         STA M_70B7
         INX H
         MOV A,M
@@ -4082,7 +4161,7 @@ L_1B14:
         DCR A
         JZ L_1B48
         LXI H,M_7053
-        CALL OLD_MUL10
+        CALL MUL10_INDEX
         ORI 80H
         STA M_70B7
         INX H
@@ -4095,7 +4174,7 @@ L_1B48:
         CPI 0AH
         JZ L_1B6C
         LXI H,M_7053
-        CALL OLD_MUL10
+        CALL MUL10_INDEX
         ORI 80H
         STA M_70B7
         INX H
@@ -4129,7 +4208,7 @@ L_1B7E:
         MVI A,0F7H
         STA M_70B7
 L_1B9C:
-        LXI H,M_7034
+        LXI H,DISP_ROW_A
 L_1B9F:
         PUSH H
         LDA SEL_B
@@ -4139,7 +4218,7 @@ L_1B9F:
         JZ L_1C65
 L_1BAD:
         LXI H,M_7053
-        CALL OLD_MUL10
+        CALL MUL10_INDEX
         STA M_70B8
         INX H
         MOV A,M
@@ -4149,7 +4228,7 @@ L_1BAD:
         DCR A
         JZ L_1BDF
         LXI H,M_7053
-        CALL OLD_MUL10
+        CALL MUL10_INDEX
         ORI 80H
         STA M_70B8
         INX H
@@ -4165,7 +4244,7 @@ L_1BDF:
         CPI 0AH
         JZ L_1C03
         LXI H,M_7053
-        CALL OLD_MUL10
+        CALL MUL10_INDEX
         ORI 80H
         STA M_70B8
         INX H
@@ -4199,7 +4278,7 @@ L_1C12:
         MVI A,0F7H
         STA M_70B8
 L_1C33:
-        LXI B,M_7037
+        LXI B,DISP_ROW_B
         JMP L_1C3B
 L_1C39:
         MOV B,H
@@ -4273,7 +4352,7 @@ L_1CA9:
         PUSH H
         MOV A,E
         LXI H,M_7053
-        CALL OLD_MUL10
+        CALL MUL10_INDEX
         STA M_70B7
         MVI A,40H                   ; '@'
         STA M_70B8
@@ -4305,7 +4384,7 @@ L_1CEA:
 SUB_1CF3:
         MVI E,03H
         PUSH H
-        LXI H,M_7037
+        LXI H,DISP_ROW_B
 L_1CF9:
         LDAX B
         MOV M,A
@@ -4315,7 +4394,7 @@ L_1CF9:
         JNZ L_1CF9
         MVI E,03H
         POP H
-        LXI B,M_7034
+        LXI B,DISP_ROW_A
 L_1D07:
         MOV A,M
         STAX B
@@ -4325,10 +4404,10 @@ L_1D07:
         JNZ L_1D07
         RET
 SUB_1D10:
-        LXI H,M_7034
+        LXI H,DISP_ROW_A
         LDA M_70B7
         CALL SUB_1D45
-        LXI H,M_7037
+        LXI H,DISP_ROW_B
         LDA M_70B8
         CALL SUB_1D45
         LDA BTN_STATE
@@ -4337,15 +4416,15 @@ SUB_1D10:
         LDA TICK_BCD
         ANI 40H                     ; '@'
         JNZ L_1D3A
-        LDA M_703A
+        LDA DISP_EXTRA
         ANI 0FH
-        STA M_703A
+        STA DISP_EXTRA
         RET
 L_1D3A:
-        LDA M_703A
+        LDA DISP_EXTRA
         ANI 0FH
         ORI 10H
-        STA M_703A
+        STA DISP_EXTRA
         RET
 SUB_1D45:
         PUSH PSW
@@ -4473,6 +4552,11 @@ X_1E05:
         STA M_70C2
         MOV A,C
         RET
+
+; OLD_SUB_1E23: dead code from an in-place patch. LDA SLOT_IDX; MOV D,A; then a
+; direct JMP to 1E2B, skipping the MOV A,C / STA SLOT_IDX step that the live
+; SUB_1E23 (1E23) inserts before falling into the same 1E2B tail.
+OLD_SUB_1E23:
         DB   3AH,11H,6FH,57H,0C3H,2BH,1EH
 SUB_1E23:
         LDA SLOT_IDX
@@ -4481,7 +4565,7 @@ SUB_1E23:
         STA SLOT_IDX
         MOV A,D
         LXI H,M_7053
-        CALL OLD_MUL10
+        CALL MUL10_INDEX
         MVI E,0AH
 L_1E34:
         MVI M,00H
@@ -4520,6 +4604,12 @@ L_1E5E:
         JNZ L_1E5E
         CPI 9AH
         RET
+
+; ORPHAN_1E6D: dead code, unreached from anywhere. Decodes as CNZ 19AE (calls the
+; dead X_19AE stub above) followed by JMP 1E6D, an infinite self-loop. Neither this
+; nor 19AE has any live caller, so the pair forms a self-contained dead-code island
+; sitting between SUB_1E55 (ends 1E6C RET) and the live L_1E73.
+ORPHAN_1E6D:
         DB   0C4H,0AEH,19H,0C3H,6DH,1EH
 L_1E73:
         MVI M,00H
@@ -4712,6 +4802,17 @@ L_1F6A:
         CPI 00H
         JZ BCD_ADD4
         JMP BCD_SUB4
+
+; 128-byte tail block of superseded routine bodies, left in place by the same kind
+; of in-place patch/reorg that produced OLD_LOAD_REC (0533) - unlike MUL10_INDEX (0515),
+; this block genuinely has no live callers anywhere.
+; Manually decoded (not part of live flow, so kept as DB):
+;   1F80-1F9B: old GET_FLAGS_A/COPY_E/FILL_ZERO-based routine, ends with JMP FILL_ZERO.
+;   1F9E-1FBB: old copy of the SLOTTBL_ZERO/SLOT_INC_CHK-style flag check, ends RET.
+;   1FBC-1FF5: old copy of X_0FBE's slot-flag logic (same GET_FLAGS_A/CMP/JNZ shape,
+;     with an extra leading MVI A,01H and a different post-branch tail), ends RET.
+;   1FF6-1FFF: an x10-multiply fragment (PUSH PSW/H/B; RLC;MOV C,A;RLC;RLC;ADD C) with the
+;     same instruction shape as MUL10_INDEX's body, but this copy is dead (no xrefs at all).
         DB   6FH,0CAH,85H,0FH,0EBH,0C1H,0D5H,0E5H
         DB   78H,0CDH,0E4H,04H,7EH,0F6H,08H,77H
         DB   0E1H,0C1H,0E5H,1EH,05H,0CDH,0BDH,07H

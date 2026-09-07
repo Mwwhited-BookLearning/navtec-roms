@@ -88,6 +88,14 @@ both chip-pins 20 and 21, and leave programmer-pin-20 disconnected.
 
 ## Routines in the missing halves and what the callers tell us
 
+**Superseded.** Both halves are now fully recovered and this table is the
+pre-recovery guesswork, kept for the record. See `docs/routines.md`,
+`docs/firmware.md` and `docs/ram-map.md` for the confirmed analysis. Notably:
+the `X_1990`..`X_19A9` guess below was exactly right (now named `SW_ERR_SEL_A`,
+`SW_ERR_SEL_B`, `SW_ERR_GRI1`..`SW_ERR_GRI4`); the `X_18C0` guess ("probably
+`DISP_REFRESH` driver") was **wrong** - it's actually a cascading BCD tick
+clock (`TICK_CLOCK_CASCADE`), see `firmware.md`.
+
 | Address | Name | Called from | Inferred purpose |
 |---|---|---|---|
 | 0800 | (tail of `BIN_TO_BCD`) | 07FF | RLC RLC RLC ADD H RET |

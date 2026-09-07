@@ -114,20 +114,25 @@ IDLE --> ARMED : PROTO_STATE 0 or 2, tick counter 0,\nOPTIONS bits vs SW/latched
 ARMED : RPT_STATE = FFH
 ARMED --> ITEM0 : TX_PENDING was set (buffer drained)
 ITEM0 : RPT_STATE = 0: master (SLOT_FLAGS[0] & 50H == 50H)
-ITEM0 --> ITEMn : each item: RPT_FORMAT -> X_189B, X_1878 (missing half)
+ITEM0 --> ITEMn : each item: RPT_FORMAT -> PRT_HEX_HI_SP, PRT_HEX_BYTE, RPT_FMT_TD3
 ITEMn : RPT_STATE 1..8: slot n (SLOT_FLAGS[n] & D0H == D0H)
 ITEMn --> ITEMn : next item when buffer drained
 ITEMn --> DONE : RPT_STATE reaches 9
-DONE : X_1940 (missing half), then RPT_STATE = FEH
+DONE : RPT_HEADER_LINE (CR/LF + status/selector fields), then RPT_STATE = FEH
 DONE --> IDLE
 @enduml
 ```
 
+See [firmware.md](firmware.md)'s "Print-buffer formatting cluster" section for
+the full byte-formatting detail (`PRTBUF_PUT`, `BYTE_TO_HEX2`, etc.), now fully
+decoded.
+
 `OPTIONS` (70DF) bits gate the report: bit 7 requires `VAR_704F` low nibble
 non-zero, bit 0 requires `VAR_704F` non-zero, bit 1 requires `SW_LO` low nibble,
 bit 2 requires `SW_LO`, bit 3 requires `SW_HI`. These look like "report only
-when the operator has latched a value" conditions; the exact meaning needs the
-formatting code in the missing half.
+when the operator has latched a value" conditions - but `VAR_704F`/`SW_LO`/
+`SW_HI` are the same cells `TICK_CLOCK_CASCADE` increments as a run-mode BCD
+clock (see firmware.md), a dual-use that isn't reconciled yet.
 
 ## Timing summary
 
