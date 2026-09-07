@@ -116,6 +116,12 @@ the first 8155's range and the first page of the second's are contiguous, giving
 one 512-byte block with the stack at the top. Whether A15 also gates the ROM and
 peripheral selects cannot be told from software.
 
+The emulator ([docs/emulator.md](emulator.md)) implements exactly this table as
+a standalone decoder component, modeled as an emulated PAL16R8/20R10 with
+matching CUPL source rather than as the 8205 + TTL glue actually on this
+board - see [docs/pal-decoder.md](pal-decoder.md) for that design and why it
+doesn't change anything documented here about the physical decoder.
+
 ## Peripheral programming
 
 ### 8251A USART (C000 data, C001 control)

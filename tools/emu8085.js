@@ -28,6 +28,8 @@
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
+const { ProductTermPal } = require('./pal.js');
+const { CS, ADDR_DECODE_TERMS } = require('./addr-decode.js');
 
 // =====================================================================
 // CPU core
@@ -407,6 +409,11 @@ class Intel8155 {
       this.timerCurrent += (this.timerReload || 1);
     }
   }
+  // Standalone-component interface (see Bus): the chip decides for itself
+  // that A15 (IO/M, wired straight to its own pin -- see tools/addr-decode.js)
+  // picks RAM vs registers; the decoder never needs to know this.
+  read8(addr) { return (addr & 0x8000) ? this.readReg(addr & 7) : this.ram[addr & 0xFF]; }
+  write8(addr, val) { if (addr & 0x8000) this.writeReg(addr & 7, val); else this.ram[addr & 0xFF] = val; }
 }
 
 class Intel8251A {
@@ -430,6 +437,9 @@ class Intel8251A {
   injectRx(byte) { this.rxQueue.push(byte & 0xFF); }
   readByAddr(addr) { return (addr & 1) ? this.readStatus() : this.readData(); }
   writeByAddr(addr, v) { if (addr & 1) this.writeControl(v); else this.writeData(v); }
+  // Standalone-component interface (see Bus): A0 picks data vs control/status.
+  read8(addr) { return this.readByAddr(addr); }
+  write8(addr, val) { this.writeByAddr(addr, val); }
 }
 
 class Intel8279 {
@@ -470,6 +480,9 @@ class Intel8279 {
   raiseIrq() { this.irqPending = true; }
   readByAddr(addr) { return (addr & 1) ? this.readStatus() : this.readData(); }
   writeByAddr(addr, v) { if (addr & 1) this.writeCommand(v); else this.writeData(v); }
+  // Standalone-component interface (see Bus): A0 picks data vs command/status.
+  read8(addr) { return this.readByAddr(addr); }
+  write8(addr, val) { this.writeByAddr(addr, val); }
 }
 
 // =====================================================================
@@ -525,18 +538,56 @@ class ReceiverFrontEnd {
 }
 
 // =====================================================================
+// Standalone devices: ROM and the "nothing answers here" case. The active
+// peripherals (Intel8155/8251A/8279 above) are already standalone in this
+// same sense -- each exposes read8(addr)/write8(addr,val) and decides for
+// itself which address bits matter to it (IO/M via A15, A0, etc.) -- the
+// bus below never masks an address down before handing it to a device.
+// =====================================================================
+
+class RomDevice {
+  constructor(size) { this.bytes = new Uint8Array(size); this.mask = size - 1; }
+  load(buf, offset = 0) { for (let i = 0; i < buf.length && offset + i < this.bytes.length; i++) this.bytes[offset + i] = buf[i]; }
+  read8(addr) { return this.bytes[addr & this.mask]; }
+  write8() { /* ROM: writes ignored */ }
+}
+
+class UnusedDevice {
+  read8() { return 0xFF; }
+  write8() { /* nothing there */ }
+}
+
+// =====================================================================
 // Bus / memory map (see docs/hardware.md "Memory map" and "Address decoding")
+//
+// Device mapping is done by an emulated PAL16R8/20R10-equivalent decoder
+// (tools/pal.js + tools/addr-decode.js), standing in for the board's real
+// TTL-based device mapping (8205 + glue, per hardware.md) -- see
+// docs/pal-decoder.md for why, and for what that does and doesn't claim
+// about the physical board. Each device below only ever sees the full,
+// unmasked 16-bit address for accesses the decoder has already routed to
+// it, exactly as a real chip only sees the address bus plus its own /CS pin.
 // =====================================================================
 
 class Bus {
   constructor() {
-    this.rom = new Uint8Array(0x2000); // 0000-1FFF, ROM1+ROM2 back to back
-    this.expRom = null; // optional 2000-2FFF
+    this.rom1 = new RomDevice(0x1000);
+    this.rom2 = new RomDevice(0x1000);
+    this.expRomDevice = new UnusedDevice(); // replaced by a RomDevice if loadExpRom() is called
     this.pio1 = new Intel8155('8155#1 (U22 or U35, E000/6F00)');
     this.pio2 = new Intel8155('8155#2 (the other one, F000/7000)');
     this.usart = new Intel8251A();
     this.kdc = new Intel8279();
+    this.unused = new UnusedDevice();
     this.latch8212 = 0; // purpose unconfirmed, see hardware.md checklist item 8; not memory-mapped in the reconstructed decode table
+
+    this.decoder = new ProductTermPal(ADDR_DECODE_TERMS);
+    this.devicesByCS = {
+      [CS.ROM1]: this.rom1, [CS.ROM2]: this.rom2, [CS.EXPROM]: this.expRomDevice,
+      [CS.UNUSED]: this.unused, [CS.USART]: this.usart, [CS.KDC]: this.kdc,
+      [CS.PIO1]: this.pio1, [CS.PIO2]: this.pio2,
+    };
+
     this.frontEnd = null;
     this.pio1.onTimerOut = (level) => { if (level) this.pio1_rst75(); };
     this.trace = false;
@@ -546,34 +597,29 @@ class Bus {
     if (this._cpu) this._cpu.requestInterrupt('7.5');
   }
   attachCpu(cpu) { this._cpu = cpu; }
-  loadRom(buf, org) { for (let i = 0; i < buf.length && org + i < this.rom.length; i++) this.rom[org + i] = buf[i]; }
-  loadExpRom(buf) { this.expRom = new Uint8Array(0x1000); for (let i = 0; i < buf.length && i < 0x1000; i++) this.expRom[i] = buf[i]; }
+  loadRom(buf, org) {
+    if (org === 0) this.rom1.load(buf);
+    else if (org === 0x1000) this.rom2.load(buf);
+    else throw new Error(`Bus.loadRom: unexpected org ${org.toString(16)}, expected 0 or 1000`);
+  }
+  loadExpRom(buf) {
+    const d = new RomDevice(0x1000); d.load(buf);
+    this.expRomDevice = d; this.devicesByCS[CS.EXPROM] = d;
+  }
 
-  read8(addr) {
-    addr &= 0xFFFF;
-    const sel = (addr >> 12) & 7;
-    switch (sel) {
-      case 0: return this.rom[addr & 0x0FFF];
-      case 1: return this.rom[0x1000 + (addr & 0x0FFF)];
-      case 2: return this.expRom ? this.expRom[addr & 0x0FFF] : 0xFF;
-      case 3: return 0xFF;
-      case 4: return this.usart.readByAddr(addr);
-      case 5: return this.kdc.readByAddr(addr);
-      case 6: return (addr & 0x8000) ? this.pio1.readReg(addr & 7) : this.pio1.ram[addr & 0xFF];
-      case 7: return (addr & 0x8000) ? this.pio2.readReg(addr & 7) : this.pio2.ram[addr & 0xFF];
-    }
+  // Evaluate the decoder for this address and return the selected device
+  // (or the "nothing answers" stub). A15 (IO/M) is not a decoder input --
+  // see tools/addr-decode.js's header -- it reaches PIO1/PIO2 directly as
+  // part of the full address each device receives.
+  deviceFor(addr) {
+    const env = { A12: !!(addr & 0x1000), A13: !!(addr & 0x2000), A14: !!(addr & 0x4000) };
+    const cs = this.decoder.clock(env);
+    for (const name of Object.keys(cs)) if (!cs[name]) return this.devicesByCS[name]; // active low: asserted == false
+    return this.unused;
   }
-  write8(addr, val) {
-    addr &= 0xFFFF; val &= 0xFF;
-    const sel = (addr >> 12) & 7;
-    switch (sel) {
-      case 0: case 1: case 2: case 3: return; // ROM/unused: writes ignored
-      case 4: this.usart.writeByAddr(addr, val); return;
-      case 5: this.kdc.writeByAddr(addr, val); return;
-      case 6: if (addr & 0x8000) this.pio1.writeReg(addr & 7, val); else this.pio1.ram[addr & 0xFF] = val; return;
-      case 7: if (addr & 0x8000) this.pio2.writeReg(addr & 7, val); else this.pio2.ram[addr & 0xFF] = val; return;
-    }
-  }
+  read8(addr) { addr &= 0xFFFF; return this.deviceFor(addr).read8(addr); }
+  write8(addr, val) { addr &= 0xFFFF; this.deviceFor(addr).write8(addr, val & 0xFF); }
+
   tick(tstates) {
     this.pio1.tick(tstates);
     this.pio2.tick(tstates);
@@ -730,6 +776,6 @@ function startRepl(cpu, bus) {
   rl.on('close', () => process.exit(0));
 }
 
-module.exports = { Cpu8085, Bus, Intel8155, Intel8251A, Intel8279, ReceiverFrontEnd, loadSymbols };
+module.exports = { Cpu8085, Bus, Intel8155, Intel8251A, Intel8279, RomDevice, UnusedDevice, ReceiverFrontEnd, loadSymbols };
 
 if (require.main === module) main();

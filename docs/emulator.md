@@ -69,16 +69,25 @@ forever. Fixed by only clearing `displayRAM` on that command.
 ```
 tools/emu8085.js
   Cpu8085          registers, flags, the full opcode dispatch table, interrupts
-  Bus              address decode (ROM / expansion ROM / 8251A / 8279 / 8155x2)
-  Intel8155        RAM + 3 ports + 14-bit timer, x2 (one instance each for E000/F000)
-  Intel8251A       mode/command state machine, TX callback, RX queue
-  Intel8279        display RAM, sensor RAM, command dispatch by top-3-bit group
+  RomDevice, UnusedDevice, Intel8155 x2, Intel8251A, Intel8279
+                   standalone devices: each exposes read8(addr)/write8(addr,val)
+                   and decides for itself which address bits matter to it
+  Bus              wires the devices to an emulated PAL device-address
+                   decoder (see below) and dispatches accesses to whichever
+                   device's chip-select the decoder asserts
   ReceiverFrontEnd synthetic Loran-C signal generator (see below)
   CLI / REPL       argument parsing, tracing, breakpoints, interactive monitor
+
+tools/pal.js           generic PAL/GAL-style sum-of-products evaluator
+tools/addr-decode.js   this board's specific decode table + CUPL generator
 ```
 
-Everything lives in one file, matching `tools/dis8085.js`'s existing
-convention. `module.exports` exposes the classes for scripting/tests.
+The CPU/bus/peripherals live in one file, matching `tools/dis8085.js`'s
+existing convention; the PAL decoder is split out into its own two small
+modules since it's also used standalone to generate CUPL source - see
+[pal-decoder.md](pal-decoder.md) for why the decoder is modeled as a PAL at
+all and what that does and doesn't claim about the real board. `module.exports`
+exposes the classes for scripting/tests.
 
 ## Known simplifications and best-effort choices
 
