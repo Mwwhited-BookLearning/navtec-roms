@@ -180,7 +180,7 @@ INIT_DIV10:                                  ; xref: j00FF
 0115  32 02 6F   STA FIRST_SLOT
 0118  C5         PUSH B
 0119  E5         PUSH H
-011A  CD BD 1D   CALL X_1DBD
+011A  CD BD 1D   CALL QUEUE_SLOT_SEL
 011D  E1         POP H
 011E  C1         POP B
 INIT_CHK_SELB:                               ; xref: j0112
@@ -189,7 +189,7 @@ INIT_CHK_SELB:                               ; xref: j0112
 0123  F2 2D 01   JP ACQ_START
 0126  BD         CMP L
 0127  CA 2D 01   JZ ACQ_START
-012A  CD BD 1D   CALL X_1DBD
+012A  CD BD 1D   CALL QUEUE_SLOT_SEL
 
 ; ACQ_START: (re)start master acquisition. Reached again whenever tracking is lost.
 ACQ_START:                                   ; xref: j0123 j0127 j01FC j0202
@@ -288,7 +288,7 @@ D_01FF:                                      ; refs: lxi0BDD lxi0BEF
 0207  32 3A 6F   STA REC_MASTER_16
 020A  3E 10      MVI A,10H
 020C  32 E7 6F   STA VAR_6FE7
-020F  CD 05 1E   CALL X_1E05
+020F  CD 05 1E   CALL DEQUEUE_SLOT_SEL
 0212  CD 23 0F   CALL SET_SLOT_ACTIVE
 0215  01 24 6F   LXI B,REC_MASTER
 0218  CD E6 0D   CALL REC_TO_FRONTEND
@@ -526,7 +526,7 @@ SLOT_ACQ_FAIL:                               ; xref: j03C0
 03DC  CD 2B 00   CALL CPY4_TO_TOA
 03DF  C3 4A 03   JMP SLOT_TRK_MISS
 SLOT_ACQ_OK:                                 ; xref: j03CE
-03E2  CD 05 1E   CALL X_1E05
+03E2  CD 05 1E   CALL DEQUEUE_SLOT_SEL
 03E5  32 03 6F   STA SLOT_RESULT
 03E8  21 01 6F   LXI H,ACQ_COUNT
 03EB  34         INR M
@@ -1485,7 +1485,7 @@ SLOT_STALE_CHECK:                            ; xref: c08A9
 0913  C2 1B 09   JNZ ACCUM_SLOT_TOA
 0916  AF         XRA A
 0917  12         STAX D
-0918  CD 23 1E   CALL SUB_1E23
+0918  CD 23 1E   CALL SWAP_SLOT_IDX
 
 ; ACCUM_SLOT_TOA (was SUB_091B). HL = M_7057 + 10*SLOT_IDX via MUL10_INDEX (confirming
 ; M_7057 is a 10-byte-stride per-slot table, like M_7053). For slot 0 (master):
@@ -3626,14 +3626,14 @@ SCAN_SEL_CHK:                                ; xref: j160D j1634 j1647 j165A j16
 16BE  21 14 6F   LXI H,SLOT_COUNT
 16C1  BE         CMP M
 16C2  F0         RP
-16C3  CD BD 1D   CALL X_1DBD
+16C3  CD BD 1D   CALL QUEUE_SLOT_SEL
 16C6  DA D7 16   JC SCAN_SEL_STORE
 16C9  3A 12 6F   LDA SLOT_IDX_B
 16CC  CD E4 04   CALL GET_FLAGS_A
 16CF  E6 C0      ANI 0C0H
 16D1  FE 80      CPI 80H
 16D3  C8         RZ
-16D4  CD 05 1E   CALL X_1E05
+16D4  CD 05 1E   CALL DEQUEUE_SLOT_SEL
 SCAN_SEL_STORE:                              ; xref: j16C6
 16D7  32 03 6F   STA SLOT_RESULT
 16DA  3E 01      MVI A,01H
@@ -4583,25 +4583,33 @@ L_1D9D:                                      ; xref: j1DB7
 1DB6  1D         DCR E
 1DB7  C2 9D 1D   JNZ L_1D9D
 1DBA  C3 64 1D   JMP L_1D64
-X_1DBD:                                      ; xref: c011A c012A c16C3
+
+; QUEUE_SLOT_SEL (was X_1DBD). B = a slot number to remember. SEL_QUEUE_0/SEL_QUEUE_1/SEL_QUEUE_2
+; act as a 3-element FIFO of selected slot numbers: if any of the three is still 0
+; (empty), stores B there and returns with carry CLEAR (room available). If all three
+; are full, shifts the queue left (SEL_QUEUE_0<-SEL_QUEUE_1<-SEL_QUEUE_2<-B) and returns with carry SET
+; and A = the evicted (oldest) slot number. Called from INIT's SEL_A/SEL_B validation
+; (front-panel.md's "validate SEL_A/SEL_B against SLOT_COUNT") - queues the operator's
+; selected secondaries for `DEQUEUE_SLOT_SEL` to hand out one at a time.
+QUEUE_SLOT_SEL:                              ; xref: c011A c012A c16C3
 1DBD  47         MOV B,A
-1DBE  3A C0 70   LDA M_70C0
+1DBE  3A C0 70   LDA SEL_QUEUE_0
 1DC1  FE 00      CPI 00H
 1DC3  CA F0 1D   JZ L_1DF0
-1DC6  3A C1 70   LDA M_70C1
+1DC6  3A C1 70   LDA SEL_QUEUE_1
 1DC9  FE 00      CPI 00H
 1DCB  CA F7 1D   JZ L_1DF7
-1DCE  3A C2 70   LDA M_70C2
+1DCE  3A C2 70   LDA SEL_QUEUE_2
 1DD1  FE 00      CPI 00H
 1DD3  CA FE 1D   JZ L_1DFE
-1DD6  3A C0 70   LDA M_70C0
+1DD6  3A C0 70   LDA SEL_QUEUE_0
 1DD9  4F         MOV C,A
-1DDA  3A C1 70   LDA M_70C1
-1DDD  32 C0 70   STA M_70C0
-1DE0  3A C2 70   LDA M_70C2
-1DE3  32 C1 70   STA M_70C1
+1DDA  3A C1 70   LDA SEL_QUEUE_1
+1DDD  32 C0 70   STA SEL_QUEUE_0
+1DE0  3A C2 70   LDA SEL_QUEUE_2
+1DE3  32 C1 70   STA SEL_QUEUE_1
 1DE6  78         MOV A,B
-1DE7  32 C2 70   STA M_70C2
+1DE7  32 C2 70   STA SEL_QUEUE_2
 1DEA  79         MOV A,C
 1DEB  37         STC
 1DEC  C9         RET
@@ -4611,25 +4619,31 @@ L_1DED:                                      ; xref: j1E02 j1DFB j1DF4
 1DEF  C9         RET
 L_1DF0:                                      ; xref: j1DC3
 1DF0  78         MOV A,B
-1DF1  32 C0 70   STA M_70C0
+1DF1  32 C0 70   STA SEL_QUEUE_0
 1DF4  C3 ED 1D   JMP L_1DED
 L_1DF7:                                      ; xref: j1DCB
 1DF7  78         MOV A,B
-1DF8  32 C1 70   STA M_70C1
+1DF8  32 C1 70   STA SEL_QUEUE_1
 1DFB  C3 ED 1D   JMP L_1DED
 L_1DFE:                                      ; xref: j1DD3
 1DFE  78         MOV A,B
-1DFF  32 C2 70   STA M_70C2
+1DFF  32 C2 70   STA SEL_QUEUE_2
 1E02  C3 ED 1D   JMP L_1DED
-X_1E05:                                      ; xref: c020F c16D4 c03E2
-1E05  3A C0 70   LDA M_70C0
+
+; DEQUEUE_SLOT_SEL (was X_1E05; the old rom-status.md guess "evaluate slot, result to
+; SLOT_RESULT" was directionally right). Unconditionally shifts the 3-element queue left
+; (SEL_QUEUE_0<-SEL_QUEUE_1<-SEL_QUEUE_2<-0) and returns the old SEL_QUEUE_0 (the head/oldest entry) in A.
+; Callers store this into SLOT_RESULT, which `ACTIVATE_SELECTED_SLOT` later consumes -
+; so this is "pop the next operator-selected slot to bring into tracking".
+DEQUEUE_SLOT_SEL:                            ; xref: c020F c16D4 c03E2
+1E05  3A C0 70   LDA SEL_QUEUE_0
 1E08  4F         MOV C,A
-1E09  3A C1 70   LDA M_70C1
-1E0C  32 C0 70   STA M_70C0
-1E0F  3A C2 70   LDA M_70C2
-1E12  32 C1 70   STA M_70C1
+1E09  3A C1 70   LDA SEL_QUEUE_1
+1E0C  32 C0 70   STA SEL_QUEUE_0
+1E0F  3A C2 70   LDA SEL_QUEUE_2
+1E12  32 C1 70   STA SEL_QUEUE_1
 1E15  3E 00      MVI A,00H
-1E17  32 C2 70   STA M_70C2
+1E17  32 C2 70   STA SEL_QUEUE_2
 1E1A  79         MOV A,C
 1E1B  C9         RET
 
@@ -4638,7 +4652,15 @@ X_1E05:                                      ; xref: c020F c16D4 c03E2
 ; SUB_1E23 (1E23) inserts before falling into the same 1E2B tail.
 OLD_SUB_1E23:                                
 1E1C  3A 11 6F 57 C3 2B 1E  DB   3AH,11H,6FH,57H,0C3H,2BH,1EH; |:.oW.+.|
-SUB_1E23:                                    ; xref: c0918
+
+; SWAP_SLOT_IDX (was SUB_1E23 - the live counterpart of the dead OLD_SUB_1E23 patch
+; fragment at 1E1C). C = new SLOT_IDX. Saves the OLD SLOT_IDX, installs C as the new
+; SLOT_IDX, then indexes M_7053 (MUL10_INDEX) using the OLD SLOT_IDX - i.e. switches
+; tracking to slot C while fetching the just-abandoned slot's M_7053 entry (the same
+; 10-byte-stride table the display-column code at 1B1x reads via SEL_A/SEL_B), likely to
+; clean up or update that slot's display column on the way out. Called from
+; SLOT_STALE_CHECK when giving up on a stale slot.
+SWAP_SLOT_IDX:                               ; xref: c0918
 1E23  3A 11 6F   LDA SLOT_IDX
 1E26  57         MOV D,A
 1E27  79         MOV A,C

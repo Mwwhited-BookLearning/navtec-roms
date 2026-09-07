@@ -248,9 +248,9 @@ control flow inside an already-named routine, not independent things to name.
 | 1CF3 | `SUB_1CF3` | 1 | needs analysis |
 | 1D10 | `SUB_1D10` | 1 | needs analysis |
 | 1D45 | `SUB_1D45` | 2 | needs analysis |
-| 1DBD | `X_1DBD` | 3 | needs analysis |
-| 1E05 | `X_1E05` | 3 | needs analysis |
-| 1E23 | `SUB_1E23` | 1 | needs analysis |
+| 1DBD | `QUEUE_SLOT_SEL` | 3 | named |
+| 1E05 | `DEQUEUE_SLOT_SEL` | 3 | named |
+| 1E23 | `SWAP_SLOT_IDX` | 1 | named |
 | 1E4C | `ROM_SELFTEST` | 1 | named |
 | 1E4F | `ROM_SELFTEST_2` | 1 | named |
 | 1E52 | `ROM_SELFTEST_3` | 1 | named |
@@ -265,7 +265,7 @@ control flow inside an already-named routine, not independent things to name.
 | 1F20 | `SUB_1F20` | 1 | needs analysis |
 | 2001 | `EXTROM_ENTRY` | 1 | named |
 
-**18 of 137 still need analysis** (down from 77 at the start of this session).
+**15 of 137 still need analysis** (down from 77 at the start of this session).
 
 ## Variables (all 175 referenced RAM/IO addresses)
 
@@ -392,9 +392,9 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 70BD | `VAR_70BD` | 1 | 2 | 0 | named |
 | 70BE | `VAR_70BE` | 2 | 3 | 0 | named |
 | 70BF | `STATUS_BITS` | 3 | 2 | 0 | named |
-| 70C0 | `M_70C0` | 3 | 3 | 0 | needs analysis |
-| 70C1 | `M_70C1` | 3 | 3 | 0 | needs analysis |
-| 70C2 | `M_70C2` | 3 | 3 | 0 | needs analysis |
+| 70C0 | `SEL_QUEUE_0` | 3 | 3 | 0 | named |
+| 70C1 | `SEL_QUEUE_1` | 3 | 3 | 0 | named |
+| 70C2 | `SEL_QUEUE_2` | 3 | 3 | 0 | named |
 | 70C3 | `MASTER_TOA_CORR` | 0 | 0 | 4 | named |
 | 70C7 | `M_70C7` | 1 | 1 | 0 | needs analysis |
 | 70C8 | `SW_D1` | 6 | 1 | 0 | named |
@@ -450,7 +450,7 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | FF9C | `M_FF9C` | 0 | 0 | 1 | needs analysis |
 | FFC0 | `M_FFC0` | 0 | 0 | 1 | needs analysis |
 
-**45 of 175 still need analysis.** Most of the `FFxx` ones (FF38, FF80, FF9C,
+**42 of 175 still need analysis.** Most of the `FFxx` ones (FF38, FF80, FF9C,
 FFC0) and `8020` are single `LXI`-only references with no read/write - almost
 certainly operands of arithmetic (e.g. negative BCD limit constants) rather
 than real variables; low priority. Two more (`M_F9CA`, `M_AC9F`) are the same
@@ -471,26 +471,27 @@ Roughly in priority order (highest caller-count / most load-bearing first):
    were "display fill/clear") and one real bug fix (`PHASE_AB_SELECT`/
    `MUL10_INDEX` were mislabeled dead code but are live) - see the table
    above and the git history for the full trail. `X_0F31` is next.
-2. **`X_1DBD`/`X_1E05`/`SUB_1E23`** (selector validation and slot-selection
-   result, called from `front-panel.md`'s switch-scan path - `X_1DBD`,
-   `X_1E05 -> SLOT_RESULT` per that doc). `SLOT_RESULT` already feeds the
-   now-resolved `ACTIVATE_SELECTED_SLOT`, so this is a natural next step.
-3. **`SUB_1C3F` / `SUB_1CF3` / `SUB_1D10` / `SUB_1D45` (1C00-1D50) and the
+2. **`SUB_1C3F` / `SUB_1CF3` / `SUB_1D10` / `SUB_1D45` (1C00-1D50) and the
    `M_70B7`-`M_70C7` display-column variables.** These feed `L_1CEA`'s
    display-commit path (same one `SW_ERR_SHOW` uses) and are keyed off
    `SEL_A`/`SEL_B` - likely "which secondary's TD to show in row A/B".
    `M_7053` (the other 10-byte-stride table `MUL10_INDEX` indexes, alongside
    the now-resolved `ACCUM_SLOT_TOA`'s `M_7057`) belongs here too.
-4. **`X_19E7`** (called every 20 ticks from `TICK_TASK`, touches `M_70BB`) -
+3. **`X_19E7`** (called every 20 ticks from `TICK_TASK`, touches `M_70BB`) -
    possibly a display-blink or column-rotation counter; unrelated to the
    `SW_ERR_*` family despite the nearby address.
-5. **`SUB_1EAA`/`SUB_1EBB`/`SUB_1ECF`/`SUB_1ED9`/`SUB_1EED`/`SUB_1F0E`/`SUB_1F20`**
+4. **`SUB_1EAA`/`SUB_1EBB`/`SUB_1ECF`/`SUB_1ED9`/`SUB_1EED`/`SUB_1F0E`/`SUB_1F20`**
    (1E9B-1F20) - all single-caller, small, clustered; likely one coherent
    feature once traced together.
-6. **Remaining `FFxx`/`8020` single-LXI addresses** - check whether they're
+5. **Remaining `FFxx`/`8020` single-LXI addresses** - check whether they're
    BCD constants (operand of `LXI H,<addr>` immediately followed by an
    arithmetic call) before spending real effort; may not be "variables" at
    all.
+
+Resolved this pass: `QUEUE_SLOT_SEL`/`DEQUEUE_SLOT_SEL` (was `X_1DBD`/`X_1E05`)
+- a 3-element FIFO of operator-selected slot numbers (`SEL_QUEUE_0..2`) feeding
+`ACTIVATE_SELECTED_SLOT` via `SLOT_RESULT` - and `SWAP_SLOT_IDX` (was
+`SUB_1E23`), the live counterpart of the dead `OLD_SUB_1E23` patch fragment.
 
 ## Regenerating the tables above
 
