@@ -55,6 +55,7 @@ M = consistent reading, L = placeholder name).
 | 6FD5 | `TOA_SAVE` | 4 | M | TOA saved when tracking is lost |
 | 6FD9 | `VAR_6FD9` | 1 | L | 1BH at INIT |
 | 6FDA | `MISS_CNT` | 1 | H | consecutive misses while tracking |
+| 6FDB | `PENDING_PIO2_BYTE` | 1 | M | next slot's status byte, pre-staged by `FIND_NEXT_TRACK_SLOT`, committed to `PIO2_PB` by `LATCH_REC_TO_PIO2PB` at the window-end capture |
 | 6FDC | `NEW_DATA` | 1 | M | set when a slot acquires or the selectors change |
 | 6FDD | `MISS_LIMIT` | 1 | H | 100 (64H) or 130 (82H) |
 | 6FDE | `TOA_ALT` | 4 | M | TOA copied into `CUR_TOA` after `MISS_LIMIT` misses |
@@ -82,7 +83,12 @@ M = consistent reading, L = placeholder name).
 | 7050 | `VAR_7050` | 2 | L | cleared by second button press in set-up |
 | 7053 | `SEL_COL_TBL` | 10 x n | M | 10-byte-stride per-selector display-column table, indexed by `SEL_A`/`SEL_B` via `MUL10_INDEX`; feeds `CHECK_SEL_RANGE`/`COMMIT_DISP_ROWS` |
 | 7054 | `SLOT_TBL` | n | L | one byte per slot, tested at 1000 |
+| 7057 | `ACCUM_TOA_TBL` | 10 x n | M | 10-byte-stride per-slot running-sum/count TOA accumulator, indexed like `SEL_COL_TBL`; filled by `ACCUM_SLOT_TOA` |
 | 70B7 | `DISP_ROW_A_FLAG`, `DISP_ROW_B_FLAG` | 1 each | M | per-row display flag byte; bit 7 gates `BLINK_ROW_BLANK`'s blink-to-blank effect; also stamped by `SW_ERR_SHOW` during error display |
+| 70B9 | `DISP_SCAN_SLOT` | 1 | M | auto-rotating slot index for the blank-`SEL_B` scan/cycle display mode |
+| 70BA | `DISP_SCAN_START` | 1 | M | snapshot of `DISP_SCAN_SLOT` at the start of a scan pass, for wrap detection |
+| 70BB | `DISP_TEST_CNT1` | 1 | M | first-stage 0..25 counter for `DISP_TEST_TICK`'s display self-test |
+| 70BC | `DISP_TEST_CNT2` | 1 | M | second-stage 0..25 counter for `DISP_TEST_TICK`'s display self-test |
 | 70BD | `VAR_70BD` | 2 | L | cleared with `VAR_7050`; also cascaded by `TICK_CLOCK_CASCADE`'s second clock when `STATUS_BITS` bit 7 is clear |
 | 70BF | `STATUS_BITS` | 1 | M | bit 7 set/cleared by button edges in set-up |
 | 70C0 | `SEL_QUEUE_0`..`SEL_QUEUE_2` | 3 | H | 3-element FIFO of operator-selected slot numbers, filled by `QUEUE_SLOT_SEL` and drained by `DEQUEUE_SLOT_SEL` |
@@ -93,6 +99,7 @@ M = consistent reading, L = placeholder name).
 | 70CF | `PLOT_COL` | 1 | H | plot-mode column counter |
 | 70D0 | `RPT_STATE` | 1 | H | report sequencer: FEH idle, FFH armed, 0..8 item |
 | 70D1 | `PRTBUF_PTR` | 2 | H | see `PRTBUF` |
+| 70D3 | `BCD_RESULT_SIGN` | 1 | M | signed-result flag (0=add, 1=subtract) for the 1E9B-1F20 BCD arithmetic cluster |
 | 70D8 | `QUAL_LO`, `QUAL_HI` | 2 | H | signal-quality accumulators (saturate at 40H, good >= 28H) |
 | 70DA | `TICK_HOOK` | 2 | H | optional routine called on every tick when non-zero |
 | 70DC | `OUT_MODE` | 1 | H | 0 normal, 1 suppressed, 2 plot |

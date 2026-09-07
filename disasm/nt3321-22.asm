@@ -77,7 +77,7 @@ BCD_DELTA_3  EQU  6FD2H  ; rd=0 wr=2 lxi=0
 TOA_SAVE     EQU  6FD5H  ; rd=0 wr=0 lxi=2
 VAR_6FD9     EQU  6FD9H  ; rd=0 wr=1 lxi=0
 MISS_CNT     EQU  6FDAH  ; rd=0 wr=1 lxi=1
-M_6FDB       EQU  6FDBH  ; rd=1 wr=1 lxi=0
+PENDING_PIO2_BYTE EQU  6FDBH  ; rd=1 wr=1 lxi=0
 NEW_DATA     EQU  6FDCH  ; rd=0 wr=2 lxi=1
 MISS_LIMIT   EQU  6FDDH  ; rd=1 wr=2 lxi=0
 TOA_ALT      EQU  6FDEH  ; rd=0 wr=0 lxi=1
@@ -96,11 +96,11 @@ SLOTREC_5    EQU  6FF3H  ; rd=0 wr=0 lxi=1
 M_6FF4       EQU  6FF4H  ; rd=0 wr=0 lxi=2
 RAM2_BASE    EQU  7000H  ; rd=0 wr=0 lxi=1
 DISP_ROW_A   EQU  7034H  ; rd=0 wr=3 lxi=9
-M_7035       EQU  7035H  ; rd=0 wr=6 lxi=0
-M_7036       EQU  7036H  ; rd=0 wr=3 lxi=0
+DISP_ROW_A_1 EQU  7035H  ; rd=0 wr=6 lxi=0
+DISP_ROW_A_2 EQU  7036H  ; rd=0 wr=3 lxi=0
 DISP_ROW_B   EQU  7037H  ; rd=0 wr=2 lxi=7
-M_7038       EQU  7038H  ; rd=0 wr=5 lxi=0
-M_7039       EQU  7039H  ; rd=0 wr=2 lxi=0
+DISP_ROW_B_1 EQU  7038H  ; rd=0 wr=5 lxi=0
+DISP_ROW_B_2 EQU  7039H  ; rd=0 wr=2 lxi=0
 DISP_EXTRA   EQU  703AH  ; rd=3 wr=2 lxi=0
 KEY_CHANGED  EQU  703BH  ; rd=1 wr=2 lxi=0
 BTN_STATE    EQU  703CH  ; rd=8 wr=3 lxi=0
@@ -112,13 +112,13 @@ VAR_7050     EQU  7050H  ; rd=2 wr=3 lxi=0
 VAR_7051     EQU  7051H  ; rd=2 wr=3 lxi=0
 SEL_COL_TBL  EQU  7053H  ; rd=0 wr=0 lxi=10
 SLOT_TBL     EQU  7054H  ; rd=0 wr=0 lxi=1
-M_7057       EQU  7057H  ; rd=0 wr=0 lxi=1
+ACCUM_TOA_TBL EQU  7057H  ; rd=0 wr=0 lxi=1
 DISP_ROW_A_FLAG EQU  70B7H  ; rd=1 wr=15 lxi=0
 DISP_ROW_B_FLAG EQU  70B8H  ; rd=1 wr=16 lxi=0
-M_70B9       EQU  70B9H  ; rd=3 wr=2 lxi=0
-M_70BA       EQU  70BAH  ; rd=1 wr=1 lxi=0
-M_70BB       EQU  70BBH  ; rd=1 wr=1 lxi=0
-M_70BC       EQU  70BCH  ; rd=1 wr=1 lxi=0
+DISP_SCAN_SLOT EQU  70B9H  ; rd=3 wr=2 lxi=0
+DISP_SCAN_START EQU  70BAH  ; rd=1 wr=1 lxi=0
+DISP_TEST_CNT1 EQU  70BBH  ; rd=1 wr=1 lxi=0
+DISP_TEST_CNT2 EQU  70BCH  ; rd=1 wr=1 lxi=0
 VAR_70BD     EQU  70BDH  ; rd=1 wr=2 lxi=0
 VAR_70BE     EQU  70BEH  ; rd=2 wr=3 lxi=0
 STATUS_BITS  EQU  70BFH  ; rd=3 wr=2 lxi=0
@@ -137,7 +137,7 @@ SW_LATCHED   EQU  70CEH  ; rd=1 wr=1 lxi=0
 PLOT_COL     EQU  70CFH  ; rd=3 wr=1 lxi=1
 RPT_STATE    EQU  70D0H  ; rd=11 wr=3 lxi=0
 PRTBUF_PTR   EQU  70D1H  ; rd=2 wr=4 lxi=0
-M_70D3       EQU  70D3H  ; rd=1 wr=2 lxi=0
+BCD_RESULT_SIGN EQU  70D3H  ; rd=1 wr=2 lxi=0
 M_70D4       EQU  70D4H  ; rd=0 wr=0 lxi=1
 M_70D6       EQU  70D6H  ; rd=0 wr=0 lxi=1
 QUAL_LO      EQU  70D8H  ; rd=2 wr=1 lxi=0
@@ -163,13 +163,13 @@ USART_CTRL   EQU  0C001H  ; rd=5 wr=2 lxi=0
 KDC_DATA     EQU  0D000H  ; rd=14 wr=3 lxi=0
 KDC_CMD      EQU  0D001H  ; rd=0 wr=11 lxi=0
 PIO1_CMD     EQU  0E000H  ; rd=0 wr=1 lxi=0
-M_E001       EQU  0E001H  ; rd=0 wr=1 lxi=0
-M_E002       EQU  0E002H  ; rd=0 wr=1 lxi=0
+PIO1_PA      EQU  0E001H  ; rd=0 wr=1 lxi=0
+PIO1_PB      EQU  0E002H  ; rd=0 wr=1 lxi=0
 PIO1_PC      EQU  0E003H  ; rd=7 wr=7 lxi=0
 PIO1_TMRLO   EQU  0E004H  ; rd=0 wr=1 lxi=0
 PIO1_TMRHI   EQU  0E005H  ; rd=0 wr=1 lxi=0
 PIO2_CMD     EQU  0F000H  ; rd=0 wr=5 lxi=0
-M_F001       EQU  0F001H  ; rd=0 wr=1 lxi=0
+PIO2_PA      EQU  0F001H  ; rd=0 wr=1 lxi=0
 PIO2_PB      EQU  0F002H  ; rd=4 wr=5 lxi=1
 PIO2_PC      EQU  0F003H  ; rd=3 wr=0 lxi=0
 PIO2_TMRLO   EQU  0F004H  ; rd=0 wr=5 lxi=0
@@ -935,7 +935,7 @@ MUL9_INDEX:
 ; M[HL] into A, HL left pointing at it). Previously mislabeled OLD_MUL10/"dead code from
 ; a patch" - it is in fact live, with 11 real callers (0922, 0A28, 1B1F, 1B36, 1B54,
 ; 1BB0, 1BC7, 1BEB, 1CB5, 1801, 1E2F), all indexing 10-byte-stride tables (SEL_COL_TBL,
-; M_7057, the 7056H report-item table) that are unrelated to the 9-byte SLOTREC_CNT.
+; ACCUM_TOA_TBL, the 7056H report-item table) that are unrelated to the 9-byte SLOTREC_CNT.
 ; The earlier "dead code left by an in-place patch" comment was simply wrong; a
 ; forced db override was hiding this as data. See docs/firmware.md for the correction.
 MUL10_INDEX:
@@ -1670,19 +1670,19 @@ SLOT_STALE_CHECK:
         STAX D
         CALL SWAP_SLOT_IDX
 
-; ACCUM_SLOT_TOA (was SUB_091B). HL = M_7057 + 10*SLOT_IDX via MUL10_INDEX (confirming
-; M_7057 is a 10-byte-stride per-slot table, like SEL_COL_TBL). For slot 0 (master):
-; record[0..3] += M_6F28. For other slots: record[0..3] += CUR_TOA, then += M_70C3 too
-; (two BCD_ADD4 calls into the same destination - an accumulator, not a single add).
-; If REC_MASTER's status byte bit 7 is clear (master not "active"), zeroes 4 bytes at
-; M_70C3 first. Finally increments record+5 - a sample counter alongside the running
-; sum, consistent with computing a smoothed/averaged TOA per slot for the report or
-; display rather than using the raw per-epoch value directly. M_6F28/M_70C3's own roles
-; aren't traced further; only referenced here (M_6F28) or here-plus-elsewhere (M_70C3).
+; ACCUM_SLOT_TOA (was SUB_091B). HL = ACCUM_TOA_TBL + 10*SLOT_IDX via MUL10_INDEX
+; (confirming ACCUM_TOA_TBL is a 10-byte-stride per-slot table, like SEL_COL_TBL). For
+; slot 0 (master): record[0..3] += M_6F28. For other slots: record[0..3] += CUR_TOA, then
+; += MASTER_TOA_CORR too (two BCD_ADD4 calls into the same destination - an accumulator,
+; not a single add). If REC_MASTER's status byte bit 7 is clear (master not "active"),
+; zeroes MASTER_TOA_CORR first. Finally increments record+5 - a sample counter alongside
+; the running sum, consistent with computing a smoothed/averaged TOA per slot for the
+; report or display rather than using the raw per-epoch value directly. M_6F28's role
+; isn't traced further (only referenced here).
 ACCUM_SLOT_TOA:
         PUSH B
         LDA SLOT_IDX
-        LXI H,M_7057
+        LXI H,ACCUM_TOA_TBL
         CALL MUL10_INDEX
         MOV B,H
         MOV C,L
@@ -1854,6 +1854,14 @@ L_0A22:
         ANI 0FH
         JZ L_0A6E
         LXI H,D_1004
+
+; M_2002 (0A4A) and M_2010 (0C6E), despite the addresses falling in the optional-
+; expansion-ROM range (2000-2FFF), do not appear to be calls into it - 0A4A's DE=2002H
+; gets conditionally XCHG'd with HL and stored into VAR_6FE6 as one of two 16-bit tag
+; values (the other being D_1004, itself a known instruction-boundary artifact), and
+; 0C6E's BC=2010H is never obviously consumed nearby. Likely incidental 16-bit constants
+; reused for their distinctive bit pattern, not deliberate expansion-ROM addresses -
+; low confidence, not fully traced.
         LXI D,M_2002
         LDA CUR_REC
         MOV B,A
@@ -1907,6 +1915,15 @@ L_0A9E:
         MOV M,A
         MOV B,A
         LHLD M_6FB3
+
+; M_FF38/M_FF80/M_FFC0 (0AAA/0ABC/0AD5) are not real variables - each is an
+; LXI-immediate 16-bit negative constant (-200, -128, -64) added via DAD to test PHASE_QUAL_A
+; or M_6FB3 against a magnitude threshold (sign of the sum = below/above threshold), in the
+; SLOT_TRACKING-area code around 0A9E-0AE6 that also uses D_0040/D_0080 (+64/+128) the same
+; way against PHASE_QUAL_B. Reads as multi-band confidence-threshold testing on the two
+; phase-quality accumulators, feeding a CUR_REC/CUR_FLAGS bit update - not traced bit-by-bit.
+; M_6FB1/M_6FB2/M_6FB3 (touched in the same area, and by CLAMP_HL_BC's caller at 0D24) are
+; part of this same quality-tracking neighborhood; not individually resolved.
         LXI D,M_FF38
         DAD D
         MOV A,H
@@ -2175,6 +2192,10 @@ L_0C2E:
         JMP PULSE_ALIGN_ADJ2_AND_CLEAR
 L_0C37:
         CALL PULSE_SCORE_UPDATE
+
+; M_8020 (0C3A) is not a real variable - LXI B,8020H loads two independent byte
+; constants (B=80H, C=20H) in one instruction, a common code-golf trick; used a few
+; instructions later inside SET_QUAL_FLAGS's B/C parameter pair. Not a memory reference.
         LXI B,M_8020
         LXI H,CUR_FLAGS
         MOV A,M
@@ -2468,7 +2489,7 @@ CUR_REC_TO_FRONTEND:
 ; Called at station-selection transitions - SEARCH_LOOP start (BC=REC_MASTER), after
 ; SLOT_ACQUIRE's secondary search starts (BC=REC_MASTER), SETTLE_LOOP start via
 ; CUR_REC_TO_FRONTEND (BC=CUR_REC) - and, via a second continuation entered at L_0E0B
-; (same byte-1/2/3 output, but byte 0's merge is deferred into M_6FDB instead of applied
+; (same byte-1/2/3 output, but byte 0's merge is deferred into PENDING_PIO2_BYTE instead of applied
 ; immediately), once per epoch from FIND_NEXT_TRACK_SLOT, with LATCH_REC_TO_PIO2PB
 ; committing the deferred byte precisely at the RST 6.5 window-end capture. The two-stage
 ; version (pre-stage now, commit at the window boundary) is strong evidence for the
@@ -2486,13 +2507,13 @@ REC_TO_FRONTEND:
 L_0DF3:
         INX B
         LDAX B
-        STA M_E002
+        STA PIO1_PB
         INX B
         LDAX B
-        STA M_E001
+        STA PIO1_PA
         INX B
         LDAX B
-        STA M_F001
+        STA PIO2_PA
         LDA PIO2_PB
         ORI 80H
         STA PIO2_PB
@@ -2502,7 +2523,7 @@ L_0E0B:
         ANI 7FH
         STA PIO2_PB
         LDAX B
-        STA M_6FDB
+        STA PENDING_PIO2_BYTE
         JMP L_0DF3
 
 ; PREP_NEXT_SLOT_FRONTEND (was X_0E1A): a one-instruction trampoline, just
@@ -2510,12 +2531,12 @@ L_0E0B:
 PREP_NEXT_SLOT_FRONTEND:
         CALL FIND_NEXT_TRACK_SLOT
 
-; LATCH_REC_TO_PIO2PB (was X_0E1D). Merges M_6FDB's bits 0,1,3 into PIO2_PB (keeping
+; LATCH_REC_TO_PIO2PB (was X_0E1D). Merges PENDING_PIO2_BYTE's bits 0,1,3 into PIO2_PB (keeping
 ; PIO2_PB's other bits), exactly the same bit-merge REC_TO_FRONTEND does for a record's
 ; status byte - this is that same merge, deferred. Called from RST65_ISR right at the
 ; window-end capture (matches firmware.md's ISR description) and from the tolerant-match
 ; path in SLOT_TRACKING. Closes the loop with FIND_NEXT_TRACK_SLOT/L_0E0B: that search
-; pre-stages the NEXT slot's status byte into M_6FDB (clearing PIO2_PB bit 7 immediately
+; pre-stages the NEXT slot's status byte into PENDING_PIO2_BYTE (clearing PIO2_PB bit 7 immediately
 ; but deferring the bits-0/1/3 merge), and this routine commits it precisely at the
 ; sample-window boundary instead of mid-window - avoiding a glitch on whatever hardware
 ; PIO2_PB's low bits drive.
@@ -2523,7 +2544,7 @@ LATCH_REC_TO_PIO2PB:
         LDA PIO2_PB
         ANI 0F4H
         MOV L,A
-        LDA M_6FDB
+        LDA PENDING_PIO2_BYTE
         ANI 0BH
         ORA L
         STA PIO2_PB
@@ -4288,11 +4309,11 @@ L_19C1:
         XRA A
         MOV A,B
         DAA
-        STA M_7038
+        STA DISP_ROW_B_1
         XRA A
         MOV A,B
         DAA
-        STA M_7035
+        STA DISP_ROW_A_1
         LXI H,DISP_ROW_A
         LXI B,DISP_ROW_B
         MVI A,33H                   ; '3'
@@ -4301,22 +4322,23 @@ L_19C1:
         JMP L_1CEA
 
 ; DISP_TEST_TICK (was X_19E7, called every 20 ticks from TICK_TASK). Only runs while
-; SW_D4 is held at 0BH (the blank thumbwheel position). Counts M_70BB 0..25 (0-19H): while
-; counting, clears DISP_ROW_A_FLAG/DISP_ROW_B_FLAG and fills both DISP_ROW_A and
+; SW_D4 is held at 0BH (the blank thumbwheel position). Counts DISP_TEST_CNT1 0..25 (0-19H):
+; while counting, clears DISP_ROW_A_FLAG/DISP_ROW_B_FLAG and fills both DISP_ROW_A and
 ; DISP_ROW_B with D_0005's bytes (88H,88H,88H - the classic all-segments-lit LED test
-; pattern) via COMMIT_DISP_ROWS. Once M_70BB reaches 25, counts M_70BC 0..25 the same way
-; but sets both flag bytes to 3FH instead of clearing them. Reads as a display self-test
-; sequence, held-thumbwheel-triggered (flash "88.88.88" then something else for ~25 ticks
-; each) - the SW_D2-gated path at L_1A23 (normal, non-test operation) isn't traced further.
+; pattern) via COMMIT_DISP_ROWS. Once DISP_TEST_CNT1 reaches 25, counts DISP_TEST_CNT2 0..25
+; the same way but sets both flag bytes to 3FH instead of clearing them. Reads as a display
+; self-test sequence, held-thumbwheel-triggered (flash "88.88.88" then something else for
+; ~25 ticks each) - the SW_D2-gated path at L_1A23 (normal, non-test operation) isn't traced
+; further.
 DISP_TEST_TICK:
         LDA SW_D4
         CPI 0BH
         JZ L_1A23
-        LDA M_70BB
+        LDA DISP_TEST_CNT1
         CPI 19H
         JZ L_1A0C
         INR A
-        STA M_70BB
+        STA DISP_TEST_CNT1
 L_19FB:
         MVI A,00H
         STA DISP_ROW_A_FLAG
@@ -4326,11 +4348,11 @@ L_1A03:
         LXI B,D_0005
         JMP L_1CEA
 L_1A0C:
-        LDA M_70BC
+        LDA DISP_TEST_CNT2
         CPI 19H
         JZ L_1A23
         INR A
-        STA M_70BC
+        STA DISP_TEST_CNT2
         MVI A,3FH                   ; '?'
         STA DISP_ROW_A_FLAG
         STA DISP_ROW_B_FLAG
@@ -4345,9 +4367,9 @@ L_1A23:
         LDA ORPHAN_0031
         STA DISP_ROW_A
         MVI A,0FFH
-        STA M_7035
+        STA DISP_ROW_A_1
         LDA D_1A4D
-        STA M_7036
+        STA DISP_ROW_A_2
         LXI H,DISP_ROW_A
         LXI B,D_1A4E
         JMP L_1CEA
@@ -4373,15 +4395,15 @@ L_1A5E:
         LDA SEL_A
         STA DISP_ROW_A
         LDA SEL_B
-        STA M_7035
+        STA DISP_ROW_A_1
         LDA SW_D1
-        STA M_7036
+        STA DISP_ROW_A_2
         LDA SW_D2
         STA DISP_ROW_B
         LDA SW_D3
-        STA M_7038
+        STA DISP_ROW_B_1
         LDA SW_D4
-        STA M_7039
+        STA DISP_ROW_B_2
         LXI H,DISP_ROW_A
         LXI B,DISP_ROW_B
         LDA BTN_STATE
@@ -4425,13 +4447,13 @@ L_1AD5:
         LDA SW_HI
         STA DISP_ROW_A
         LDA SW_LO
-        STA M_7035
+        STA DISP_ROW_A_1
         LDA VAR_704F
-        STA M_7036
+        STA DISP_ROW_A_2
         LDA VAR_70BE
-        STA M_7039
+        STA DISP_ROW_B_2
         LDA VAR_7050
-        STA M_7038
+        STA DISP_ROW_B_1
         LDA VAR_7051
         STA DISP_ROW_B
         LXI H,DISP_ROW_A
@@ -4479,7 +4501,7 @@ L_1B6C:
         MVI A,77H                   ; 'w'
         STA DISP_ROW_A_FLAG
         LDA SEL_A
-        STA M_7035
+        STA DISP_ROW_A_1
         CPI 0AH
         JC L_1B7E
         MVI A,00H
@@ -4495,7 +4517,7 @@ L_1B7E:
         JNZ L_1B9C
         ANI 0FH
         ORI 50H                     ; 'P'
-        STA M_7035
+        STA DISP_ROW_A_1
         MVI A,0F7H
         STA DISP_ROW_A_FLAG
 L_1B9C:
@@ -4561,11 +4583,11 @@ L_1C12:
         ANI 0C0H
         CPI 80H
         LDA SEL_B
-        STA M_7038
+        STA DISP_ROW_B_1
         JNZ L_1C33
         ANI 0FH
         ORI 50H                     ; 'P'
-        STA M_7038
+        STA DISP_ROW_B_1
         MVI A,0F7H
         STA DISP_ROW_B_FLAG
 L_1C33:
@@ -4608,9 +4630,17 @@ L_1C51:
         STA DISP_ROW_B_FLAG
         POP H
         JMP L_1CEA
+
+; DISP_SCAN_SLOT/DISP_SCAN_START (was M_70B9/M_70BA): reached when SEL_B sits at the
+; blank position (0BH). DISP_SCAN_SLOT cycles 0-9 once per second-ish (gated on TICK_BCD==0
+; and VAR_704F's low nibble==0), auto-rotating through slots for display when the operator
+; hasn't picked a specific secondary. DISP_SCAN_START snapshots the starting value once per
+; gating window; the search loop compares back against it to stop after a full cycle if no
+; slot has flags bits 6+7 both set (active+acquiring), avoiding an infinite loop when
+; nothing is eligible. An auto-cycle/scan display mode.
 L_1C65:
         POP H
-        LDA M_70B9
+        LDA DISP_SCAN_SLOT
         MOV E,A
         LDA TICK_BCD
         CPI 00H
@@ -4618,16 +4648,16 @@ L_1C65:
         LDA VAR_704F
         ANI 0FH
         JNZ L_1CA9
-        LDA M_70B9
-        STA M_70BA
+        LDA DISP_SCAN_SLOT
+        STA DISP_SCAN_START
 L_1C80:
-        LDA M_70B9
+        LDA DISP_SCAN_SLOT
         INR A
-        STA M_70B9
+        STA DISP_SCAN_SLOT
         CPI 0AH
         JNZ L_1C91
         MVI A,00H
-        STA M_70B9
+        STA DISP_SCAN_SLOT
 L_1C91:
         MOV C,A
         MOV E,A
@@ -4638,7 +4668,7 @@ L_1C91:
         ANI 0C0H
         CPI 0C0H
         JZ L_1CA9
-        LDA M_70BA
+        LDA DISP_SCAN_START
         CMP E
         RZ
         JMP L_1C80
@@ -5175,10 +5205,16 @@ L_1F30:
         MOV A,H
         RLC
         MVI A,01H
-        STA M_70D3
+
+; BCD_RESULT_SIGN (was M_70D3): set to 0 or 1 partway through the 1E9B-1F20 BCD
+; cluster's outer routine (1F35-1F75) based on a carry test, then consumed at the very end
+; (1F75) to pick BCD_ADD4 vs BCD_SUB4 - i.e. this is that cluster's signed-result flag
+; (0=positive/add, 1=negative/subtract). Doesn't resolve what the overall computation
+; means, just confirms it produces a signed BCD result.
+        STA BCD_RESULT_SIGN
         JNC L_1F5D
         XRA A
-        STA M_70D3
+        STA BCD_RESULT_SIGN
         CALL BCD_COMPL_HL
 L_1F5D:
         PUSH H
@@ -5195,7 +5231,7 @@ L_1F6A:
         CALL SWAP_HL_STASH
         POP B
         LXI H,BCD_TMP
-        LDA M_70D3
+        LDA BCD_RESULT_SIGN
         CPI 00H
         JZ BCD_ADD4
         JMP BCD_SUB4

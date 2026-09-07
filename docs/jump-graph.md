@@ -352,7 +352,7 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 6FD5 | `TOA_SAVE` | 0 | 0 | 2 | named |
 | 6FD9 | `VAR_6FD9` | 0 | 1 | 0 | named |
 | 6FDA | `MISS_CNT` | 0 | 1 | 1 | named |
-| 6FDB | `M_6FDB` | 1 | 1 | 0 | needs analysis |
+| 6FDB | `PENDING_PIO2_BYTE` | 1 | 1 | 0 | named |
 | 6FDC | `NEW_DATA` | 0 | 2 | 1 | named |
 | 6FDD | `MISS_LIMIT` | 1 | 2 | 0 | named |
 | 6FDE | `TOA_ALT` | 0 | 0 | 1 | named |
@@ -371,11 +371,11 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 6FF4 | `M_6FF4` | 0 | 0 | 2 | needs analysis |
 | 7000 | `RAM2_BASE` | 0 | 0 | 1 | named |
 | 7034 | `DISP_ROW_A` | 0 | 3 | 9 | named |
-| 7035 | `M_7035` | 0 | 6 | 0 | needs analysis |
-| 7036 | `M_7036` | 0 | 3 | 0 | needs analysis |
+| 7035 | `DISP_ROW_A_1` | 0 | 6 | 0 | named |
+| 7036 | `DISP_ROW_A_2` | 0 | 3 | 0 | named |
 | 7037 | `DISP_ROW_B` | 0 | 2 | 7 | named |
-| 7038 | `M_7038` | 0 | 5 | 0 | needs analysis |
-| 7039 | `M_7039` | 0 | 2 | 0 | needs analysis |
+| 7038 | `DISP_ROW_B_1` | 0 | 5 | 0 | named |
+| 7039 | `DISP_ROW_B_2` | 0 | 2 | 0 | named |
 | 703A | `DISP_EXTRA` | 3 | 2 | 0 | named |
 | 703B | `KEY_CHANGED` | 1 | 2 | 0 | named |
 | 703C | `BTN_STATE` | 8 | 3 | 0 | named |
@@ -387,13 +387,13 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 7051 | `VAR_7051` | 2 | 3 | 0 | named |
 | 7053 | `SEL_COL_TBL` | 0 | 0 | 10 | named |
 | 7054 | `SLOT_TBL` | 0 | 0 | 1 | named |
-| 7057 | `M_7057` | 0 | 0 | 1 | needs analysis |
+| 7057 | `ACCUM_TOA_TBL` | 0 | 0 | 1 | named |
 | 70B7 | `DISP_ROW_A_FLAG` | 1 | 15 | 0 | named |
 | 70B8 | `DISP_ROW_B_FLAG` | 1 | 16 | 0 | named |
-| 70B9 | `M_70B9` | 3 | 2 | 0 | needs analysis |
-| 70BA | `M_70BA` | 1 | 1 | 0 | needs analysis |
-| 70BB | `M_70BB` | 1 | 1 | 0 | needs analysis |
-| 70BC | `M_70BC` | 1 | 1 | 0 | needs analysis |
+| 70B9 | `DISP_SCAN_SLOT` | 3 | 2 | 0 | named |
+| 70BA | `DISP_SCAN_START` | 1 | 1 | 0 | named |
+| 70BB | `DISP_TEST_CNT1` | 1 | 1 | 0 | named |
+| 70BC | `DISP_TEST_CNT2` | 1 | 1 | 0 | named |
 | 70BD | `VAR_70BD` | 1 | 2 | 0 | named |
 | 70BE | `VAR_70BE` | 2 | 3 | 0 | named |
 | 70BF | `STATUS_BITS` | 3 | 2 | 0 | named |
@@ -412,7 +412,7 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 70CF | `PLOT_COL` | 3 | 1 | 1 | named |
 | 70D0 | `RPT_STATE` | 11 | 3 | 0 | named |
 | 70D1 | `PRTBUF_PTR` | 2 | 4 | 0 | named |
-| 70D3 | `M_70D3` | 1 | 2 | 0 | needs analysis |
+| 70D3 | `BCD_RESULT_SIGN` | 1 | 2 | 0 | named |
 | 70D4 | `M_70D4` | 0 | 0 | 1 | needs analysis |
 | 70D6 | `M_70D6` | 0 | 0 | 1 | needs analysis |
 | 70D8 | `QUAL_LO` | 2 | 1 | 0 | named |
@@ -438,13 +438,13 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | D000 | `KDC_DATA` | 14 | 3 | 0 | named |
 | D001 | `KDC_CMD` | 0 | 11 | 0 | named |
 | E000 | `PIO1_CMD` | 0 | 1 | 0 | named |
-| E001 | `M_E001` | 0 | 1 | 0 | needs analysis |
-| E002 | `M_E002` | 0 | 1 | 0 | needs analysis |
+| E001 | `PIO1_PA` | 0 | 1 | 0 | named |
+| E002 | `PIO1_PB` | 0 | 1 | 0 | named |
 | E003 | `PIO1_PC` | 7 | 7 | 0 | named |
 | E004 | `PIO1_TMRLO` | 0 | 1 | 0 | named |
 | E005 | `PIO1_TMRHI` | 0 | 1 | 0 | named |
 | F000 | `PIO2_CMD` | 0 | 5 | 0 | named |
-| F001 | `M_F001` | 0 | 1 | 0 | needs analysis |
+| F001 | `PIO2_PA` | 0 | 1 | 0 | named |
 | F002 | `PIO2_PB` | 4 | 5 | 1 | named |
 | F003 | `PIO2_PC` | 3 | 0 | 0 | named |
 | F004 | `PIO2_TMRLO` | 0 | 5 | 0 | named |
@@ -455,19 +455,23 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | FF9C | `M_FF9C` | 0 | 0 | 1 | needs analysis |
 | FFC0 | `M_FFC0` | 0 | 0 | 1 | needs analysis |
 
-**39 of 175 still need analysis.** Most of the `FFxx` ones (FF38, FF80, FF9C,
-FFC0) and `8020` are single `LXI`-only references with no read/write - almost
-certainly operands of arithmetic (e.g. negative BCD limit constants) rather
-than real variables; low priority. Two more (`M_F9CA`, `M_AC9F`) are the same
-kind of artifact, freshly exposed by decoding `PHASE_AB_SELECT` as code - they
-are `LXI H` immediate operands for the phase-code-pair constants, not real
-memory locations at all.
+**25 of 175 still need analysis** (down from 39 earlier this session; the
+`FFxx`/`F9CA`/`AC9F`/`8020` group - 6 of the 25 - are confirmed `LXI`-immediate
+arithmetic constants, not real variables at all, documented in their own
+`disasm/nt3321-22.json` comments rather than renamed - see the note at 0AAA,
+0C3A and 0A4A). `M_2002`/`M_2010` (also in the 25) are likely the same kind of
+incidental-constant artifact, at low confidence. That leaves roughly 17
+genuine unresolved variables, mostly in the two low-confidence clusters below
+(`SLOT_STATE_DISPATCH`'s neighborhood and the 1E9B-1F20 BCD cluster) plus a
+few isolated ones (`M_6F28`, `M_6F2D`, `M_6F36`, `M_6F46`, `M_6FA8`,
+`M_6FEA`, `M_6FEF`, `M_6FF4`, `M_70C7`, `M_70D4`, `M_70D6`) not yet traced.
 
 ## What to tackle next
 
-Every `CALL`ed jump target now has a name - the remaining work is (a) raising
-confidence on the handful of low-confidence names below, and (b) the 39
-still-generic `M_xxxx` variables.
+Every `CALL`ed jump target has a name. Remaining work is (a) raising
+confidence on three low-confidence routine names, and (b) roughly 17
+genuine unresolved variables (of 25 still flagged - the rest are confirmed
+or likely `LXI`-immediate constants, not real memory, see above).
 
 **Low-confidence names worth a dedicated re-check** (each already has an
 honest confidence note in its `disasm/nt3321-22.json` comment - don't trust
@@ -476,33 +480,34 @@ the name alone, read the comment):
 1. **`SLOT_STATE_DISPATCH`** (0F31) - the single hardest routine in the ROM.
    Structure (a `RAM1_BASE`-keyed 0/1/2 dispatcher relocating a 5-byte block)
    is confirmed; the *why* is not. Needs fresh eyes, not more guessing.
+   `M_6F28`, `M_6F2D`, `M_6F36`, `M_6F46`, `M_6FA8` and the
+   `M_6FB0`-`M_6FB3`/`M_70C7` quality-threshold neighborhood (see the 0AAA
+   comment) are all in this same low-confidence orbit.
 2. **The `1E9B-1F20` extended-precision BCD cluster** (`TOGGLE_70C7_BIT`,
    `SHR4_ROUND`, `SHL4_EHL`, `LOAD3_BC`, `BCD_COMPL_HL`,
    `BCD_COMPL_ADD_DEHL`, `SWAP_HL_STASH`, `SLOT0_COPY_M70D4`) - named
    mechanically (what each does, verified) rather than semantically (why).
    The outer routine at 1F35-1F75 involves `GRI_VAL`, plausibly TD-to-plot-
    column scaling for `PLOT_VALUES`, but that connection isn't confirmed.
+   `M_70D4`/`M_70D6` (operands of this cluster) and `M_6FEA`/`M_6FEF`/
+   `M_6FF4` (small pointer targets nearby) belong here too.
 3. **`DISP_TEST_TICK`** (19E7) - the held-thumbwheel-triggered "88.88.88"
    display self-test sequence is confirmed; the normal (non-test) path at
    `L_1A23`, gated on `SW_D2`, isn't traced.
-
-**Variables** - see the table above for the full list of 39. Most of the
-`FFxx`/`8020`/`F9CA`/`AC9F` ones are `LXI`-immediate artifacts, not real
-memory (see the note above the table). The rest are scattered across areas
-already understood structurally (the arithmetic cluster's `M_70Cx` bytes,
-the display-column table's neighbors) - a natural side effect of finishing
-item 2 above, or of a dedicated variable-naming pass using the same
-call-site-tracing method this session used throughout.
 
 Resolved this session (see git history for the full trail, one commit per
 cluster): the entire 0800-0FFF arithmetic cluster (36 targets), the
 print-buffer formatting cluster, the switch-validation error stubs, the
 SEL_A/SEL_B display-column and blink pipeline, selector queueing
-(`QUEUE_SLOT_SEL`/`DEQUEUE_SLOT_SEL`/`SWAP_SLOT_IDX`), and this cluster -
-77 routines total, plus two corrected wrong guesses (`ROM_SELFTEST` was
-"receiver init"; `INIT_REC_FROM_TOA`/`INIT_REC_AND_SEND` were "display
-fill/clear") and one real bug fix (`PHASE_AB_SELECT`/`MUL10_INDEX` were
-mislabeled dead code but are live).
+(`QUEUE_SLOT_SEL`/`DEQUEUE_SLOT_SEL`/`SWAP_SLOT_IDX`), and the BCD/display-
+test cluster - 77 routines total (0 left generic), plus two corrected wrong
+guesses (`ROM_SELFTEST` was "receiver init"; `INIT_REC_FROM_TOA`/
+`INIT_REC_AND_SEND` were "display fill/clear") and one real bug fix
+(`PHASE_AB_SELECT`/`MUL10_INDEX` were mislabeled dead code but are live).
+A first variable-naming pass afterward resolved 14 more (`PIO1_PA`/
+`PIO1_PB`/`PIO2_PA`, `ACCUM_TOA_TBL`, the `DISP_ROW_A`/`B` sub-bytes,
+`DISP_SCAN_SLOT`/`DISP_SCAN_START`, `DISP_TEST_CNT1`/`DISP_TEST_CNT2`,
+`PENDING_PIO2_BYTE`, `BCD_RESULT_SIGN`), taking variables from 39 to 25.
 
 ## Regenerating the tables above
 
