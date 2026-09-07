@@ -1149,7 +1149,7 @@ CALC_TD:                                     ; xref: c0BC5 c0B3A c0B45 c0B6B
 0740  CD BB 07   CALL COPY4
 0743  2A AB 6F   LHLD CUR_PULSES_1
 0746  01 01 00   LXI B,0001H                 ; BC = 1
-0749  CD 8D 0B   CALL X_0B8D
+0749  CD 8D 0B   CALL CLAMP_HL_BC
 074C  22 AB 6F   SHLD CUR_PULSES_1
 074F  CD 98 06   CALL ADJ_PULSES
 0752  21 20 6F   LXI H,BCD_ACC
@@ -1322,20 +1322,21 @@ L_0810:                                      ; xref: j0813
 ; EPOCH_PHASE_UPDATE (was X_0817; old rom-status.md guess "per-epoch update, likely
 ; display of TDs" - the display part was wrong, no display code anywhere in this routine).
 ; CONFIRMED: calls PHASE_AB_SELECT and stores its alternating result into PHASE_REF, then
-; CALL LOAD_CUR_REC. Then a conditional block gated on M_6FBE bit 0, running SUB_0E6D and
-; conditionally SUB_0EBE/SUB_0EA3/SUB_0EB2 (part of the still-unanalyzed 0E00-0EBE
-; arithmetic cluster - see docs/jump-graph.md). After that block (taken or not), PHASE_REF
-; is OVERWRITTEN AGAIN from M_6FBC (so PHASE_AB_SELECT's value only lasts transiently
-; during the SUB_0E6D-family calls, not as this routine's lasting effect) and M_6FBE is
-; refreshed from M_6FBD. Finally: if RESTART_REQ==1, a SEL_A/BUTTONS-driven block updates
-; CUR_REC/CUR_FLAGS bits (looks like manual override / re-sync when the operator changes the
-; selector during set-up) before falling into SAVE_CUR_REC. NOT fully resolved - the
-; M_6FBC/M_6FBD/M_6FBE trio and the SUB_0E6x/0EAx/0EBx calls need their own pass.
+; CALL LOAD_CUR_REC. Then a conditional block gated on PULSE_ALIGN_FLAGS bit 0, running
+; PULSE_ALIGN_ADJ and conditionally TOA_ADD_1000/TOA_SUB_1000/TOA_SUB_3000 (now resolved -
+; see PULSE_ALIGN_ADJ, 0E6D). After that block (taken or not), PHASE_REF is OVERWRITTEN
+; AGAIN from M_6FBC (so PHASE_AB_SELECT's value only lasts transiently during the
+; PULSE_ALIGN_ADJ-family calls, not as this routine's lasting effect) and PULSE_ALIGN_FLAGS
+; is refreshed from PHASE_QUAL_FLAGS (set by PHASE_QUALITY_UPDATE, 0BC5, when a phase-code
+; quality accumulator saturates - see there for the full picture). Finally: if
+; RESTART_REQ==1, a SEL_A/BUTTONS-driven block updates CUR_REC/CUR_FLAGS bits (looks like
+; manual override / re-sync when the operator changes the selector during set-up) before
+; falling into SAVE_CUR_REC. M_6FBC's own role is still untraced.
 EPOCH_PHASE_UPDATE:                          ; xref: c01E7 c023A
 0817  CD 8C 05   CALL PHASE_AB_SELECT
 081A  22 BB 6F   SHLD PHASE_REF
 081D  CD 22 05   CALL LOAD_CUR_REC
-0820  3A BE 6F   LDA M_6FBE
+0820  3A BE 6F   LDA PULSE_ALIGN_FLAGS
 0823  E6 FE      ANI 0FEH
 0825  CA 3A 08   JZ L_083A
 0828  CD 6D 0E   CALL PULSE_ALIGN_ADJ
@@ -1352,8 +1353,8 @@ L_083A:                                      ; xref: j0825
 083A  CD 1B 09   CALL ACCUM_SLOT_TOA
 083D  3A BC 6F   LDA M_6FBC
 0840  32 BB 6F   STA PHASE_REF
-0843  3A BD 6F   LDA M_6FBD
-0846  32 BE 6F   STA M_6FBE
+0843  3A BD 6F   LDA PHASE_QUAL_FLAGS
+0846  32 BE 6F   STA PULSE_ALIGN_FLAGS
 0849  3A CE 6F   LDA RESTART_REQ
 084C  FE 01      CPI 01H
 084E  C2 75 08   JNZ SAVE_CUR_REC
@@ -1372,7 +1373,7 @@ L_0867:                                      ; xref: j085F
 0869  0F         RRC
 086A  0F         RRC
 086B  0F         RRC
-086C  21 BE 6F   LXI H,M_6FBE
+086C  21 BE 6F   LXI H,PULSE_ALIGN_FLAGS
 086F  B6         ORA M
 0870  77         MOV M,A
 L_0871:                                      ; xref: j08D6 j08DD
@@ -1389,8 +1390,8 @@ L_087B:                                      ; xref: j08C5 j085A
 0881  3A BA 6F   LDA CUR_FLAGS
 0884  DA 99 08   JC L_0899
 0887  21 00 00   LXI H,RESET
-088A  22 B5 6F   SHLD M_6FB5
-088D  22 B8 6F   SHLD M_6FB8
+088A  22 B5 6F   SHLD PHASE_QUAL_A
+088D  22 B8 6F   SHLD PHASE_QUAL_B
 0890  E6 FB      ANI 0FBH
 0892  5F         MOV E,A
 0893  7A         MOV A,D
@@ -1410,8 +1411,8 @@ L_089F:                                      ; xref: j0896
 ; HANDLE_ACQUIRING_SLOT (was X_08A9; called from TRACK_NEXT_SLOT when the current
 ; slot's flags bit 6 - "acquiring" - is set, per firmware.md). Calls SLOT_STALE_CHECK,
 ; then PULSE_ALIGN_ADJ_6FBE plus two more RLCs and a CC TOA_SUB_3000 (that pair of extra
-; RLCs tests M_6FBE's original bit 1, after the 5 the cascade already consumed testing
-; bits 7,6,5,4). If RESTART_REQ==1, falls to SAVE_CUR_REC. Otherwise reads BUTTONS and
+; RLCs tests PULSE_ALIGN_FLAGS's original bit 1, after the 5 the cascade already consumed
+; testing bits 7,6,5,4). If RESTART_REQ==1, falls to SAVE_CUR_REC. Otherwise reads BUTTONS and
 ; the byte right after it (SEL_A) and branches on SEL_A against 0AH/0BH/0CH (the same
 ; blank/setup sentinel values front-panel.md documents for SEL_B) into a handful of
 ; manual-override paths (CLEAR_TRACK_VARS, PULSE_ALIGN_ADJ2, or a CUR_REC/CUR_FLAGS
@@ -1664,7 +1665,7 @@ L_0A22:                                      ; xref: j0A1B
 0A32  CD 1A 0E   CALL X_0E1A
 0A35  AF         XRA A
 0A36  32 15 6F   STA SAMPLE_CNT
-0A39  32 BD 6F   STA M_6FBD
+0A39  32 BD 6F   STA PHASE_QUAL_FLAGS
 0A3C  CD D1 04   CALL READ_PHASE
 0A3F  3A 0F 6F   LDA TRACK_MASK
 0A42  E6 0F      ANI 0FH
@@ -1686,10 +1687,10 @@ L_0A5A:                                      ; xref: j0A56
 0A63  0F         RRC
 0A64  0F         RRC
 0A65  DA 6E 0A   JC L_0A6E
-0A68  CD C5 0B   CALL SUB_0BC5
+0A68  CD C5 0B   CALL PHASE_QUALITY_UPDATE
 0A6B  C3 77 0A   JMP L_0A77
 L_0A6E:                                      ; xref: j0A44 j0A65
-0A6E  CD 07 0B   CALL SUB_0B07
+0A6E  CD 07 0B   CALL PULSE_SCORE_UPDATE
 0A71  3A BA 6F   LDA CUR_FLAGS
 0A74  E6 10      ANI 10H
 0A76  C8         RZ
@@ -1732,13 +1733,13 @@ L_0A9E:                                      ; xref: j0A99
 0AB4  E6 DF      ANI 0DFH
 0AB6  32 A1 6F   STA CUR_REC
 L_0AB9:                                      ; xref: j0AB0
-0AB9  2A B5 6F   LHLD M_6FB5
+0AB9  2A B5 6F   LHLD PHASE_QUAL_A
 0ABC  01 80 FF   LXI B,M_FF80
 0ABF  09         DAD B
 0AC0  7C         MOV A,H
 0AC1  07         RLC
 0AC2  DA D2 0A   JC L_0AD2
-0AC5  2A B8 6F   LHLD M_6FB8
+0AC5  2A B8 6F   LHLD PHASE_QUAL_B
 0AC8  01 40 00   LXI B,D_0040
 0ACB  09         DAD B
 0ACC  7C         MOV A,H
@@ -1746,13 +1747,13 @@ L_0AB9:                                      ; xref: j0AB0
 0ACE  DA E6 0A   JC L_0AE6
 0AD1  C9         RET
 L_0AD2:                                      ; xref: j0AC2
-0AD2  2A B5 6F   LHLD M_6FB5
+0AD2  2A B5 6F   LHLD PHASE_QUAL_A
 0AD5  01 C0 FF   LXI B,M_FFC0
 0AD8  09         DAD B
 0AD9  7C         MOV A,H
 0ADA  07         RLC
 0ADB  D8         RC
-0ADC  2A B8 6F   LHLD M_6FB8
+0ADC  2A B8 6F   LHLD PHASE_QUAL_B
 0ADF  01 80 00   LXI B,D_0080
 0AE2  09         DAD B
 0AE3  7C         MOV A,H
@@ -1777,7 +1778,18 @@ L_0AE6:                                      ; xref: j0ACE
 0B03  F6 04      ORI 04H
 0B05  77         MOV M,A
 0B06  C9         RET
-SUB_0B07:                                    ; xref: c0A6E c0C37
+
+; PULSE_SCORE_UPDATE (was SUB_0B07). Starting from CUR_NPULSE, walks all 8 bits of
+; PHASE_CODE (a per-bit RRC over 8 iterations): for each mismatch bit (PHASE_CODE bit=1,
+; since PHASE_CODE is already an XOR-vs-reference result) adds CUR_MODE to a running
+; score, for each match bit subtracts it, then stores the score back into CUR_NPULSE.
+; If the score goes negative (bit 7 set), corrects it by adding VAR_6FE7 (up to twice)
+; and applies a matching -1-pulse TOA adjustment via CALC_TD/TOA_SUB_CONST each time
+; (mirrors the positive-side path with CALC_TD/TOA_ADD_CONST, not yet traced in as much
+; detail). Reads as a mismatch-weighted confidence score with automatic pulse-index
+; correction on underflow, but the good/bad direction of the score and VAR_6FE7's exact
+; role aren't fully pinned down - medium confidence only.
+PULSE_SCORE_UPDATE:                          ; xref: c0A6E c0C37
 0B07  21 AF 6F   LXI H,CUR_PULSE_PTR
 0B0A  34         INR M
 0B0B  21 B7 6F   LXI H,CUR_MODE
@@ -1851,7 +1863,18 @@ L_0B65:                                      ; xref: j0B33
 0B89  35         DCR M
 L_0B8A:                                      ; xref: j0B3D j0B54 j0B62 j0B7A
 0B8A  C3 FE 0C   JMP L_0CFE
-X_0B8D:                                      ; xref: c0749 c0BE0 c0BF2 c0D24
+
+; CLAMP_HL_BC (was X_0B8D; the old rom-status.md guess "16-bit arithmetic on HL with
+; BC = 1" undersold it). Borrows GRI_SW as scratch storage for the incoming HL (not the
+; GRI switch value - just unused RAM at this call site). Uses NEG_HL and a two-sided
+; DAD-based comparison between HL and BC to decide a sign, then conditionally returns
+; either the original HL unchanged or a negated/adjusted version. Called right after
+; POPCOUNT_ADJ_HL with BC = 01FFH (511 - a plain integer constant; the tool's "D_01FF"
+; label for this LXI's immediate operand is a labeling artifact, not real data), which
+; together with the surrounding code (see PHASE_QUALITY_UPDATE, 0BC5) strongly suggests
+; "clamp/limit signed HL to roughly +-511" - a saturating-accumulator helper. The exact
+; register choreography (why GRI_SW, why two NEG_HL calls) isn't fully traced.
+CLAMP_HL_BC:                                 ; xref: c0749 c0BE0 c0BF2 c0D24
 0B8D  22 CC 6F   SHLD GRI_SW
 0B90  C5         PUSH B
 0B91  1E 00      MVI E,00H
@@ -1880,7 +1903,14 @@ X_0B8D:                                      ; xref: c0749 c0BE0 c0BF2 c0D24
 L_0BB3:                                      ; xref: j0BA9
 0BB3  C1         POP B
 0BB4  C9         RET
-SUB_0BB5:                                    ; xref: c0BDA c0BEC c0D1E
+
+; POPCOUNT_ADJ_HL (was SUB_0BB5). A = an 8-bit pattern. For each of its 8 bits
+; (successive RRC): INX H if the bit is 1, DCX H if 0. Net effect: HL += 2*popcount(A) - 8.
+; Same shape as PULSE_SCORE_UPDATE's per-bit tally but applied to a pointer via INX/DCX
+; instead of an accumulator via ADD/SUB M, and with an implicit weight of 1 instead of
+; CUR_MODE. Used by PHASE_QUALITY_UPDATE to adjust the two saturating quality
+; accumulators by the popcount of PHASE_CODE / PHASE_CODE_HI each epoch.
+POPCOUNT_ADJ_HL:                             ; xref: c0BDA c0BEC c0D1E
 0BB5  1E 08      MVI E,08H
 L_0BB7:                                      ; xref: j0BC1
 0BB7  0F         RRC
@@ -1893,36 +1923,51 @@ L_0BC0:                                      ; xref: j0BBC
 0BC0  1D         DCR E
 0BC1  C2 B7 0B   JNZ L_0BB7
 0BC4  C9         RET
-SUB_0BC5:                                    ; xref: c0A68
+
+; PHASE_QUALITY_UPDATE (was SUB_0BC5, extends through 0C34). Two parallel saturating
+; 16-bit accumulators, PHASE_QUAL_A:PHASE_QUAL_A_HI (6FB5:6FB6) and PHASE_QUAL_B:
+; PHASE_QUAL_B_HI (6FB8:6FB9), are each adjusted by POPCOUNT_ADJ_HL using PHASE_CODE
+; (accumulator A) and PHASE_CODE_HI (accumulator B) as the bit pattern, then clamped via
+; CLAMP_HL_BC against +-511 and stored back. If accumulator A's high byte is 0FFH
+; (strongly negative) with PHASE_QUAL_A bit 6 clear, or accumulator B's low byte bit 6 is
+; set (gated by PHASE_QUAL_A_HI/PHASE_QUAL_B_HI sanity checks and CUR_FLAGS bit 2), sets
+; PHASE_QUAL_FLAGS bit 7 or bit 6 and calls PULSE_ALIGN_ADJ2_AND_CLEAR with A=80H or 40H -
+; i.e. once a quality accumulator drifts far enough, this triggers a real +-1-pulse TOA
+; realignment (PULSE_ALIGN_ADJ2 tests exactly those two bits). This is also confirmed as
+; where PHASE_QUAL_FLAGS's bits actually come from - EPOCH_PHASE_UPDATE (0817) reads it
+; into PULSE_ALIGN_FLAGS every epoch, and PULSE_ALIGN_ADJ_6FBE/PULSE_ALIGN_ADJ act on
+; PULSE_ALIGN_FLAGS's bits 7/6. Also calls SLOTREC_UPDATE when SW_D4 (a thumbwheel digit)
+; >= 9, an apparent debug/calibration hook.
+PHASE_QUALITY_UPDATE:                        ; xref: c0A68
 0BC5  CD 2A 07   CALL CALC_TD
 0BC8  3A CB 70   LDA SW_D4
 0BCB  FE 09      CPI 09H
 0BCD  D4 5C 10   CNC SLOTREC_UPDATE
 0BD0  21 B0 6F   LXI H,M_6FB0
 0BD3  34         INR M
-0BD4  2A B5 6F   LHLD M_6FB5
+0BD4  2A B5 6F   LHLD PHASE_QUAL_A
 0BD7  3A BF 6F   LDA PHASE_CODE
-0BDA  CD B5 0B   CALL SUB_0BB5
+0BDA  CD B5 0B   CALL POPCOUNT_ADJ_HL
 0BDD  01 FF 01   LXI B,D_01FF
-0BE0  CD 8D 0B   CALL X_0B8D
-0BE3  22 B5 6F   SHLD M_6FB5
-0BE6  2A B8 6F   LHLD M_6FB8
+0BE0  CD 8D 0B   CALL CLAMP_HL_BC
+0BE3  22 B5 6F   SHLD PHASE_QUAL_A
+0BE6  2A B8 6F   LHLD PHASE_QUAL_B
 0BE9  3A C0 6F   LDA PHASE_CODE_HI
-0BEC  CD B5 0B   CALL SUB_0BB5
+0BEC  CD B5 0B   CALL POPCOUNT_ADJ_HL
 0BEF  01 FF 01   LXI B,D_01FF
-0BF2  CD 8D 0B   CALL X_0B8D
-0BF5  22 B8 6F   SHLD M_6FB8
-0BF8  3A B6 6F   LDA M_6FB6
+0BF2  CD 8D 0B   CALL CLAMP_HL_BC
+0BF5  22 B8 6F   SHLD PHASE_QUAL_B
+0BF8  3A B6 6F   LDA PHASE_QUAL_A_HI
 0BFB  FE FF      CPI 0FFH
 0BFD  C2 08 0C   JNZ L_0C08
-0C00  3A B5 6F   LDA M_6FB5
+0C00  3A B5 6F   LDA PHASE_QUAL_A
 0C03  E6 40      ANI 40H                     ; '@'
 0C05  CA 24 0C   JZ L_0C24
 L_0C08:                                      ; xref: j0BFD
-0C08  3A B9 6F   LDA M_6FB9
+0C08  3A B9 6F   LDA PHASE_QUAL_B_HI
 0C0B  FE 00      CPI 00H
 0C0D  C0         RNZ
-0C0E  3A B8 6F   LDA M_6FB8
+0C0E  3A B8 6F   LDA PHASE_QUAL_B
 0C11  E6 40      ANI 40H                     ; '@'
 0C13  C2 17 0C   JNZ L_0C17
 0C16  C9         RET
@@ -1940,13 +1985,13 @@ L_0C24:                                      ; xref: j0C05
 0C2A  3E 40      MVI A,40H                   ; '@'
 0C2C  06 80      MVI B,80H
 L_0C2E:                                      ; xref: j0C21
-0C2E  21 BD 6F   LXI H,M_6FBD
+0C2E  21 BD 6F   LXI H,PHASE_QUAL_FLAGS
 0C31  B6         ORA M
 0C32  77         MOV M,A
 0C33  78         MOV A,B
 0C34  C3 92 0E   JMP PULSE_ALIGN_ADJ2_AND_CLEAR
 L_0C37:                                      ; xref: j0A5F
-0C37  CD 07 0B   CALL SUB_0B07
+0C37  CD 07 0B   CALL PULSE_SCORE_UPDATE
 0C3A  01 20 80   LXI B,M_8020
 0C3D  21 BA 6F   LXI H,CUR_FLAGS
 0C40  7E         MOV A,M
@@ -1994,8 +2039,8 @@ L_0C50:                                      ; xref: j0C48
 0C86  77         MOV M,A
 0C87  21 00 00   LXI H,RESET
 0C8A  22 AF 6F   SHLD CUR_PULSE_PTR
-0C8D  22 B5 6F   SHLD M_6FB5
-0C90  22 B8 6F   SHLD M_6FB8
+0C8D  22 B5 6F   SHLD PHASE_QUAL_A
+0C90  22 B8 6F   SHLD PHASE_QUAL_B
 0C93  C3 B1 0C   JMP L_0CB1
 L_0C96:                                      ; xref: j0C73
 0C96  3E 01      MVI A,01H
@@ -2007,7 +2052,7 @@ L_0C96:                                      ; xref: j0C73
 SUB_0CA4:                                    ; xref: c0CB1
 0CA4  AF         XRA A
 0CA5  32 B2 6F   STA M_6FB2
-0CA8  21 BD 6F   LXI H,M_6FBD
+0CA8  21 BD 6F   LXI H,PHASE_QUAL_FLAGS
 0CAB  7E         MOV A,M
 0CAC  B1         ORA C
 0CAD  77         MOV M,A
@@ -2070,9 +2115,9 @@ L_0D0C:                                      ; xref: j0D06
 L_0D1A:                                      ; xref: j0D15
 0D1A  3A C0 6F   LDA PHASE_CODE_HI
 0D1D  2F         CMA
-0D1E  CD B5 0B   CALL SUB_0BB5
+0D1E  CD B5 0B   CALL POPCOUNT_ADJ_HL
 0D21  01 5F 00   LXI B,D_005F
-0D24  CD 8D 0B   CALL X_0B8D
+0D24  CD 8D 0B   CALL CLAMP_HL_BC
 0D27  7D         MOV A,L
 0D28  32 B2 6F   STA M_6FB2
 0D2B  07         RLC
@@ -2276,15 +2321,16 @@ L_0E65:                                      ; xref: j0E5C
 0E66  4D         MOV C,L
 0E67  C3 0B 0E   JMP L_0E0B
 PULSE_ALIGN_ADJ_6FBE:                        ; xref: c08AC
-0E6A  3A BE 6F   LDA M_6FBE
+0E6A  3A BE 6F   LDA PULSE_ALIGN_FLAGS
 
-; PULSE_ALIGN_ADJ: A = flags byte. Tests bits 7,6,5,4 in that order (successive RLC),
-; independently CALLing (any/all can fire): bit7 -> TOA_SUB_1000, bit6 -> TOA_ADD_1000,
-; bit5 -> TOA_ADD_6000, bit4 -> TOA_SUB_2000. Corrects CUR_TOA by whole multiples of the
-; ~1000us Loran-C inter-pulse spacing - the fix for the phase-code correlator locking
-; onto the wrong pulse within the 8-pulse group. PULSE_ALIGN_ADJ_6FBE (0E6A) is the same
-; cascade pre-loaded with A = M_6FBE. PULSE_ALIGN_ADJ2 (0E87) is a shorter 2-bit variant
-; (bit7/bit6 only, i.e. just the +-1000 pair).
+; PULSE_ALIGN_ADJ: A = flags byte (normally PULSE_ALIGN_FLAGS, was M_6FBE). Tests bits
+; 7,6,5,4 in that order (successive RLC), independently CALLing (any/all can fire):
+; bit7 -> TOA_SUB_1000, bit6 -> TOA_ADD_1000, bit5 -> TOA_ADD_6000, bit4 -> TOA_SUB_2000.
+; Corrects CUR_TOA by whole multiples of the ~1000us Loran-C inter-pulse spacing - the fix
+; for the phase-code correlator locking onto the wrong pulse within the 8-pulse group.
+; PULSE_ALIGN_ADJ_6FBE (0E6A) is the same cascade pre-loaded with A = PULSE_ALIGN_FLAGS.
+; PULSE_ALIGN_ADJ2 (0E87) is a shorter 2-bit variant (bit7/bit6 only, i.e. just the
+; +-1000 pair).
 PULSE_ALIGN_ADJ:                             ; xref: c0828
 0E6D  07         RLC
 0E6E  F5         PUSH PSW
@@ -2315,15 +2361,15 @@ PULSE_ALIGN_ADJ2:                            ; xref: c0E92 c08E5
 PULSE_ALIGN_ADJ2_AND_CLEAR:                  ; xref: c0872 j0C34
 0E92  CD 87 0E   CALL PULSE_ALIGN_ADJ2
 
-; CLEAR_TRACK_VARS: zero M_6FB5, M_6FB8 (via SHLD of the RESET vector's 0000H, a
-; code-golf reuse of an existing zero word rather than a fresh 00,00 immediate) and
-; M_6FB2. PULSE_ALIGN_ADJ2_AND_CLEAR (0E92) is CALL PULSE_ALIGN_ADJ2 falling straight
+; CLEAR_TRACK_VARS: zero PHASE_QUAL_A, PHASE_QUAL_B (via SHLD of the RESET vector's
+; 0000H, a code-golf reuse of an existing zero word rather than a fresh 00,00 immediate)
+; and M_6FB2. PULSE_ALIGN_ADJ2_AND_CLEAR (0E92) is CALL PULSE_ALIGN_ADJ2 falling straight
 ; through into this same body (no RET in between) - the two are almost always used
 ; as one combined operation; this entry point alone is only reached directly from 08EB.
 CLEAR_TRACK_VARS:                            ; xref: c08EB
 0E95  21 00 00   LXI H,RESET
-0E98  22 B5 6F   SHLD M_6FB5
-0E9B  22 B8 6F   SHLD M_6FB8
+0E98  22 B5 6F   SHLD PHASE_QUAL_A
+0E9B  22 B8 6F   SHLD PHASE_QUAL_B
 0E9E  7C         MOV A,H
 0E9F  32 B2 6F   STA M_6FB2
 0EA2  C9         RET

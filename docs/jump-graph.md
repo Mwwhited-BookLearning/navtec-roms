@@ -154,7 +154,7 @@ control flow inside an already-named routine, not independent things to name.
 | 0576 | `BCD_INC_STORE` | 1 | named |
 | 057A | `RESET_PULSES` | 4 | named |
 | 0584 | `CLEAR_PULSES` | 4 | named |
-| 058C | `PHASE_AB_SELECT` | 1 | named (was wrongly filed as dead code - it's live, see firmware.md) |
+| 058C | `PHASE_AB_SELECT` | 1 | named |
 | 059D | `PHASE_MISMATCH` | 2 | named |
 | 05AF | `FIRST_SAMPLE` | 2 | named |
 | 05C2 | `MATCH_PULSES` | 2 | named |
@@ -175,15 +175,15 @@ control flow inside an already-named routine, not independent things to name.
 | 0805 | `TOA1_SLOT_NIB` | 2 | named |
 | 0808 | `HI_NIBBLE` | 1 | named |
 | 080F | `FILL_ZERO` | 5 | named |
-| 0817 | `EPOCH_PHASE_UPDATE` | 2 | named (partially - see comment) |
+| 0817 | `EPOCH_PHASE_UPDATE` | 2 | named |
 | 0875 | `SAVE_CUR_REC` | 1 | named |
 | 08A9 | `HANDLE_ACQUIRING_SLOT` | 1 | named |
 | 08F1 | `SLOT_STALE_CHECK` | 1 | named |
 | 091B | `ACCUM_SLOT_TOA` | 1 | named |
-| 0B07 | `SUB_0B07` | 2 | needs analysis |
-| 0B8D | `X_0B8D` | 4 | needs analysis |
-| 0BB5 | `SUB_0BB5` | 3 | needs analysis |
-| 0BC5 | `SUB_0BC5` | 1 | needs analysis |
+| 0B07 | `PULSE_SCORE_UPDATE` | 2 | named |
+| 0B8D | `CLAMP_HL_BC` | 4 | named |
+| 0BB5 | `POPCOUNT_ADJ_HL` | 3 | named |
+| 0BC5 | `PHASE_QUALITY_UPDATE` | 1 | named |
 | 0CA4 | `SUB_0CA4` | 1 | needs analysis |
 | 0CBE | `SUB_0CBE` | 1 | needs analysis |
 | 0CE8 | `SUB_0CE8` | 1 | needs analysis |
@@ -265,9 +265,9 @@ control flow inside an already-named routine, not independent things to name.
 | 1F20 | `SUB_1F20` | 1 | needs analysis |
 | 2001 | `EXTROM_ENTRY` | 1 | named |
 
-**37 of 137 still need analysis** (down from 77 at the start of this session).
+**33 of 137 still need analysis** (down from 77 at the start of this session).
 
-## Variables (all 173 referenced RAM/IO addresses)
+## Variables (all 175 referenced RAM/IO addresses)
 
 Generated from `disasm/nt3321-22-refs.md`'s "External memory references"
 table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
@@ -281,7 +281,7 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 6F01 | `ACQ_COUNT` | 2 | 0 | 1 | named |
 | 6F02 | `FIRST_SLOT` | 5 | 2 | 1 | named |
 | 6F03 | `SLOT_RESULT` | 1 | 2 | 0 | named |
-| 6F04 | `SLOT_FLAGS` | 5 | 1 | 7 | named |
+| 6F04 | `SLOT_FLAGS` | 5 | 1 | 8 | named |
 | 6F0E | `WIN_END` | 0 | 4 | 4 | named |
 | 6F0F | `TRACK_MASK` | 2 | 0 | 1 | named |
 | 6F11 | `SLOT_IDX` | 22 | 1 | 1 | named |
@@ -322,16 +322,16 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 6FB1 | `M_6FB1` | 0 | 0 | 1 | needs analysis |
 | 6FB2 | `M_6FB2` | 0 | 3 | 1 | needs analysis |
 | 6FB3 | `M_6FB3` | 3 | 1 | 0 | needs analysis |
-| 6FB5 | `M_6FB5` | 4 | 4 | 0 | needs analysis |
-| 6FB6 | `M_6FB6` | 1 | 0 | 0 | needs analysis |
+| 6FB5 | `PHASE_QUAL_A` | 4 | 4 | 0 | named |
+| 6FB6 | `PHASE_QUAL_A_HI` | 1 | 0 | 0 | named |
 | 6FB7 | `CUR_MODE` | 0 | 3 | 1 | named |
-| 6FB8 | `M_6FB8` | 4 | 4 | 0 | needs analysis |
-| 6FB9 | `M_6FB9` | 1 | 0 | 0 | needs analysis |
+| 6FB8 | `PHASE_QUAL_B` | 4 | 4 | 0 | named |
+| 6FB9 | `PHASE_QUAL_B_HI` | 1 | 0 | 0 | named |
 | 6FBA | `CUR_FLAGS` | 11 | 3 | 5 | named |
 | 6FBB | `PHASE_REF` | 1 | 2 | 1 | named |
 | 6FBC | `M_6FBC` | 1 | 0 | 0 | needs analysis |
-| 6FBD | `M_6FBD` | 1 | 1 | 2 | needs analysis |
-| 6FBE | `M_6FBE` | 2 | 1 | 1 | needs analysis |
+| 6FBD | `PHASE_QUAL_FLAGS` | 1 | 1 | 2 | named |
+| 6FBE | `PULSE_ALIGN_FLAGS` | 2 | 1 | 1 | named |
 | 6FBF | `PHASE_CODE` | 4 | 0 | 1 | named |
 | 6FC0 | `PHASE_CODE_HI` | 4 | 0 | 0 | named |
 | 6FC1 | `DISP_MODE` | 2 | 1 | 1 | named |
@@ -366,11 +366,11 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 6FF4 | `M_6FF4` | 0 | 0 | 2 | needs analysis |
 | 7000 | `RAM2_BASE` | 0 | 0 | 1 | named |
 | 7034 | `DISP_ROW_A` | 0 | 3 | 9 | named |
-| 7035 | `M_7035` | 0 | 6 | 0 | needs analysis (part of `DISP_ROW_A`) |
-| 7036 | `M_7036` | 0 | 3 | 0 | needs analysis (part of `DISP_ROW_A`) |
+| 7035 | `M_7035` | 0 | 6 | 0 | needs analysis |
+| 7036 | `M_7036` | 0 | 3 | 0 | needs analysis |
 | 7037 | `DISP_ROW_B` | 0 | 2 | 7 | named |
-| 7038 | `M_7038` | 0 | 5 | 0 | needs analysis (part of `DISP_ROW_B`) |
-| 7039 | `M_7039` | 0 | 2 | 0 | needs analysis (part of `DISP_ROW_B`) |
+| 7038 | `M_7038` | 0 | 5 | 0 | needs analysis |
+| 7039 | `M_7039` | 0 | 2 | 0 | needs analysis |
 | 703A | `DISP_EXTRA` | 3 | 2 | 0 | named |
 | 703B | `KEY_CHANGED` | 1 | 2 | 0 | named |
 | 703C | `BTN_STATE` | 8 | 3 | 0 | named |
@@ -427,6 +427,7 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | 70E8 | `PLOT_BASE` | 1 | 1 | 0 | named |
 | 7100 | `STACK_TOP` | 0 | 0 | 1 | named |
 | 8020 | `M_8020` | 0 | 0 | 1 | needs analysis |
+| AC9F | `M_AC9F` | 0 | 0 | 1 | needs analysis |
 | C000 | `USART_DATA` | 1 | 6 | 0 | named |
 | C001 | `USART_CTRL` | 5 | 2 | 0 | named |
 | D000 | `KDC_DATA` | 14 | 3 | 0 | named |
@@ -443,51 +444,54 @@ table. R/W/LXI are reference counts (reads, writes, address-load-only refs).
 | F003 | `PIO2_PC` | 3 | 0 | 0 | named |
 | F004 | `PIO2_TMRLO` | 0 | 5 | 0 | named |
 | F005 | `PIO2_TMRHI` | 0 | 1 | 0 | named |
+| F9CA | `M_F9CA` | 0 | 0 | 1 | needs analysis |
 | FF38 | `M_FF38` | 0 | 0 | 1 | needs analysis |
 | FF80 | `M_FF80` | 0 | 0 | 1 | needs analysis |
 | FF9C | `M_FF9C` | 0 | 0 | 1 | needs analysis |
 | FFC0 | `M_FFC0` | 0 | 0 | 1 | needs analysis |
 
-**53 of 173 still need analysis.** Most of the `FFxx` ones (FF38, FF80, FF9C,
+**46 of 175 still need analysis.** Most of the `FFxx` ones (FF38, FF80, FF9C,
 FFC0) and `8020` are single `LXI`-only references with no read/write - almost
 certainly operands of arithmetic (e.g. negative BCD limit constants) rather
-than real variables; low priority.
+than real variables; low priority. Two more (`M_F9CA`, `M_AC9F`) are the same
+kind of artifact, freshly exposed by decoding `PHASE_AB_SELECT` as code - they
+are `LXI H` immediate operands for the phase-code-pair constants, not real
+memory locations at all.
 
 ## What to tackle next, by cluster
 
 Roughly in priority order (highest caller-count / most load-bearing first):
 
 1. **`GET_FLAGS_A` neighborhood (0800-0FFF): the slot-tracking arithmetic
-   helpers.** ~21 targets remain (`SUB_0B07` through `X_0FE9`) plus their
-   associated `M_6FBx`/`M_70Cx` variables. This is the window/timing
-   arithmetic that `firmware.md` already flags as "working names, not proven
-   ones" - the hardest but highest-value cluster, needs careful numeric
-   tracing of each routine against the `TRACK_LOOP`/`SLOT_PROCESS` state
-   machine. Resolved so far: `EPOCH_PHASE_UPDATE`/`PHASE_AB_SELECT` (the
-   GRI-A/GRI-B phase alternator), `GET_ITEM_REC`/`GET_SEC_REC`/
-   `TOA1_SLOT_NIB` (record lookups), the `PULSE_ALIGN_ADJ`/`TOA_ADD_CONST`/
-   `TOA_SUB_CONST` family (0E6A-0ED9, CUR_TOA corrections in whole multiples
-   of the ~1000us inter-pulse spacing), and `HANDLE_ACQUIRING_SLOT`/
-   `SLOT_STALE_CHECK`/`ACCUM_SLOT_TOA` (08A9-0955 - a slot-staleness watchdog
-   plus a per-slot running-sum/count TOA accumulator at `M_7057`, stride 10
-   like `M_7053`). `SUB_0B07`/`X_0B8D`/`SUB_0BB5` (right after `CALC_TD`) is
-   a reasonable next target.
+   helpers.** ~18 targets remain (`SUB_0C9C`-ish through `X_0FE9`) plus their
+   associated `M_70Cx` variables. This is the window/timing arithmetic that
+   `firmware.md` already flags as "working names, not proven ones" - the
+   hardest but highest-value cluster, needs careful numeric tracing of each
+   routine against the `TRACK_LOOP`/`SLOT_PROCESS` state machine. Resolved so
+   far: `EPOCH_PHASE_UPDATE`/`PHASE_AB_SELECT` (the GRI-A/GRI-B phase
+   alternator), `GET_ITEM_REC`/`GET_SEC_REC`/`TOA1_SLOT_NIB` (record lookups),
+   the `PULSE_ALIGN_ADJ`/`TOA_ADD_CONST`/`TOA_SUB_CONST` family (CUR_TOA
+   corrections in whole multiples of the ~1000us inter-pulse spacing),
+   `HANDLE_ACQUIRING_SLOT`/`SLOT_STALE_CHECK`/`ACCUM_SLOT_TOA` (a
+   slot-staleness watchdog plus a per-slot TOA accumulator at `M_7057`), and
+   `PULSE_SCORE_UPDATE`/`CLAMP_HL_BC`/`POPCOUNT_ADJ_HL`/`PHASE_QUALITY_UPDATE`
+   (0B07-0C34 - two saturating quality accumulators, `PHASE_QUAL_A`/`_B`, that
+   trigger a pulse realignment when either drifts too far). `SUB_0CA4`/
+   `SUB_0CBE` (called right after `PHASE_QUALITY_UPDATE`, touching the same
+   `PHASE_QUAL_FLAGS`/`M_70C3` area) is a reasonable next target.
 2. **`SUB_1C3F` / `SUB_1CF3` / `SUB_1D10` / `SUB_1D45` (1C00-1D50) and the
    `M_70B7`-`M_70C7` display-column variables.** These feed `L_1CEA`'s
    display-commit path (same one `SW_ERR_SHOW` uses) and are keyed off
    `SEL_A`/`SEL_B` - likely "which secondary's TD to show in row A/B".
-   `M_7053`/`M_7057` (the 10-byte-stride tables `MUL10_INDEX` indexes) belong
-   here too.
-3. **Receiver init chain `X_1E4C` -> `SUB_1E4F` -> `SUB_1E52` -> `SUB_1E55`**
-   (1E4C-1E5E). Short, linear, called once from `INIT` - a good next target,
-   likely low effort for the payoff.
-4. **`X_19E7`** (called every 20 ticks from `TICK_TASK`, touches `M_70BB`) -
+   `M_7053`/`M_7057` (the 10-byte-stride tables `MUL10_INDEX` indexes,
+   `M_7057` now known to be `ACCUM_SLOT_TOA`'s per-slot table) belong here too.
+3. **`X_19E7`** (called every 20 ticks from `TICK_TASK`, touches `M_70BB`) -
    possibly a display-blink or column-rotation counter; unrelated to the
    `SW_ERR_*` family despite the nearby address.
-5. **`SUB_1EAA`/`SUB_1EBB`/`SUB_1ECF`/`SUB_1ED9`/`SUB_1EED`/`SUB_1F0E`/`SUB_1F20`**
+4. **`SUB_1EAA`/`SUB_1EBB`/`SUB_1ECF`/`SUB_1ED9`/`SUB_1EED`/`SUB_1F0E`/`SUB_1F20`**
    (1E9B-1F20) - all single-caller, small, clustered; likely one coherent
    feature once traced together.
-6. **Remaining `FFxx`/`8020` single-LXI addresses** - check whether they're
+5. **Remaining `FFxx`/`8020` single-LXI addresses** - check whether they're
    BCD constants (operand of `LXI H,<addr>` immediately followed by an
    arithmetic call) before spending real effort; may not be "variables" at
    all.

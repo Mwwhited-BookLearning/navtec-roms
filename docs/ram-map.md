@@ -35,9 +35,13 @@ M = consistent reading, L = placeholder name).
 | 6FA9 | `CUR_NPULSE` | 1 | H | +8: pulse counters |
 | 6FAA | `CUR_PULSES` | 5 | H | +9: matched sample positions |
 | 6FAF | `CUR_PULSE_PTR` | 2 | H | +14: write pointer into `CUR_PULSES` |
+| 6FB5 | `PHASE_QUAL_A` | 2 | M | saturating (+-511) quality accumulator for `PHASE_CODE`, updated each epoch by `PHASE_QUALITY_UPDATE` (`PHASE_QUAL_A_HI` = 6FB6) |
 | 6FB7 | `CUR_MODE` | 1 | M | +22: 1 settling, 3 re-acquiring |
+| 6FB8 | `PHASE_QUAL_B` | 2 | M | same as `PHASE_QUAL_A` but for `PHASE_CODE_HI` (`PHASE_QUAL_B_HI` = 6FB9) |
 | 6FBA | `CUR_FLAGS` | 1 | H | copy of `SLOT_FLAGS[SLOT_IDX]` |
 | 6FBB | `PHASE_REF` | 2 | H | XOR reference for the shift-register words |
+| 6FBD | `PHASE_QUAL_FLAGS` | 1 | M | set by `PHASE_QUALITY_UPDATE` when a quality accumulator saturates; copied into `PULSE_ALIGN_FLAGS` each epoch |
+| 6FBE | `PULSE_ALIGN_FLAGS` | 1 | M | refreshed from `PHASE_QUAL_FLAGS` every epoch by `EPOCH_PHASE_UPDATE`; consumed by `PULSE_ALIGN_ADJ` to correct `CUR_TOA` by whole pulse-intervals |
 | 6FBF | `PHASE_CODE` | 2 | H | last shift-register words after XOR (`PHASE_CODE_HI` = 6FC0) |
 | 6FC1 | `DISP_MODE` | 1 | M | 1 -> `X_0F31`, 2 -> `X_0F08` in the track loop |
 | 6FC4 | `BUTTONS` | 1 | H | push-button bits from sensor rows 6/7 (bits 7, 6) |
