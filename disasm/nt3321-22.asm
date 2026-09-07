@@ -511,7 +511,7 @@ TRACK_SLOT_CHK:
 TRACK_SLOT_BIT6:
         RLC
         JNC SLOT_PROCESS
-        CALL X_08A9
+        CALL HANDLE_ACQUIRING_SLOT
         JMP TRACK_NEXT_SLOT
 
 ; SLOT_PROCESS: load slot record into CUR_REC and dispatch on TRACK_STATE:
@@ -1532,7 +1532,7 @@ EPOCH_PHASE_UPDATE:
         RLC
         CC TOA_SUB_3000
 L_083A:
-        CALL SUB_091B
+        CALL ACCUM_SLOT_TOA
         LDA M_6FBC
         STA PHASE_REF
         LDA M_6FBD
@@ -1589,8 +1589,20 @@ L_089F:
         MOV A,E
         STA CUR_FLAGS
         JMP SAVE_CUR_REC
-X_08A9:
-        CALL SUB_08F1
+
+; HANDLE_ACQUIRING_SLOT (was X_08A9; called from TRACK_NEXT_SLOT when the current
+; slot's flags bit 6 - "acquiring" - is set, per firmware.md). Calls SLOT_STALE_CHECK,
+; then PULSE_ALIGN_ADJ_6FBE plus two more RLCs and a CC TOA_SUB_3000 (that pair of extra
+; RLCs tests M_6FBE's original bit 1, after the 5 the cascade already consumed testing
+; bits 7,6,5,4). If RESTART_REQ==1, falls to SAVE_CUR_REC. Otherwise reads BUTTONS and
+; the byte right after it (SEL_A) and branches on SEL_A against 0AH/0BH/0CH (the same
+; blank/setup sentinel values front-panel.md documents for SEL_B) into a handful of
+; manual-override paths (CLEAR_TRACK_VARS, PULSE_ALIGN_ADJ2, or a CUR_REC/CUR_FLAGS
+; patch-up at L_087B) before SAVE_CUR_REC - reads as "let the operator manually nudge
+; an acquiring slot's TOA via the front panel", but the exact button semantics aren't
+; traced bit-for-bit.
+HANDLE_ACQUIRING_SLOT:
+        CALL SLOT_STALE_CHECK
         CALL PULSE_ALIGN_ADJ_6FBE
         RLC
         RLC
@@ -1624,7 +1636,18 @@ L_08E3:
 L_08EB:
         CALL CLEAR_TRACK_VARS
         JMP SAVE_CUR_REC
-SUB_08F1:
+
+; SLOT_STALE_CHECK (was SUB_08F1). LOAD_CUR_REC + GET_SLOT_FLAGS (which, as a side
+; effect, leaves HL -> SLOT_FLAGS[SLOT_IDX]; XCHG parks that pointer in DE for a later
+; STAX D). Compares SLOT_IDX against TOA1_SLOT_NIB (CUR_TOA_1's high-nibble slot tag):
+; if they match, or if DISP_MODE's companion byte (DISP_MODE+1, read via LHLD) is
+; nonzero, returns immediately via ACCUM_SLOT_TOA. Otherwise increments that companion
+; byte, and once it wraps to 0FFH, clears SLOT_FLAGS[SLOT_IDX] entirely and calls
+; SUB_1E23 to resync SLOT_IDX to the tagged slot. Reads as a staleness watchdog: if
+; 256 consecutive epochs see a different slot than the one CUR_TOA_1 is tagged for,
+; give up on the untagged slot and deactivate it. Confidence: medium - the DISP_MODE+1
+; companion byte's own name/purpose isn't otherwise established.
+SLOT_STALE_CHECK:
         CALL LOAD_CUR_REC
         CALL GET_SLOT_FLAGS
         XCHG
@@ -1633,19 +1656,29 @@ SUB_08F1:
         MOV C,A
         LDA SLOT_IDX
         CMP C
-        JZ SUB_091B
+        JZ ACCUM_SLOT_TOA
         MOV A,L
         CPI 00H
-        JNZ SUB_091B
+        JNZ ACCUM_SLOT_TOA
         INR H
         SHLD DISP_MODE
         MOV A,H
         CPI 0FFH
-        JNZ SUB_091B
+        JNZ ACCUM_SLOT_TOA
         XRA A
         STAX D
         CALL SUB_1E23
-SUB_091B:
+
+; ACCUM_SLOT_TOA (was SUB_091B). HL = M_7057 + 10*SLOT_IDX via MUL10_INDEX (confirming
+; M_7057 is a 10-byte-stride per-slot table, like M_7053). For slot 0 (master):
+; record[0..3] += M_6F28. For other slots: record[0..3] += CUR_TOA, then += M_70C3 too
+; (two BCD_ADD4 calls into the same destination - an accumulator, not a single add).
+; If REC_MASTER's status byte bit 7 is clear (master not "active"), zeroes 4 bytes at
+; M_70C3 first. Finally increments record+5 - a sample counter alongside the running
+; sum, consistent with computing a smoothed/averaged TOA per slot for the report or
+; display rather than using the raw per-epoch value directly. M_6F28/M_70C3's own roles
+; aren't traced further; only referenced here (M_6F28) or here-plus-elsewhere (M_70C3).
+ACCUM_SLOT_TOA:
         PUSH B
         LDA SLOT_IDX
         LXI H,M_7057

@@ -177,9 +177,9 @@ control flow inside an already-named routine, not independent things to name.
 | 080F | `FILL_ZERO` | 5 | named |
 | 0817 | `EPOCH_PHASE_UPDATE` | 2 | named (partially - see comment) |
 | 0875 | `SAVE_CUR_REC` | 1 | named |
-| 08A9 | `X_08A9` | 1 | needs analysis |
-| 08F1 | `SUB_08F1` | 1 | needs analysis |
-| 091B | `SUB_091B` | 1 | needs analysis |
+| 08A9 | `HANDLE_ACQUIRING_SLOT` | 1 | named |
+| 08F1 | `SLOT_STALE_CHECK` | 1 | named |
+| 091B | `ACCUM_SLOT_TOA` | 1 | named |
 | 0B07 | `SUB_0B07` | 2 | needs analysis |
 | 0B8D | `X_0B8D` | 4 | needs analysis |
 | 0BB5 | `SUB_0BB5` | 3 | needs analysis |
@@ -265,7 +265,7 @@ control flow inside an already-named routine, not independent things to name.
 | 1F20 | `SUB_1F20` | 1 | needs analysis |
 | 2001 | `EXTROM_ENTRY` | 1 | named |
 
-**40 of 137 still need analysis** (down from 77 at the start of this session).
+**37 of 137 still need analysis** (down from 77 at the start of this session).
 
 ## Variables (all 173 referenced RAM/IO addresses)
 
@@ -458,20 +458,20 @@ than real variables; low priority.
 Roughly in priority order (highest caller-count / most load-bearing first):
 
 1. **`GET_FLAGS_A` neighborhood (0800-0FFF): the slot-tracking arithmetic
-   helpers.** ~24 targets remain (`X_08A9` through `X_0FE9`) plus their
+   helpers.** ~21 targets remain (`SUB_0B07` through `X_0FE9`) plus their
    associated `M_6FBx`/`M_70Cx` variables. This is the window/timing
    arithmetic that `firmware.md` already flags as "working names, not proven
    ones" - the hardest but highest-value cluster, needs careful numeric
    tracing of each routine against the `TRACK_LOOP`/`SLOT_PROCESS` state
    machine. Resolved so far: `EPOCH_PHASE_UPDATE`/`PHASE_AB_SELECT` (the
    GRI-A/GRI-B phase alternator), `GET_ITEM_REC`/`GET_SEC_REC`/
-   `TOA1_SLOT_NIB` (record lookups), and the whole
-   `PULSE_ALIGN_ADJ`/`TOA_ADD_CONST`/`TOA_SUB_CONST` family (0E6A-0ED9) -
-   CUR_TOA corrections in whole multiples of the ~1000us Loran-C inter-pulse
-   spacing, for when the correlator locks onto the wrong pulse in the group.
-   `X_08A9`/`SUB_08F1`/`SUB_091B` (the "handle a slot in acquisition" group
-   right after `SAVE_CUR_REC`) is a good next target - it already calls into
-   the now-resolved `PULSE_ALIGN_ADJ`/`MUL10_INDEX`.
+   `TOA1_SLOT_NIB` (record lookups), the `PULSE_ALIGN_ADJ`/`TOA_ADD_CONST`/
+   `TOA_SUB_CONST` family (0E6A-0ED9, CUR_TOA corrections in whole multiples
+   of the ~1000us inter-pulse spacing), and `HANDLE_ACQUIRING_SLOT`/
+   `SLOT_STALE_CHECK`/`ACCUM_SLOT_TOA` (08A9-0955 - a slot-staleness watchdog
+   plus a per-slot running-sum/count TOA accumulator at `M_7057`, stride 10
+   like `M_7053`). `SUB_0B07`/`X_0B8D`/`SUB_0BB5` (right after `CALC_TD`) is
+   a reasonable next target.
 2. **`SUB_1C3F` / `SUB_1CF3` / `SUB_1D10` / `SUB_1D45` (1C00-1D50) and the
    `M_70B7`-`M_70C7` display-column variables.** These feed `L_1CEA`'s
    display-commit path (same one `SW_ERR_SHOW` uses) and are keyed off
