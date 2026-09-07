@@ -97,10 +97,10 @@ SEARCH_VERIFY --> SEARCH_LOOP : no
 SEARCH_VERIFY --> MASTER_FOUND : yes
 MASTER_FOUND : SLOT_FLAGS[0] = C8H, CUR_MODE = 1, SETTLE_CNT = 20
 MASTER_FOUND --> SETTLE_LOOP
-SETTLE_LOOP : 20 x (wait epoch, X_0817, QUAL_UPDATE)
+SETTLE_LOOP : 20 x (wait epoch, EPOCH_PHASE_UPDATE, QUAL_UPDATE)
 SETTLE_LOOP --> ACQ_START : flag bit 5 clear or QUAL_CHECK bad
 SETTLE_LOOP --> TRACK_LOOP : good signal
-TRACK_LOOP : wait epoch, X_0EEE, X_0ED9, display (X_0F31/X_0F08 by DISP_MODE), X_0817
+TRACK_LOOP : wait epoch, X_0EEE, X_0ED9, display (X_0F31/X_0F08 by DISP_MODE), EPOCH_PHASE_UPDATE
 TRACK_LOOP --> TRACK_NEXT_SLOT
 TRACK_NEXT_SLOT : SLOT_IDX++ (wrap -> TRACK_LOOP)
 TRACK_NEXT_SLOT --> TRACK_LOOP : wrapped
@@ -250,18 +250,27 @@ Dead fragments show the ROM was patched by hand after assembly in some spots:
 | Address | Old code | What replaced it |
 |---|---|---|
 | 0533-053E | copy `CUR_REC` -> record | `LOAD_CUR_REC` copies record -> `CUR_REC` |
-| 058C-0593 | flag manipulation on `SLOT_FLAGS` | nothing (jumped around) |
 | 1E1C-1E22 | shorter entry into what's now `SUB_1E23` | `SUB_1E23` inserts an extra `MOV A,C` / `STA SLOT_IDX` step |
 | 1F80-1FFF | four old routine bodies (see `disasm/nt3321-22.json`'s `1F80` comment) | reorganized/relocated equivalents elsewhere in ROM 1 |
 
-**Correction:** 0515-051A (`0515`, once labeled `OLD_MUL10`) was wrongly filed
-here. A stale forced-`db` override in the hints file was hiding it as data even
-though it is live code with 11 real callers - it's `MUL10_INDEX`, a genuine
-sibling of `MUL9_INDEX` for 10-byte-stride tables (`M_7053`, `M_7057`, the
-7056H report-item table), unrelated to the 9-byte `SLOTREC_CNT` records. There
-was no patch here; the "dead code" claim was simply an error in the original
-analysis, caught by noticing its xref list was all `CALL`-kind (live) rather
-than `LXI`-kind (pointer-only) references.
+**Two corrections**, both the same shape: a stale forced-`db` override in the
+hints file hid live code as data, and the original analysis read the absence
+of a *decoded* xref as absence of any caller, when the caller's xref was
+there all along (as a `CALL`-kind reference the tool still tracks even for
+addresses it renders as data).
+
+- 0515-051A (`0515`, once `OLD_MUL10`) - live code with 11 real callers, now
+  `MUL10_INDEX`, a genuine sibling of `MUL9_INDEX` for 10-byte-stride tables
+  (`M_7053`, `M_7057`, the 7056H report-item table), unrelated to the 9-byte
+  `SLOTREC_CNT` records.
+- 058C-059C (`058C`, once `ORPHAN_058C`, guessed to be followed by an inert
+  "phase-code table") - also live, called once from `EPOCH_PHASE_UPDATE`
+  (0817). It's `PHASE_AB_SELECT`: toggles `SLOT_FLAGS[0]` bit 7 and returns
+  one of two hard-coded 16-bit constants that byte-split into exactly the
+  master/secondary GRI-A and GRI-B phase-code pairs - the real-time
+  alternator Loran-C phase coding requires. The bytes that looked like "a
+  phase-code table" were actually `LXI H,<phase pair>` immediate operands in
+  the routine's own fallthrough code, not passive data.
 
 Two more idioms worth knowing when reading the source: `21H` (LXI H) is used as a
 two-byte skip prefix (`TX_DASH`, `PHASE_CODE_TBL`), and `EI / NOP / DI` is the

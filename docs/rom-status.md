@@ -104,9 +104,13 @@ the `X_1990`..`X_19A9` guess below was exactly right (now named `SW_ERR_SEL_A`,
 clock (`TICK_CLOCK_CASCADE`); the `X_1E4C` guess ("receiver hardware
 initialisation") was also **wrong** - it's `ROM_SELFTEST`, an XOR checksum
 over most of the ROM whose pass/fail result is never even tested by the
-caller (see `disasm/nt3321-22.json`'s `1E4C` comment). Both wrong guesses
-were architecturally reasonable calls-from-INIT/calls-from-tick, just not
-what the actual decoded bytes turned out to do.
+caller; and the `X_0817` guess ("per-epoch update, likely display of TDs")
+was half right (per-epoch update, yes) and half wrong (nothing about display -
+it's `EPOCH_PHASE_UPDATE`, which drives the GRI-A/GRI-B phase alternation via
+`PHASE_AB_SELECT`). See `disasm/nt3321-22.json`'s comments on each address for
+the full story. All these wrong guesses were architecturally reasonable
+calls-from-INIT/calls-from-tick/calls-from-loop, just not what the actual
+decoded bytes turned out to do.
 
 | Address | Name | Called from | Inferred purpose |
 |---|---|---|---|

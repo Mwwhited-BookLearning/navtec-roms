@@ -140,8 +140,8 @@ control flow inside an already-named routine, not independent things to name.
 | 04E1 | `GET_SLOT_FLAGS` | 3 | named |
 | 04E4 | `GET_FLAGS_A` | 14 | named |
 | 04EB | `GET_SLOT_REC` | 1 | named |
-| 04EE | `SUB_04EE` | 2 | needs analysis |
-| 04F7 | `SUB_04F7` | 2 | needs analysis |
+| 04EE | `GET_ITEM_REC` | 2 | named |
+| 04F7 | `GET_SEC_REC` | 2 | named |
 | 04FD | `GET_SEC_TOA` | 1 | named |
 | 050B | `MUL9_INDEX` | 8 | named |
 | 0515 | `MUL10_INDEX` | 11 | named |
@@ -154,7 +154,7 @@ control flow inside an already-named routine, not independent things to name.
 | 0576 | `BCD_INC_STORE` | 1 | named |
 | 057A | `RESET_PULSES` | 4 | named |
 | 0584 | `CLEAR_PULSES` | 4 | named |
-| 058C | `ORPHAN_058C` | 1 | named (dead code, documented) |
+| 058C | `PHASE_AB_SELECT` | 1 | named (was wrongly filed as dead code - it's live, see firmware.md) |
 | 059D | `PHASE_MISMATCH` | 2 | named |
 | 05AF | `FIRST_SAMPLE` | 2 | named |
 | 05C2 | `MATCH_PULSES` | 2 | named |
@@ -172,10 +172,10 @@ control flow inside an already-named routine, not independent things to name.
 | 07C6 | `MUL8` | 1 | named |
 | 07D9 | `BCD_TO_BIN` | 4 | named |
 | 07EF | `BIN_TO_BCD` | 4 | named |
-| 0805 | `SUB_0805` | 2 | needs analysis |
+| 0805 | `TOA1_SLOT_NIB` | 2 | named |
 | 0808 | `HI_NIBBLE` | 1 | named |
 | 080F | `FILL_ZERO` | 5 | named |
-| 0817 | `X_0817` | 2 | needs analysis |
+| 0817 | `EPOCH_PHASE_UPDATE` | 2 | named (partially - see comment) |
 | 0875 | `SAVE_CUR_REC` | 1 | named |
 | 08A9 | `X_08A9` | 1 | needs analysis |
 | 08F1 | `SUB_08F1` | 1 | needs analysis |
@@ -191,8 +191,8 @@ control flow inside an already-named routine, not independent things to name.
 | 0D7F | `SUB_0D7F` | 1 | needs analysis |
 | 0DB0 | `SUB_0DB0` | 1 | needs analysis |
 | 0DB3 | `X_0DB3` | 4 | needs analysis |
-| 0DE3 | `X_0DE3` | 1 | needs analysis |
-| 0DE6 | `X_0DE6` | 2 | needs analysis |
+| 0DE3 | `CUR_REC_TO_FRONTEND` | 1 | named |
+| 0DE6 | `REC_TO_FRONTEND` | 2 | named |
 | 0E1A | `X_0E1A` | 3 | needs analysis |
 | 0E1D | `X_0E1D` | 2 | needs analysis |
 | 0E2D | `X_0E2D` | 2 | needs analysis |
@@ -265,7 +265,7 @@ control flow inside an already-named routine, not independent things to name.
 | 1F20 | `SUB_1F20` | 1 | needs analysis |
 | 2001 | `EXTROM_ENTRY` | 1 | named |
 
-**62 of 137 still need analysis** (down from 77 at the start of this session).
+**52 of 137 still need analysis** (down from 77 at the start of this session).
 
 ## Variables (all 173 referenced RAM/IO addresses)
 
@@ -458,11 +458,16 @@ than real variables; low priority.
 Roughly in priority order (highest caller-count / most load-bearing first):
 
 1. **`GET_FLAGS_A` neighborhood (0800-0FFF): the slot-tracking arithmetic
-   helpers.** ~35 targets (`X_0817` through `X_0FE9`) plus their associated
+   helpers.** ~36 targets (`X_08A9` through `X_0FE9`) plus their associated
    `M_6FBx`/`M_70Cx` variables. This is the window/timing arithmetic that
    `firmware.md` already flags as "working names, not proven ones" - the
    hardest but highest-value cluster, needs careful numeric tracing of each
-   routine against the `TRACK_LOOP`/`SLOT_PROCESS` state machine.
+   routine against the `TRACK_LOOP`/`SLOT_PROCESS` state machine. Two entry
+   points into this area are now resolved (`EPOCH_PHASE_UPDATE`/0817 drives
+   the GRI-A/GRI-B phase alternator via `PHASE_AB_SELECT`; `GET_ITEM_REC`/
+   `GET_SEC_REC`/`TOA1_SLOT_NIB` at 04EE-0805 are simple record lookups) -
+   the remaining `SUB_0E6x`/`SUB_0EAx`/`SUB_0EBx` group that
+   `EPOCH_PHASE_UPDATE` calls is a good place to continue.
 2. **`SUB_1C3F` / `SUB_1CF3` / `SUB_1D10` / `SUB_1D45` (1C00-1D50) and the
    `M_70B7`-`M_70C7` display-column variables.** These feed `L_1CEA`'s
    display-commit path (same one `SW_ERR_SHOW` uses) and are keyed off

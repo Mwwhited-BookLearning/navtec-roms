@@ -11,7 +11,7 @@ RAM1_BASE    EQU  6F00H  ; rd=1 wr=0 lxi=2
 ACQ_COUNT    EQU  6F01H  ; rd=2 wr=0 lxi=1
 FIRST_SLOT   EQU  6F02H  ; rd=5 wr=2 lxi=1
 SLOT_RESULT  EQU  6F03H  ; rd=1 wr=2 lxi=0
-SLOT_FLAGS   EQU  6F04H  ; rd=5 wr=1 lxi=7
+SLOT_FLAGS   EQU  6F04H  ; rd=5 wr=1 lxi=8
 WIN_END      EQU  6F0EH  ; rd=0 wr=4 lxi=4
 TRACK_MASK   EQU  6F0FH  ; rd=2 wr=0 lxi=1
 SLOT_IDX     EQU  6F11H  ; rd=22 wr=1 lxi=1
@@ -157,6 +157,7 @@ MON_LAST     EQU  70E7H  ; rd=1 wr=1 lxi=0
 PLOT_BASE    EQU  70E8H  ; rd=1 wr=1 lxi=0
 STACK_TOP    EQU  7100H  ; rd=0 wr=0 lxi=1
 M_8020       EQU  8020H  ; rd=0 wr=0 lxi=1
+M_AC9F       EQU  0AC9FH  ; rd=0 wr=0 lxi=1
 USART_DATA   EQU  0C000H  ; rd=1 wr=6 lxi=0
 USART_CTRL   EQU  0C001H  ; rd=5 wr=2 lxi=0
 KDC_DATA     EQU  0D000H  ; rd=14 wr=3 lxi=0
@@ -173,6 +174,7 @@ PIO2_PB      EQU  0F002H  ; rd=4 wr=5 lxi=1
 PIO2_PC      EQU  0F003H  ; rd=3 wr=0 lxi=0
 PIO2_TMRLO   EQU  0F004H  ; rd=0 wr=5 lxi=0
 PIO2_TMRHI   EQU  0F005H  ; rd=0 wr=1 lxi=0
+M_F9CA       EQU  0F9CAH  ; rd=0 wr=0 lxi=1
 M_FF38       EQU  0FF38H  ; rd=0 wr=0 lxi=1
 M_FF80       EQU  0FF80H  ; rd=0 wr=0 lxi=1
 M_FF9C       EQU  0FF9CH  ; rd=0 wr=0 lxi=1
@@ -392,7 +394,7 @@ SEARCH_RESTART:
 
 ; SEARCH_LOOP: search for the master phase code, alternating REC_MASTER / REC_SEC targets.
 SEARCH_LOOP:
-        CALL X_0DE6
+        CALL REC_TO_FRONTEND
         CALL WAIT_EPOCH
         CALL WAIT_SAMPLE
         XRA A
@@ -446,9 +448,9 @@ MASTER_FOUND:
 
 ; SETTLE_LOOP: 20 iterations accumulating signal quality (QUAL_LO/QUAL_HI).
 SETTLE_LOOP:
-        CALL X_0DE3
+        CALL CUR_REC_TO_FRONTEND
         CALL WAIT_EPOCH
-        CALL X_0817
+        CALL EPOCH_PHASE_UPDATE
         CALL QUAL_UPDATE
         CALL X_0ED9
         LXI H,SETTLE_CNT
@@ -467,7 +469,7 @@ D_01FF:
         CALL X_1E05
         CALL X_0F23
         LXI B,REC_MASTER
-        CALL X_0DE6
+        CALL REC_TO_FRONTEND
 
 ; TRACK_LOOP: steady-state tracking loop, one pass per GRI epoch.
 TRACK_LOOP:
@@ -484,7 +486,7 @@ TRACK_LOOP:
 TRACK_DISP1:
         CALL X_0F31
 TRACK_UPDATE:
-        CALL X_0817
+        CALL EPOCH_PHASE_UPDATE
 
 ; TRACK_NEXT_SLOT: advance SLOT_IDX (wraps at SLOT_COUNT); skip slots without bit 7.
 TRACK_NEXT_SLOT:
@@ -882,12 +884,20 @@ GET_FLAGS_A:
 ; Slot 0 = REC_MASTER; otherwise REC_SEC + 25 * (flags & 3).
 GET_SLOT_REC:
         LDA SLOT_IDX
-SUB_04EE:
+
+; GET_ITEM_REC: A = report-item number (RPT_STATE, 0=master, else secondary index).
+; Returns HL -> REC_MASTER (item 0) or, via GET_FLAGS_A + GET_SEC_REC, REC_SEC[flags&3].
+; Mirrors GET_SLOT_REC's SLOT_IDX-based lookup but keyed by an explicit item number
+; instead - used by RPT_FORMAT to find the record a report item describes.
+GET_ITEM_REC:
         LXI H,REC_MASTER
         CPI 00H
         RZ
         CALL GET_FLAGS_A
-SUB_04F7:
+
+; GET_SEC_REC: HL -> REC_SEC + 25*(A&3). Fallthrough tail of GET_ITEM_REC; also used
+; directly wherever a caller already has the flags-derived secondary index in A.
+GET_SEC_REC:
         LXI H,REC_SEC
         JMP REC_INDEX
 
@@ -1015,14 +1025,29 @@ CLEAR_PULSES:
         LXI H,CUR_NPULSE
         JMP FILL_ZERO
 
-; ORPHAN_058C: dead code from a patch, followed by the Loran-C phase-code table
-; (CA F9 = master A / secondary A, 9F AC = master B / secondary B, each preceded by 21H LXI-skip).
-ORPHAN_058C:
-        DB   21H,04H,6FH,7EH,07H,3FH,1FH,77H
-PHASE_CODE_TBL:
-        DB   07H,21H,0CAH
-        DB   0F9H,0D8H,21H
-        DB   9FH,0ACH,0C9H
+; PHASE_AB_SELECT: another routine that was wrongly filed as dead code (like
+; MUL10_INDEX, 0515) - it has a real caller (EPOCH_PHASE_UPDATE, 0817) and a forced db
+; override was hiding it. Toggles bit 7 of SLOT_FLAGS[0] (RLC/CMC/RAR is a 3-instruction
+; idiom for "invert bit 7, leave the rest alone"), stores it back, then returns one of
+; two hard-coded 16-bit constants in HL depending on the new bit 7: 0F9CAH if set,
+; 00AC9FH if clear. Byte-split, those are exactly the master/secondary GRI-A and GRI-B
+; phase-code pairs from firmware.md (CA/F9 and 9F/AC) - this is the real-time GRI-A/
+; GRI-B alternator Loran-C phase coding requires, hence the name. NOT actually a data
+; table (the previous "followed by the phase-code table" reading of these same bytes
+; was a coincidence of the guess, not a real second structure - 0594 has zero xrefs of
+; its own; it's the fallthrough continuation of this routine's own code).
+PHASE_AB_SELECT:
+        LXI H,SLOT_FLAGS
+        MOV A,M
+        RLC
+        CMC
+        RAR
+        MOV M,A
+        RLC
+        LXI H,M_F9CA
+        RC
+        LXI H,M_AC9F
+        RET
 
 ; PHASE_MISMATCH: B = popcount(PHASE_REF XOR B) = number of phase-code bit errors.
 PHASE_MISMATCH:
@@ -1450,7 +1475,11 @@ B2D_DONE:
         RLC
         ORA H
         RET
-SUB_0805:
+
+; TOA1_SLOT_NIB: high nibble of CUR_TOA_1 (falls into HI_NIBBLE). Compared against
+; SLOT_IDX and a BUTTONS-derived slot number at its two call sites (08D9, 08FB) -
+; CUR_TOA_1's high nibble appears to tag which slot a saved TOA snapshot belongs to.
+TOA1_SLOT_NIB:
         LDA CUR_TOA_1
 HI_NIBBLE:
         RRC
@@ -1467,8 +1496,21 @@ L_0810:
         DCR B
         JNZ L_0810
         RET
-X_0817:
-        CALL ORPHAN_058C
+
+; EPOCH_PHASE_UPDATE (was X_0817; old rom-status.md guess "per-epoch update, likely
+; display of TDs" - the display part was wrong, no display code anywhere in this routine).
+; CONFIRMED: calls PHASE_AB_SELECT and stores its alternating result into PHASE_REF, then
+; CALL LOAD_CUR_REC. Then a conditional block gated on M_6FBE bit 0, running SUB_0E6D and
+; conditionally SUB_0EBE/SUB_0EA3/SUB_0EB2 (part of the still-unanalyzed 0E00-0EBE
+; arithmetic cluster - see docs/jump-graph.md). After that block (taken or not), PHASE_REF
+; is OVERWRITTEN AGAIN from M_6FBC (so PHASE_AB_SELECT's value only lasts transiently
+; during the SUB_0E6D-family calls, not as this routine's lasting effect) and M_6FBE is
+; refreshed from M_6FBD. Finally: if RESTART_REQ==1, a SEL_A/BUTTONS-driven block updates
+; CUR_REC/CUR_FLAGS bits (looks like manual override / re-sync when the operator changes the
+; selector during set-up) before falling into SAVE_CUR_REC. NOT fully resolved - the
+; M_6FBC/M_6FBD/M_6FBE trio and the SUB_0E6x/0EAx/0EBx calls need their own pass.
+EPOCH_PHASE_UPDATE:
+        CALL PHASE_AB_SELECT
         SHLD PHASE_REF
         CALL LOAD_CUR_REC
         LDA M_6FBE
@@ -1565,7 +1607,7 @@ X_08A9:
         LDA SLOT_IDX
         CMP B
         JZ L_0871
-        CALL SUB_0805
+        CALL TOA1_SLOT_NIB
         CMP B
         JZ L_0871
         JMP SAVE_CUR_REC
@@ -1582,7 +1624,7 @@ SUB_08F1:
         CALL GET_SLOT_FLAGS
         XCHG
         LHLD DISP_MODE
-        CALL SUB_0805
+        CALL TOA1_SLOT_NIB
         MOV C,A
         LDA SLOT_IDX
         CMP C
@@ -2228,7 +2270,7 @@ L_0D6F:
         JMP L_0D44
 X_0D79:
         CALL X_0DB3
-        JMP X_0DE6
+        JMP REC_TO_FRONTEND
 SUB_0D7F:
         LDA SLOT_IDX
         CPI 00H
@@ -2282,9 +2324,26 @@ L_0DD1:
         LXI B,CUR_REC
         STAX B
         RET
-X_0DE3:
+CUR_REC_TO_FRONTEND:
         LXI B,CUR_REC
-X_0DE6:
+
+; REC_TO_FRONTEND: BC = pointer to a 4-byte-BCD-fronted record (REC_MASTER or CUR_REC
+; in practice - never a fixed operand, always whatever the caller left in BC).
+; Byte 0 (the record's status byte, e.g. CUR_REC's "bit0=skip in ISR") has bits
+; 2,4,5,6 of the CURRENT PIO2_PB merged in and bits 0,1,3 written out to PIO2_PB
+; (correcting hardware.md's old "static, meaning unknown" for those bits).
+; Bytes 1-3 (the record's actual BCD digits) are written raw, one each, to
+; PIO1_PB (E002), PIO1_PA (E001), PIO2_PA (F001) - ports previously documented as
+; "never touched" before this ROM half was recovered. Then PIO2_PB bit 7 is set.
+; Called only at station-selection transitions - SEARCH_LOOP start (BC=REC_MASTER),
+; after SLOT_ACQUIRE's secondary search starts (BC=REC_MASTER), and SETTLE_LOOP
+; start via CUR_REC_TO_FRONTEND (BC=CUR_REC) - never every epoch inside a loop.
+; Hypothesis (not certain): this broadcasts the newly-selected station's current
+; BCD value to the analog front end in parallel, as a feed-forward timing hint for
+; the "pulse-group timing" hardware.md already infers lives on that board -
+; consistent with the board's silkscreened SAMPLER/TRF sections. Needs the
+; physical board to confirm.
+REC_TO_FRONTEND:
         LDA PIO2_PB
         ANI 74H                     ; 't'
         MOV L,A
@@ -2354,7 +2413,7 @@ L_0E58:
         JMP L_0E65
 L_0E5F:
         MOV A,B
-        CALL SUB_04F7
+        CALL GET_SEC_REC
         POP PSW
         POP D
 L_0E65:
@@ -2574,7 +2633,7 @@ X_0FBE:
         RLC
         JC L_1018
         MOV A,B
-        CALL SUB_04F7
+        CALL GET_SEC_REC
         MOV A,M
         ANI 80H
         JNZ L_1018
@@ -3717,14 +3776,14 @@ RPT_FORMAT:
         LXI H,GRI_BCD_HI
         JMP RPT_FMT_TD3
 RPT_ITEM_OFS:
-        LXI H,7056H                 ; operand high byte is at 1800 in the undumped half: real value unknown (dump shows 0FFH)
+        LXI H,7056H                 ; LXI H,7056H: RPT_ITEM_OFS's table base, indexed by MUL10_INDEX
         CALL MUL10_INDEX
 RPT_FMT_TD3:
         CALL PRT_TD_DOT
         CALL PRT_HEX_BYTE
         CALL PRT_HEX_BYTE
         LDA RPT_STATE
-        CALL SUB_04EE
+        CALL GET_ITEM_REC
         MOV A,M
         ANI 20H                     ; ' '
         CPI 00H
@@ -3754,7 +3813,7 @@ L_1838:
         MVI A,4CH                   ; 'L'
         JNZ PRTBUF_PUT
         LDA RPT_STATE
-        CALL SUB_04EE
+        CALL GET_ITEM_REC
         MOV A,M
         ANI 20H                     ; ' '
         CPI 00H
