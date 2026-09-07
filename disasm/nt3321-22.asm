@@ -191,18 +191,23 @@ D_0003       EQU  $+2
         JMP INIT
 
 ; Table of six 4-byte packed-BCD constants (little-endian, LS byte first).
-; BCD_K_00080980 and BCD_K_00000110 are passed to X_0EC1 (still generically named).
+; D_0005 (888888) is still unidentified. TOA_ADJ_2000/_3000/_6000/_1000 (0008-0014,
+; overlapping 4-byte windows into the same byte run) are now confirmed pulse-interval
+; adjustment constants - see PULSE_ALIGN_ADJ (0E6D) - values 2000, 3000, 6000, 1000 in
+; CUR_TOA's BCD units, i.e. 2, 3, 6 and 1 times the ~1000us Loran-C inter-pulse spacing.
+; BCD_K_00080980 and BCD_K_00000110 are passed to TOA_ADD_CONST (0EC1, still needs its
+; other 4 callers traced to say what they mean there).
 BCD_CONST_TBL:
         DB   08H
 D_0005:
         DB   88H,88H,88H
-D_0008:
+TOA_ADJ_2000:
         DB   00H,00H,02H
-D_000B:
+TOA_ADJ_3000:
         DB   00H,00H,03H
-D_000E:
+TOA_ADJ_6000:
         DB   00H,00H,06H
-D_0011:
+TOA_ADJ_1000:
         DB   00H,00H,01H
 BCD_K_00080980:
         DB   00H,08H,09H,80H
@@ -382,7 +387,7 @@ ACQ_START:
         LXI B,REC_MASTER
         CALL COPY4
         LXI H,BCD_K_00080980
-        CALL X_0EC1
+        CALL TOA_ADD_CONST
         MVI A,0EH
         CALL X_0DB3
         LXI H,CUR_REC
@@ -415,7 +420,7 @@ SEARCH_VERIFY:
         CALL SAMPLE_TO_BCD
         CALL CPY_GRI_TO_TOA
         LXI H,BCD_DELTA_2
-        CALL X_0EC1
+        CALL TOA_ADD_CONST
         MVI A,0FH
         CALL X_0D79
         CALL WAIT_EPOCH
@@ -631,7 +636,7 @@ SLOT_TRK_RESULT:
         JNZ SLOT_TRK_END
 SLOT_TRK_MISS:
         LXI H,BCD_K_00000110
-        CALL X_0EC1
+        CALL TOA_ADD_CONST
         LXI H,MISS_CNT
         INR M
         LDA MISS_LIMIT
@@ -1516,16 +1521,16 @@ EPOCH_PHASE_UPDATE:
         LDA M_6FBE
         ANI 0FEH
         JZ L_083A
-        CALL SUB_0E6D
+        CALL PULSE_ALIGN_ADJ
         PUSH PSW
-        CC SUB_0EBE
+        CC TOA_ADD_1000
         POP PSW
         RLC
         PUSH PSW
-        CC SUB_0EA3
+        CC TOA_SUB_1000
         POP PSW
         RLC
-        CC SUB_0EB2
+        CC TOA_SUB_3000
 L_083A:
         CALL SUB_091B
         LDA M_6FBC
@@ -1555,7 +1560,7 @@ L_0867:
         MOV M,A
 L_0871:
         MOV A,C
-        CALL SUB_0E92
+        CALL PULSE_ALIGN_ADJ2_AND_CLEAR
 SAVE_CUR_REC:
         CALL SUB_0D7F
         JMP OLD_LOAD_REC
@@ -1586,10 +1591,10 @@ L_089F:
         JMP SAVE_CUR_REC
 X_08A9:
         CALL SUB_08F1
-        CALL SUB_0E6A
+        CALL PULSE_ALIGN_ADJ_6FBE
         RLC
         RLC
-        CC SUB_0EB2
+        CC TOA_SUB_3000
         LDA RESTART_REQ
         CPI 01H
         JNZ SAVE_CUR_REC
@@ -1614,10 +1619,10 @@ X_08A9:
 L_08E3:
         MOV A,C
         CMA
-        CALL SUB_0E87
+        CALL PULSE_ALIGN_ADJ2
         JMP SAVE_CUR_REC
 L_08EB:
-        CALL SUB_0E95
+        CALL CLEAR_TRACK_VARS
         JMP SAVE_CUR_REC
 SUB_08F1:
         CALL LOAD_CUR_REC
@@ -1961,7 +1966,7 @@ L_0B40:
         LXI H,CUR_PULSES
         INR M
         CALL CALC_TD
-        CALL X_0EC1
+        CALL TOA_ADD_CONST
         LDA VAR_6FE7
         MOV C,A
         LXI H,CUR_NPULSE
@@ -1970,7 +1975,7 @@ L_0B40:
         JM L_0B8A
         MOV M,A
         LXI H,VAR_6FE3
-        CALL X_0EC1
+        CALL TOA_ADD_CONST
         LXI H,CUR_PULSES
         INR M
         JMP L_0B8A
@@ -1980,7 +1985,7 @@ L_0B65:
         LXI H,CUR_PULSES
         DCR M
         CALL CALC_TD
-        CALL SUB_0EA6
+        CALL TOA_SUB_CONST
         LDA VAR_6FE7
         MOV C,A
         LXI H,CUR_NPULSE
@@ -1991,7 +1996,7 @@ L_0B65:
         ADD C
         MOV M,A
         LXI H,VAR_6FE3
-        CALL SUB_0EA6
+        CALL TOA_SUB_CONST
         LXI H,CUR_PULSES
         DCR M
 L_0B8A:
@@ -2089,7 +2094,7 @@ L_0C2E:
         ORA M
         MOV M,A
         MOV A,B
-        JMP SUB_0E92
+        JMP PULSE_ALIGN_ADJ2_AND_CLEAR
 L_0C37:
         CALL SUB_0B07
         LXI B,M_8020
@@ -2164,7 +2169,7 @@ L_0CB1:
         CALL SUB_0CA4
         RLC
         CALL SUB_0CBE
-        JC L_0EB8
+        JC TOA_SUB_6000
         JMP L_0EC7
 SUB_0CBE:
         PUSH PSW
@@ -2174,14 +2179,14 @@ SUB_0CBE:
         LDA SLOT_IDX
         CPI 00H
         JNZ L_0CFB
-        LXI H,D_0008
+        LXI H,TOA_ADJ_2000
         CALL BCD_ADD4
         JMP L_0CFB
 L_0CD7:
         LDA SLOT_IDX
         CPI 00H
         JNZ L_0CFB
-        LXI H,D_000E
+        LXI H,TOA_ADJ_6000
         CALL BCD_SUB4
         JMP L_0CFB
 SUB_0CE8:
@@ -2191,7 +2196,7 @@ SUB_0CE8:
         LDA SLOT_IDX
         CPI 00H
         JNZ L_0CFB
-        LXI H,D_000B
+        LXI H,TOA_ADJ_3000
         CALL BCD_ADD4
 L_0CFB:
         POP B
@@ -2420,72 +2425,96 @@ L_0E65:
         MOV B,H
         MOV C,L
         JMP L_0E0B
-SUB_0E6A:
+PULSE_ALIGN_ADJ_6FBE:
         LDA M_6FBE
-SUB_0E6D:
+
+; PULSE_ALIGN_ADJ: A = flags byte. Tests bits 7,6,5,4 in that order (successive RLC),
+; independently CALLing (any/all can fire): bit7 -> TOA_SUB_1000, bit6 -> TOA_ADD_1000,
+; bit5 -> TOA_ADD_6000, bit4 -> TOA_SUB_2000. Corrects CUR_TOA by whole multiples of the
+; ~1000us Loran-C inter-pulse spacing - the fix for the phase-code correlator locking
+; onto the wrong pulse within the 8-pulse group. PULSE_ALIGN_ADJ_6FBE (0E6A) is the same
+; cascade pre-loaded with A = M_6FBE. PULSE_ALIGN_ADJ2 (0E87) is a shorter 2-bit variant
+; (bit7/bit6 only, i.e. just the +-1000 pair).
+PULSE_ALIGN_ADJ:
         RLC
         PUSH PSW
-        CC SUB_0EA3
+        CC TOA_SUB_1000
         POP PSW
         RLC
         PUSH PSW
-        CC SUB_0EBE
+        CC TOA_ADD_1000
         POP PSW
         RLC
         PUSH PSW
-        CC SUB_0ED3
+        CC TOA_ADD_6000
         POP PSW
         RLC
         PUSH PSW
-        CC SUB_0EAC
+        CC TOA_SUB_2000
         POP PSW
         RLC
         RET
-SUB_0E87:
+PULSE_ALIGN_ADJ2:
         RLC
         PUSH PSW
-        CC SUB_0EA3
+        CC TOA_SUB_1000
         POP PSW
         RLC
-        CC SUB_0EBE
+        CC TOA_ADD_1000
         RET
-SUB_0E92:
-        CALL SUB_0E87
-SUB_0E95:
+PULSE_ALIGN_ADJ2_AND_CLEAR:
+        CALL PULSE_ALIGN_ADJ2
+
+; CLEAR_TRACK_VARS: zero M_6FB5, M_6FB8 (via SHLD of the RESET vector's 0000H, a
+; code-golf reuse of an existing zero word rather than a fresh 00,00 immediate) and
+; M_6FB2. PULSE_ALIGN_ADJ2_AND_CLEAR (0E92) is CALL PULSE_ALIGN_ADJ2 falling straight
+; through into this same body (no RET in between) - the two are almost always used
+; as one combined operation; this entry point alone is only reached directly from 08EB.
+CLEAR_TRACK_VARS:
         LXI H,RESET
         SHLD M_6FB5
         SHLD M_6FB8
         MOV A,H
         STA M_6FB2
         RET
-SUB_0EA3:
-        LXI H,D_0011
-SUB_0EA6:
+TOA_SUB_1000:
+        LXI H,TOA_ADJ_1000
+
+; TOA_SUB_CONST: HL = pointer to a 4-byte BCD constant. CUR_TOA -= (HL). The subtract
+; sibling of TOA_ADD_CONST (0EC1); TOA_SUB_1000/_2000/_3000/_6000 are fixed-constant
+; entry points into this same tail (see PULSE_ALIGN_ADJ, 0E6D).
+TOA_SUB_CONST:
         LXI B,CUR_TOA
         JMP BCD_SUB4
-SUB_0EAC:
-        LXI H,D_0008
-        JMP SUB_0EA6
-SUB_0EB2:
-        LXI H,D_000B
-        JMP SUB_0EA6
-L_0EB8:
-        LXI H,D_000E
-        JMP SUB_0EA6
-SUB_0EBE:
-        LXI H,D_0011
-X_0EC1:
+TOA_SUB_2000:
+        LXI H,TOA_ADJ_2000
+        JMP TOA_SUB_CONST
+TOA_SUB_3000:
+        LXI H,TOA_ADJ_3000
+        JMP TOA_SUB_CONST
+TOA_SUB_6000:
+        LXI H,TOA_ADJ_6000
+        JMP TOA_SUB_CONST
+TOA_ADD_1000:
+        LXI H,TOA_ADJ_1000
+
+; TOA_ADD_CONST (was X_0EC1; the old rom-status.md guess "add BCD constant to CUR_TOA"
+; was exactly right). HL = pointer to a 4-byte BCD constant. CUR_TOA += (HL).
+; TOA_ADD_1000/_6000 are fixed-constant entry points into this same tail (see
+; PULSE_ALIGN_ADJ, 0E6D); the other 5 callers pass BCD_K_00080980 or BCD_K_00000110
+; (0004's table) or another caller-chosen constant, not yet individually traced.
+TOA_ADD_CONST:
         LXI B,CUR_TOA
         JMP BCD_ADD4
 L_0EC7:
-        LXI H,D_0008
-        JMP X_0EC1
+        LXI H,TOA_ADJ_2000
+        JMP TOA_ADD_CONST
 SUB_0ECD:
-        LXI H,D_000B
-        JMP X_0EC1
-SUB_0ED3:
-        LXI H,D_000E
-        JMP X_0EC1
+        LXI H,TOA_ADJ_3000
+        JMP TOA_ADD_CONST
+TOA_ADD_6000:
+        LXI H,TOA_ADJ_6000
+        JMP TOA_ADD_CONST
 X_0ED9:
         LXI H,DISP_MODE
         INR M

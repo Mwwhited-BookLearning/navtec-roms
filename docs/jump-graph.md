@@ -196,19 +196,19 @@ control flow inside an already-named routine, not independent things to name.
 | 0E1A | `X_0E1A` | 3 | needs analysis |
 | 0E1D | `X_0E1D` | 2 | needs analysis |
 | 0E2D | `X_0E2D` | 2 | needs analysis |
-| 0E6A | `SUB_0E6A` | 1 | needs analysis |
-| 0E6D | `SUB_0E6D` | 1 | needs analysis |
-| 0E87 | `SUB_0E87` | 2 | needs analysis |
-| 0E92 | `SUB_0E92` | 1 | needs analysis |
-| 0E95 | `SUB_0E95` | 1 | needs analysis |
-| 0EA3 | `SUB_0EA3` | 3 | needs analysis |
-| 0EA6 | `SUB_0EA6` | 2 | needs analysis |
-| 0EAC | `SUB_0EAC` | 1 | needs analysis |
-| 0EB2 | `SUB_0EB2` | 2 | needs analysis |
-| 0EBE | `SUB_0EBE` | 3 | needs analysis |
-| 0EC1 | `X_0EC1` | 5 | needs analysis |
+| 0E6A | `PULSE_ALIGN_ADJ_6FBE` | 1 | named |
+| 0E6D | `PULSE_ALIGN_ADJ` | 1 | named |
+| 0E87 | `PULSE_ALIGN_ADJ2` | 2 | named |
+| 0E92 | `PULSE_ALIGN_ADJ2_AND_CLEAR` | 1 | named |
+| 0E95 | `CLEAR_TRACK_VARS` | 1 | named |
+| 0EA3 | `TOA_SUB_1000` | 3 | named |
+| 0EA6 | `TOA_SUB_CONST` | 2 | named |
+| 0EAC | `TOA_SUB_2000` | 1 | named |
+| 0EB2 | `TOA_SUB_3000` | 2 | named |
+| 0EBE | `TOA_ADD_1000` | 3 | named |
+| 0EC1 | `TOA_ADD_CONST` | 5 | named |
 | 0ECD | `SUB_0ECD` | 1 | needs analysis |
-| 0ED3 | `SUB_0ED3` | 1 | needs analysis |
+| 0ED3 | `TOA_ADD_6000` | 1 | named |
 | 0ED9 | `X_0ED9` | 3 | needs analysis |
 | 0EEE | `X_0EEE` | 1 | needs analysis |
 | 0F08 | `X_0F08` | 1 | needs analysis |
@@ -265,7 +265,7 @@ control flow inside an already-named routine, not independent things to name.
 | 1F20 | `SUB_1F20` | 1 | needs analysis |
 | 2001 | `EXTROM_ENTRY` | 1 | named |
 
-**52 of 137 still need analysis** (down from 77 at the start of this session).
+**40 of 137 still need analysis** (down from 77 at the start of this session).
 
 ## Variables (all 173 referenced RAM/IO addresses)
 
@@ -458,16 +458,20 @@ than real variables; low priority.
 Roughly in priority order (highest caller-count / most load-bearing first):
 
 1. **`GET_FLAGS_A` neighborhood (0800-0FFF): the slot-tracking arithmetic
-   helpers.** ~36 targets (`X_08A9` through `X_0FE9`) plus their associated
-   `M_6FBx`/`M_70Cx` variables. This is the window/timing arithmetic that
-   `firmware.md` already flags as "working names, not proven ones" - the
-   hardest but highest-value cluster, needs careful numeric tracing of each
-   routine against the `TRACK_LOOP`/`SLOT_PROCESS` state machine. Two entry
-   points into this area are now resolved (`EPOCH_PHASE_UPDATE`/0817 drives
-   the GRI-A/GRI-B phase alternator via `PHASE_AB_SELECT`; `GET_ITEM_REC`/
-   `GET_SEC_REC`/`TOA1_SLOT_NIB` at 04EE-0805 are simple record lookups) -
-   the remaining `SUB_0E6x`/`SUB_0EAx`/`SUB_0EBx` group that
-   `EPOCH_PHASE_UPDATE` calls is a good place to continue.
+   helpers.** ~24 targets remain (`X_08A9` through `X_0FE9`) plus their
+   associated `M_6FBx`/`M_70Cx` variables. This is the window/timing
+   arithmetic that `firmware.md` already flags as "working names, not proven
+   ones" - the hardest but highest-value cluster, needs careful numeric
+   tracing of each routine against the `TRACK_LOOP`/`SLOT_PROCESS` state
+   machine. Resolved so far: `EPOCH_PHASE_UPDATE`/`PHASE_AB_SELECT` (the
+   GRI-A/GRI-B phase alternator), `GET_ITEM_REC`/`GET_SEC_REC`/
+   `TOA1_SLOT_NIB` (record lookups), and the whole
+   `PULSE_ALIGN_ADJ`/`TOA_ADD_CONST`/`TOA_SUB_CONST` family (0E6A-0ED9) -
+   CUR_TOA corrections in whole multiples of the ~1000us Loran-C inter-pulse
+   spacing, for when the correlator locks onto the wrong pulse in the group.
+   `X_08A9`/`SUB_08F1`/`SUB_091B` (the "handle a slot in acquisition" group
+   right after `SAVE_CUR_REC`) is a good next target - it already calls into
+   the now-resolved `PULSE_ALIGN_ADJ`/`MUL10_INDEX`.
 2. **`SUB_1C3F` / `SUB_1CF3` / `SUB_1D10` / `SUB_1D45` (1C00-1D50) and the
    `M_70B7`-`M_70C7` display-column variables.** These feed `L_1CEA`'s
    display-commit path (same one `SW_ERR_SHOW` uses) and are keyed off
