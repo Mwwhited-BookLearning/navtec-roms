@@ -1,5 +1,10 @@
 # Serial port protocol (8251 at C000/C001)
 
+*For the host-facing flows this protocol supports (addressing a unit, the
+memory monitor, periodic reports, plot mode), see
+[user-flows.md](user-flows.md)'s "Flow F"; this document covers the
+mechanism, that one covers the experience.*
+
 Frame: asynchronous, 7 data bits, odd parity, 2 stop bits. Default 1200 baud,
 selectable 110 / 300 / 1200 / 19200 from the front panel (see
 [front-panel.md](front-panel.md)). RTS and DTR are asserted permanently. The

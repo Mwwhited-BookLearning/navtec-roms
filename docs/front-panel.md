@@ -1,5 +1,10 @@
 # Front panel: switches and display (8279 at D000/D001)
 
+*For the operator-facing flows this hardware supports (cold start, station
+selection, set-up mode, error recovery), see
+[user-flows.md](user-flows.md); this document covers the mechanism, that
+one covers the experience.*
+
 The 8279 runs in **encoded-scan sensor-matrix** mode. Its eight scan lines and
 eight return lines form a 64-point matrix that the chip samples continuously
 into an 8-byte sensor RAM. Any change raises IRQ (wired to RST 5.5). The

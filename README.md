@@ -48,6 +48,7 @@ that still need meter verification against the schematic).
 | [docs/routines.md](docs/routines.md) | subroutine catalog |
 | [docs/rom-status.md](docs/rom-status.md) | the ROM recovery story: how the missing halves were found and read (now resolved) |
 | [docs/jump-graph.md](docs/jump-graph.md) | jump-graph sequence diagrams, full jump-target/variable tables, analysis worklist |
+| [docs/user-flows.md](docs/user-flows.md) | operator user-flow design document: what someone in front of the unit (or on the serial line) actually experiences |
 | [docs/emulator.md](docs/emulator.md) | the 8085 emulator (`src/emu/emu8085.js`): CPU, peripherals, synthetic receiver, CLI |
 | [docs/pal-decoder.md](docs/pal-decoder.md) | the emulated PAL16R8/20R10 device-address decoder + generated CUPL source |
 | [docs/web-emulator.md](docs/web-emulator.md) | the browser front end (`src/emu/web-emu.js`): front panel, display, serial console, position map |
