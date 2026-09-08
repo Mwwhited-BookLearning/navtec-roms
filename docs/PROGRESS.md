@@ -1,5 +1,64 @@
 # Progress notes / session handoff (2026-09-06/07)
 
+## Update 5: hardware data, PAL/CUPL decoder, an 8085 emulator with a web
+front end, and an operator user-flow design document
+
+Follows on from Update 4 (below), which finished the renaming milestone.
+This update is a different kind of work: turning the finished analysis into
+running code and operator-facing documentation, plus folding in the first
+real physical-board data from the user.
+
+- **Physical hardware data incorporated.** The user confirmed: a single
+  10 MHz TCXO on the board (resolves the crystal-frequency open question -
+  the 8085's internal /2 gives exactly 5.000 MHz, matching the baud-rate
+  table's already-preferred fit); chip designators for all seven ICs
+  (U22/U35 = the two 8155s, U32 = 8251A, U36 = 8279, U40 = 8085, U45 = 8205
+  decoder, U39 = 8212); and that U45 being an 8205 confirms the
+  code-inferred "single 3-to-8 decoder" theory. Flagged (not silently
+  resolved) a conflict between an earlier photo pass and the new
+  designator data over where the `OPTION` ROM sockets actually sit. Added a
+  9-item physical-verification checklist to `hardware.md` for whoever has
+  the board next.
+- **An emulated PAL16R8/20R10 device-address decoder with matching CUPL
+  source** (`src/emu/pal.js`, `src/emu/addr-decode.js`,
+  `pal/addr_decoder_16r8.pld`, `pal/addr_decoder_20r10.pld`) - explicitly a
+  design-tool/hardware-modification artifact standing in for the board's
+  real TTL-based decode (8205 + glue), not a claim about what's physically
+  on the board. See `docs/pal-decoder.md`.
+- **A from-scratch 8085 emulator** (`src/emu/emu8085.js`): full documented +
+  undocumented instruction set, all peripherals as standalone components
+  (each exposes `read8`/`write8` and decides for itself which address bits
+  matter to it), a synthetic Loran-C receiver front end. Verified booting
+  both real ROM images through `INIT`/self-test/`READ_SWITCHES` and, with a
+  valid switch panel, into the real background tracking loop. See
+  `docs/emulator.md` for what's been checked and every place it had to
+  guess.
+- **A web front end** (`src/emu/web-emu.js` + `src/emu/web/index.html`):
+  thumbwheels, push-buttons, a real CSS 7-segment display, a blinkenlights
+  panel tied to named internal signals, a serial console, receiver
+  controls, and an illustrative Loran-C hyperbolic position-fix map
+  (`src/emu/loran-chains.js`, real chain-9940 geometry, explicitly *not* a
+  real position - see `docs/web-emulator.md`). Building and testing this
+  surfaced and fixed three real bugs: the 8279's clear command was wiping
+  the live switch-matrix sensor RAM instead of just display RAM; nothing
+  connected the 8279's IRQ output to RST 5.5, so a switch changed after
+  cold boot was never noticed; and the position map's hyperbola-curve
+  parametrization divided by a value that could be near zero and blew up.
+- **Six screenshotted playbooks** (`docs/playbooks/`) walking through the
+  web UI's user flows, captured by a Playwright script
+  (`src/emu/playbooks/capture.js`) that can regenerate every screenshot in
+  about 15 seconds. Added `playwright` as this project's first root
+  `package.json` devDependency.
+- **An operator user-flow design document** (`docs/user-flows.md`)
+  synthesizing the *experience* (cold start, station selection, set-up
+  mode, error recovery, the four serial-host flows) from the existing
+  *mechanism* docs, with per-claim confirmed/inferred/open confidence
+  markers. Surfaced one previously-undocumented mechanism in the process
+  (`ram-map.md`'s `DISP_SCAN_SLOT`/`DISP_SCAN_START` describe an
+  auto-scanning display mode that hadn't been written up as a flow before)
+  and named the single biggest real gap: what the display actually shows
+  *during* acquisition/tracking isn't established by any traced code path.
+
 ## Update 4: every jump target AND every variable in the ROM now has a name
 
 Finished what Update 3 started: **0 of 137 routines and 0 of 175 variables
@@ -205,20 +264,29 @@ read of two easily-confused part numbers.
 
 Items 1 and 2 from the original version of this list (rebuild verification,
 small remaining data regions) are done - see "Update (later same day)" above.
-Renumbered remaining items:
+The physical-board cross-check and JSON-cleanup items are still open, plus
+new items from Update 5:
 
-1. **Physical-board cross-check.** `docs/hardware.md` now has a "Physical
-   board observations" section from photos of the actual board (manufacturer
-   ID, a candidate answer for the crystal-frequency open question, an
-   RS-422/485 line receiver that corroborates the multi-drop serial protocol,
-   silkscreened functional section names, two unpopulated `OPTION` ROM
-   sockets). None of this has been traced with a meter against the schematic
-   - it's corroborating context, not verified fact.
-2. **`disasm/nt3321-22.json` cleanup.** The hints file's `entries`/`extraCode`
+1. **Physical-board verification, now itemized.** The crystal question is
+   effectively resolved (Update 5) and the 8205/decoder theory is
+   confirmed, but `docs/hardware.md`'s "Physical-verification checklist"
+   (9 items - RST 7.5 source, which 8155 is which, the U39/8212 conflict,
+   the OPTION socket wiring, the 8279 CLK source, etc.) is still open and
+   needs someone with the actual board and a meter.
+2. **Receiver front-end bit-protocol verification.** The emulator's
+   synthetic Loran-C front end (Update 5) hasn't been driven all the way to
+   `MASTER_FOUND` - `SHIFT_IN16`/`MATCH_PULSES`'s exact bit ordering needs
+   re-verification against the disassembly and the front end's timing
+   needs tuning to match, per `docs/emulator.md`'s suggested next step.
+3. **`disasm/nt3321-22.json` cleanup.** The hints file's `entries`/`extraCode`
    lists may be worth revisiting now that flow analysis reaches so much more
    of the image directly - some entries added earlier specifically to force
    discovery of code in the (then-missing) upper halves might now be
    redundant, though leaving them is harmless.
+4. **Open UX questions from the user-flow synthesis** (`docs/user-flows.md`):
+   what the two push-buttons do outside set-up mode, whether display
+   dimming is firmware-controlled at all, and what the display shows during
+   acquisition/tracking before a station locks.
 
 ## Quick orientation if you're new to this repo
 
@@ -233,4 +301,11 @@ Renumbered remaining items:
   resolution, including the diagnostic reasoning (not just the answer) in
   case a similar problem comes up with a different chip.
 - `docs/hardware.md` is the memory map / peripheral-programming reference;
-  now has both the code-derived analysis and the photo-derived board notes.
+  now has both the code-derived analysis and the photo-derived board notes,
+  plus the physical-verification checklist mentioned above.
+- `src/emu/` is the 8085 emulator and its web front end (Update 5) - start
+  at `docs/emulator.md` and `docs/web-emulator.md`; `docs/playbooks/` has
+  screenshotted usage walkthroughs.
+- `docs/user-flows.md` is the operator-facing design document - what someone
+  in front of the unit or on the serial line actually experiences, as
+  opposed to the mechanism-focused docs everything else here is.
