@@ -60,6 +60,8 @@ that still need meter verification against the schematic).
 | [docs/emulator-api.md](docs/emulator-api.md) | the emulator's programmatic surface, for scripting against it rather than just running it |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | the disassembly edit/verify/sweep workflow, naming discipline, and commit conventions |
 | [CLAUDE.md](CLAUDE.md) / [CONTEXT.md](CONTEXT.md) | operating rules and current-state snapshot for resuming work in a new session |
+| [docs/hardware-reuse.md](docs/hardware-reuse.md) | proposed reuse projects for this hardware with all-new firmware, no Loran interface required - single-board, breadboard/harvested-parts, and dual-board ideas |
+| [docs/peripheral-pinouts.md](docs/peripheral-pinouts.md) | chip-level pinouts for the 8279/8155/8251A, for anyone wiring a new panel or interfacing new hardware |
 
 ## Regenerating the listing
 

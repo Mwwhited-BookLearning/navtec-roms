@@ -51,6 +51,17 @@ meter), receiver front-end bit-protocol verification (needs
 `docs/user-flows.md`. Check `docs/PROGRESS.md`'s "Open items" section for
 the current, authoritative version.
 
+## Latest addition (2026-09-07, later same day)
+
+`docs/hardware-reuse.md` (proposed non-Loran reuse projects for this
+hardware - single-board, harvested-parts/breadboard, and dual-board ideas,
+since the user has two identical boards) and
+`docs/peripheral-pinouts.md` (8279 pinout fully verified against two
+independent datasheet sources; 8155/8251A pin *functions* confirmed but
+exact pin *numbers* not independently verified this session - flagged
+explicitly, cross-check before wiring). Neither the reuse ideas nor the
+pinouts have been built/tested - both are design proposals.
+
 ## Most recent session's work (2026-09-07)
 
 In order: captured the user's physical-board data (crystal, chip
