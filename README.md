@@ -54,6 +54,12 @@ that still need meter verification against the schematic).
 | [docs/pal-decoder.md](docs/pal-decoder.md) | the emulated PAL16R8/20R10 device-address decoder + generated CUPL source |
 | [docs/web-emulator.md](docs/web-emulator.md) | the browser front end (`src/emu/web-emu.js`): front panel, display, serial console, position map |
 | [docs/playbooks/](docs/playbooks/README.md) | screenshotted walkthroughs of the web front end's user flows |
+| [docs/loran-c-primer.md](docs/loran-c-primer.md) | conceptual grounding in Loran-C navigation itself (GRI, TD, hyperbolic fixes) for readers new to the domain |
+| [docs/glossary.md](docs/glossary.md) | domain terms + this project's own naming conventions (`SUB_`/`X_`/`M_`/`L_`/`D_`/`VAR_` prefixes, confidence markers) |
+| [docs/pal-programming-guide.md](docs/pal-programming-guide.md) | how to actually compile and burn the PAL decoder onto a real chip (not done in this project - a guide for whoever does) |
+| [docs/emulator-api.md](docs/emulator-api.md) | the emulator's programmatic surface, for scripting against it rather than just running it |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | the disassembly edit/verify/sweep workflow, naming discipline, and commit conventions |
+| [CLAUDE.md](CLAUDE.md) / [CONTEXT.md](CONTEXT.md) | operating rules and current-state snapshot for resuming work in a new session |
 
 ## Regenerating the listing
 
