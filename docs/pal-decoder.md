@@ -6,7 +6,7 @@ exposes a uniform `read8(addr)`/`write8(addr, val)` and decides for itself
 which address bits matter to it, the same way a real chip only looks at the
 pins actually wired to it. What decides *which* device answers a given
 address - the board's device-mapping logic - is modeled separately, as its
-own component: `tools/pal.js` + `tools/addr-decode.js`.
+own component: `src/emu/pal.js` + `src/emu/addr-decode.js`.
 
 **This is presented as an emulated PAL16R8/20R10 standing in for the
 board's real device-mapping logic. The real board's logic is TTL** - an
@@ -46,14 +46,14 @@ needs 3 inputs.
 
 ## Files
 
-- `tools/pal.js` - `ProductTermPal`, a small generic sum-of-products
+- `src/emu/pal.js` - `ProductTermPal`, a small generic sum-of-products
   evaluator (named input literals, AND within a term, OR across terms,
   active-low output). Not specific to this decoder; reusable for any future
   PAL-shaped logic in this project.
-- `tools/addr-decode.js` - the actual 8-term decode table (`ADDR_DECODE_TERMS`),
+- `src/emu/addr-decode.js` - the actual 8-term decode table (`ADDR_DECODE_TERMS`),
   shared by the emulator's `Bus` and the CUPL generator so they can't drift
   apart, plus pin-assignment specs for PAL16R8 and PAL20R10 and the CUPL
-  renderer itself. Run directly (`node tools/addr-decode.js`) to regenerate
+  renderer itself. Run directly (`node src/emu/addr-decode.js`) to regenerate
   the `.pld` files below.
 - `pal/addr_decoder_16r8.pld`, `pal/addr_decoder_20r10.pld` - generated
   CUPL source, committed like `disasm/*.asm`/`.lst` are: build artifacts of
@@ -94,7 +94,7 @@ that's the place to revisit this.
 ## Regenerating
 
 ```sh
-node tools/addr-decode.js
+node src/emu/addr-decode.js
 ```
 
 Overwrites both `.pld` files from `ADDR_DECODE_TERMS`. Compiling them

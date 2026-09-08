@@ -123,7 +123,7 @@ function generateCupl(deviceKey, opts = {}) {
 }
 
 function main() {
-  const base = path.resolve(__dirname, '..');
+  const base = path.resolve(__dirname, '..', '..');
   const outDir = path.join(base, 'pal');
   if (!fs.existsSync(outDir)) fs.mkdirSync(outDir, { recursive: true });
   for (const key of Object.keys(DEVICE_SPECS)) {

@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Navtec Loran-C receiver -- 8085 emulator</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px; background: #1b1b1d; color: #ddd;
+    font-family: 'Courier New', ui-monospace, monospace; font-size: 13px;
+  }
+  h1 { font-size: 16px; margin: 0 0 4px; color: #eee; }
+  .sub { color: #888; margin: 0 0 14px; font-size: 12px; }
+  a { color: #7ab8ff; }
+  .panel {
+    background: #26262a; border: 1px solid #3a3a3f; border-radius: 6px;
+    padding: 12px; margin-bottom: 12px;
+  }
+  .panel h2 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
+    color: #999; margin: 0 0 10px; border-bottom: 1px solid #3a3a3f; padding-bottom: 6px;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+
+  /* ---- controls ---- */
+  button {
+    background: #3a3a40; color: #ddd; border: 1px solid #55555c; border-radius: 4px;
+    padding: 5px 10px; font-family: inherit; font-size: 12px; cursor: pointer;
+  }
+  button:hover { background: #46464d; }
+  button:active { background: #2c2c30; }
+  button.primary { background: #2f5d3a; border-color: #3f7a4d; }
+  button.danger { background: #6b2f2f; border-color: #8a3d3d; }
+  input[type=text] { background: #101012; color: #cfc; border: 1px solid #444; border-radius: 4px; padding: 5px; font-family: inherit; }
+  #error { color: #ff8080; font-weight: bold; margin-top: 6px; }
+
+  /* ---- status line ---- */
+  #status { display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; }
+  #status span b { color: #eee; }
+
+  /* ---- 7-segment display ---- */
+  .display-panel { background: #0b0b0c; border: 2px solid #333; border-radius: 6px; padding: 14px; }
+  .disp-row { display: flex; gap: 4px; margin-bottom: 8px; }
+  .disp-row:last-child { margin-bottom: 0; }
+  .disp-label { color: #666; width: 46px; font-size: 11px; align-self: center; }
+  .digit { position: relative; width: 22px; height: 38px; margin: 0 3px; }
+  .seg { position: absolute; background: #2a0808; border-radius: 1px; transition: background .05s, box-shadow .05s; }
+  .seg.on { background: #ff3b3b; box-shadow: 0 0 6px #ff3b3b99, 0 0 2px #fff8; }
+  .seg.a { top: 0;    left: 3px;  width: 16px; height: 3px; }
+  .seg.f { top: 3px;  left: 0;    width: 3px;  height: 15px; }
+  .seg.b { top: 3px;  right: 0;   width: 3px;  height: 15px; }
+  .seg.g { top: 17px; left: 3px;  width: 16px; height: 3px; }
+  .seg.e { top: 20px; left: 0;    width: 3px;  height: 15px; }
+  .seg.c { top: 20px; right: 0;   width: 3px;  height: 15px; }
+  .seg.d { top: 35px; left: 3px;  width: 16px; height: 3px; }
+
+  /* ---- blinkenlights ---- */
+  .leds { display: flex; gap: 16px; flex-wrap: wrap; }
+  .led-item { display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; color: #999; }
+  .led { width: 16px; height: 16px; border-radius: 50%; background: #3a1010; border: 1px solid #500; box-shadow: inset 0 0 3px #000; }
+  .led.on { background: #ff5b3b; border-color: #ff8a3b; box-shadow: 0 0 8px #ff5b3bcc, inset 0 0 3px #400; }
+  .led.green.on { background: #5bff6a; border-color: #8affa0; box-shadow: 0 0 8px #5bff6acc, inset 0 0 3px #040; }
+  .led.blue.on { background: #5bc0ff; border-color: #8ad9ff; box-shadow: 0 0 8px #5bc0ffcc, inset 0 0 3px #004; }
+
+  /* ---- thumbwheels ---- */
+  .wheels { display: flex; gap: 10px; flex-wrap: wrap; }
+  .wheel { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .wheel .name { font-size: 10px; color: #888; }
+  .wheel .window {
+    width: 34px; height: 30px; background: #0b0b0c; border: 1px solid #444; border-radius: 3px;
+    display: flex; align-items: center; justify-content: center; font-size: 18px; color: #ffcf5b;
+    font-weight: bold; text-shadow: 0 0 4px #ffcf5b88;
+  }
+  .wheel .arrows { display: flex; gap: 4px; }
+  .wheel .arrows button { padding: 2px 8px; }
+  .buttons-row { display: flex; gap: 14px; margin-top: 10px; }
+  .pushbtn { width: 64px; height: 40px; font-weight: bold; }
+  .pushbtn.pressed { background: #2f5d3a; }
+
+  /* ---- serial ---- */
+  #serialOut {
+    width: 100%; height: 160px; background: #0b0b0c; color: #7dff7d; border: 1px solid #333;
+    border-radius: 4px; padding: 6px; font-family: inherit; font-size: 12px; white-space: pre-wrap;
+    overflow-y: auto;
+  }
+  .serial-input-row { display: flex; gap: 6px; margin-top: 6px; }
+  .serial-input-row input { flex: 1; }
+  .quickkeys { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; }
+
+  /* ---- receiver ---- */
+  .bits { display: flex; gap: 2px; }
+  .bit { width: 14px; height: 14px; border: 1px solid #444; border-radius: 2px; background: #101012; }
+  .bit.on { background: #5bc0ff; box-shadow: 0 0 5px #5bc0ffaa; }
+  label.inline { display: flex; align-items: center; gap: 6px; }
+
+  /* ---- position map ---- */
+  #loranCanvas { background: #0b0b0c; border: 1px solid #333; border-radius: 4px; display: block; }
+  .loran-readout { font-size: 11px; color: #aaa; margin-top: 8px; line-height: 1.6; }
+  .loran-readout b { color: #ddd; }
+  .loran-note { color: #776; font-size: 10px; margin-top: 4px; }
+  .override-row { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+  .override-row input[type=number] { width: 90px; background: #101012; color: #cfc; border: 1px solid #444; border-radius: 4px; padding: 4px; font-family: inherit; }
+</style>
+</head>
+<body>
+<h1>Navtec Loran-C receiver &mdash; 8085 emulator</h1>
+<p class="sub">
+  Best-effort reconstruction from ROM analysis, never checked against real hardware.
+  See <code>docs/web-emulator.md</code> in the repo for what's modeled and what's guessed.
+</p>
+
+<div class="panel">
+  <h2>Machine control</h2>
+  <div class="row" style="align-items:center;">
+    <button id="btnRun" class="primary">Run</button>
+    <button id="btnPause">Pause</button>
+    <button id="btnReset" class="danger">Reset</button>
+    <label class="inline">Speed <input id="speed" type="range" min="0.1" max="10" step="0.1" value="1"> <span id="speedVal">1.0x</span></label>
+  </div>
+  <div id="status">
+    <span>PC: <b id="stPc">-</b></span>
+    <span>Routine: <b id="stSym">-</b></span>
+    <span>SP: <b id="stSp">-</b></span>
+    <span>A: <b id="stA">-</b></span>
+    <span>Flags: <b id="stFlags">-</b></span>
+    <span>Cycles: <b id="stCycles">-</b></span>
+    <span>State: <b id="stRunning">-</b></span>
+  </div>
+  <div id="error"></div>
+</div>
+
+<div class="grid">
+  <div class="panel display-panel">
+    <h2>Display (8279, DISP_REFRESH -- see front-panel.md)</h2>
+    <div class="disp-row"><span class="disp-label">TD-A</span><div id="rowA" style="display:flex"></div></div>
+    <div class="disp-row"><span class="disp-label">TD-B</span><div id="rowB" style="display:flex"></div></div>
+    <div class="disp-row"><span class="disp-label">extra</span><div id="rowX" style="display:flex"></div></div>
+  </div>
+
+  <div class="panel">
+    <h2>Blinkenlights</h2>
+    <div class="leds">
+      <div class="led-item"><div class="led green" id="ledIe"></div>IE</div>
+      <div class="led-item"><div class="led" id="ledHalt"></div>HLT</div>
+      <div class="led-item"><div class="led" id="ledBusy"></div>BUSY<br>(PIO1 PC0)</div>
+      <div class="led-item"><div class="led blue" id="ledSample"></div>SAMPLE<br>(RST 6.5)</div>
+      <div class="led-item"><div class="led" id="ledTick"></div>TICK<br>(RST 7.5, guess)</div>
+      <div class="led-item"><div class="led green" id="ledTx"></div>TX</div>
+      <div class="led-item"><div class="led" id="ledKdcIrq"></div>KDC IRQ<br>(RST 5.5)</div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Front panel &mdash; thumbwheels &amp; buttons (docs/front-panel.md)</h2>
+  <div class="wheels" id="wheels"></div>
+  <div class="buttons-row">
+    <button class="pushbtn" id="btnA">BTN A</button>
+    <button class="pushbtn" id="btnB">BTN B</button>
+    <span class="sub" style="align-self:center;">Button semantics unconfirmed -- see front-panel.md "Not yet known".</span>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="panel">
+    <h2>Serial port (8251A, docs/serial-protocol.md)</h2>
+    <div id="serialOut"></div>
+    <div class="serial-input-row">
+      <input id="serialIn" type="text" placeholder="type and press Enter to send">
+      <button id="serialSend">Send</button>
+    </div>
+    <div class="quickkeys">
+      <button data-ch="27">ESC</button>
+      <button data-ch="18">DC2 (reset)</button>
+      <button data-ch="20">DC4 (out_mode=1)</button>
+      <button data-ch="5">ENQ (select)</button>
+      <button data-ch="7">BEL</button>
+      <button data-ch="13">CR</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Loran-C receiver front end (synthetic -- docs/emulator.md "Known simplifications")</h2>
+    <div class="row" style="align-items:center;">
+      <label class="inline"><input type="radio" name="rxmode" value="master" checked> Master (CA/9F)</label>
+      <label class="inline"><input type="radio" name="rxmode" value="secondary"> Secondary (F9/AC)</label>
+    </div>
+    <div class="row" style="align-items:center; margin-top:8px;">
+      <label class="inline">Noise <input id="noise" type="range" min="0" max="100" step="1" value="0"> <span id="noiseVal">0%</span></label>
+      <span>Samples: <b id="rxSamples">0</b></span>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Position map (illustrative Loran-C fix -- NOT a real position, see docs/web-emulator.md)</h2>
+  <div class="row">
+    <canvas id="loranCanvas" width="420" height="360"></canvas>
+    <div style="flex:1; min-width:220px;">
+      <div class="loran-readout" id="loranReadout">-</div>
+      <div class="override-row">
+        <span>Manual TD entry (bypasses the display):</span>
+        <input id="ovTdA" type="number" step="0.1" placeholder="TD-A us">
+        <input id="ovTdB" type="number" step="0.1" placeholder="TD-B us">
+        <button id="ovApply">Apply</button>
+        <button id="ovClear">Use live display</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SEG7 = [
+  'abcdef', 'bc', 'abged', 'abgcd', 'fgbc', 'afgcd', 'afgedc', 'abc',
+  'abcdefg', 'abcdfg', 'abcefg', 'fedcg', 'afed', 'bcdeg', 'afged', 'afge',
+];
+function makeDigit() {
+  const d = document.createElement('div');
+  d.className = 'digit';
+  for (const s of ['a','b','c','d','e','f','g']) {
+    const seg = document.createElement('div');
+    seg.className = 'seg ' + s;
+    seg.dataset.seg = s;
+    d.appendChild(seg);
+  }
+  return d;
+}
+function setDigit(el, value) {
+  const on = new Set((SEG7[value & 0xF] || '').split(''));
+  el.querySelectorAll('.seg').forEach((seg) => seg.classList.toggle('on', on.has(seg.dataset.seg)));
+}
+function makeRow(container, n) {
+  const digits = [];
+  for (let i = 0; i < n; i++) { const d = makeDigit(); container.appendChild(d); digits.push(d); }
+  return digits;
+}
+const rowAEl = document.getElementById('rowA');
+const rowBEl = document.getElementById('rowB');
+const rowXEl = document.getElementById('rowX');
+const rowADigits = makeRow(rowAEl, 6);
+const rowBDigits = makeRow(rowBEl, 6);
+const rowXDigits = makeRow(rowXEl, 2);
+
+// ---- thumbwheels ----
+const WHEEL_NAMES = ['SEL A', 'SEL B', 'GRI 1', 'GRI 2', 'GRI 3', 'GRI 4'];
+const STATES = ['0','1','2','3','4','5','6','7','8','9','blank'];
+let wheelState = [1,2,9,9,4,0].map(String); // optimistic local copy, corrected by poll
+const wheelsEl = document.getElementById('wheels');
+const wheelWindows = [];
+WHEEL_NAMES.forEach((name, row) => {
+  const w = document.createElement('div'); w.className = 'wheel';
+  const label = document.createElement('div'); label.className = 'name'; label.textContent = name;
+  const win = document.createElement('div'); win.className = 'window'; win.textContent = wheelState[row];
+  const arrows = document.createElement('div'); arrows.className = 'arrows';
+  const up = document.createElement('button'); up.textContent = '+';
+  const down = document.createElement('button'); down.textContent = '-';
+  function step(dir) {
+    let idx = STATES.indexOf(wheelState[row]);
+    if (idx < 0) idx = 0;
+    idx = (idx + dir + STATES.length) % STATES.length;
+    wheelState[row] = STATES[idx];
+    win.textContent = wheelState[row];
+    postJson('/api/switch', { row, value: wheelState[row] });
+  }
+  up.onclick = () => step(1);
+  down.onclick = () => step(-1);
+  arrows.appendChild(down); arrows.appendChild(up);
+  w.appendChild(label); w.appendChild(win); w.appendChild(arrows);
+  wheelsEl.appendChild(w);
+  wheelWindows.push(win);
+});
+
+function postJson(url, body) {
+  return fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+    .catch(() => {});
+}
+
+// ---- push buttons (momentary) ----
+function wireButton(id, name) {
+  const el = document.getElementById(id);
+  const press = () => { el.classList.add('pressed'); postJson('/api/button', { name, pressed: true }); };
+  const release = () => { el.classList.remove('pressed'); postJson('/api/button', { name, pressed: false }); };
+  el.addEventListener('mousedown', press);
+  el.addEventListener('touchstart', (e) => { e.preventDefault(); press(); });
+  ['mouseup','mouseleave','touchend','touchcancel'].forEach((ev) => el.addEventListener(ev, release));
+}
+wireButton('btnA', 'A');
+wireButton('btnB', 'B');
+
+// ---- machine control ----
+document.getElementById('btnRun').onclick = () => postJson('/api/control', { action: 'run' });
+document.getElementById('btnPause').onclick = () => postJson('/api/control', { action: 'pause' });
+document.getElementById('btnReset').onclick = () => postJson('/api/control', { action: 'reset' });
+const speedEl = document.getElementById('speed');
+speedEl.addEventListener('input', () => {
+  document.getElementById('speedVal').textContent = Number(speedEl.value).toFixed(1) + 'x';
+  postJson('/api/control', { action: 'speed', value: speedEl.value });
+});
+
+// ---- serial ----
+const serialOutEl = document.getElementById('serialOut');
+let lastSerialLen = -1;
+function sendSerialText(text) { if (text) postJson('/api/serial', { text }); }
+document.getElementById('serialSend').onclick = () => {
+  const el = document.getElementById('serialIn');
+  sendSerialText(el.value); el.value = '';
+};
+document.getElementById('serialIn').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { sendSerialText(e.target.value + '\r'); e.target.value = ''; }
+});
+document.querySelectorAll('.quickkeys button').forEach((btn) => {
+  btn.addEventListener('click', () => sendSerialText(String.fromCharCode(Number(btn.dataset.ch))));
+});
+
+// ---- receiver ----
+document.querySelectorAll('input[name=rxmode]').forEach((r) => {
+  r.addEventListener('change', () => { if (r.checked) postJson('/api/receiver', { mode: r.value }); });
+});
+const noiseEl = document.getElementById('noise');
+noiseEl.addEventListener('input', () => {
+  document.getElementById('noiseVal').textContent = noiseEl.value + '%';
+  postJson('/api/receiver', { noise: noiseEl.value });
+});
+
+// ---- position map ----
+const loranCanvas = document.getElementById('loranCanvas');
+const loranReadout = document.getElementById('loranReadout');
+document.getElementById('ovApply').onclick = () => {
+  postJson('/api/loran', { tdA: document.getElementById('ovTdA').value, tdB: document.getElementById('ovTdB').value });
+};
+document.getElementById('ovClear').onclick = () => {
+  document.getElementById('ovTdA').value = '';
+  document.getElementById('ovTdB').value = '';
+  postJson('/api/loran', { tdA: '', tdB: '' });
+};
+
+function drawLoranMap(canvas, d) {
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#0b0b0c';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  if (!d || !d.available) return;
+
+  const pts = d.stations.map((s) => ({ x: s.x, y: s.y }));
+  if (d.fix) pts.push(d.fix);
+  const pad = 34;
+  const minX = Math.min(...pts.map((p) => p.x)), maxX = Math.max(...pts.map((p) => p.x));
+  const minY = Math.min(...pts.map((p) => p.y)), maxY = Math.max(...pts.map((p) => p.y));
+  const w = canvas.width - 2 * pad, h = canvas.height - 2 * pad;
+  const scale = Math.min(w / (maxX - minX || 1), h / (maxY - minY || 1));
+  const toPx = (p) => ({ x: pad + (p.x - minX) * scale, y: canvas.height - pad - (p.y - minY) * scale });
+
+  function drawCurve(points, color) {
+    if (!points || points.length < 2) return;
+    ctx.strokeStyle = color; ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    points.forEach((raw, i) => {
+      const p = toPx(raw);
+      if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+    });
+    ctx.stroke();
+  }
+  drawCurve(d.hypA, '#ff9d3b');
+  drawCurve(d.hypB, '#5bc0ff');
+
+  d.stations.forEach((s) => {
+    const p = toPx(s);
+    ctx.fillStyle = s.id === 'M' ? '#ffcf5b' : (s.id === d.secA || s.id === d.secB ? '#7dff7d' : '#666');
+    ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = '#ccc'; ctx.font = '10px monospace';
+    ctx.fillText(s.id, p.x + 6, p.y - 6);
+  });
+
+  if (d.fix) {
+    const p = toPx(d.fix);
+    ctx.strokeStyle = '#ff3b3b'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(p.x - 8, p.y); ctx.lineTo(p.x + 8, p.y); ctx.moveTo(p.x, p.y - 8); ctx.lineTo(p.x, p.y + 8); ctx.stroke();
+  }
+}
+
+function renderLoranReadout(d) {
+  if (!d || !d.available) {
+    loranReadout.innerHTML = `<span style="color:#c88">${(d && d.reason) || 'no data'}</span>`;
+    return;
+  }
+  loranReadout.innerHTML =
+    `Chain: <b>${d.gri}</b> (${d.chainName})<br>` +
+    `SEL A -> <b>${d.secA}</b> (TD-A ${d.tdA.toFixed(1)} us, orange LOP)<br>` +
+    `SEL B -> <b>${d.secB}</b> (TD-B ${d.tdB.toFixed(1)} us, blue LOP)<br>` +
+    (d.usingOverride ? '<span style="color:#8bf">using manual TD entry</span><br>' : '') +
+    (d.fix ? `Fix: <b>${d.fix.lat.toFixed(4)}, ${d.fix.lon.toFixed(4)}</b>` : '<span style="color:#c88">LOPs did not intersect</span>') +
+    `<div class="loran-note">${d.note}</div>`;
+}
+
+// ---- poll loop ----
+function fmtHex(n, w) { return n.toString(16).toUpperCase().padStart(w, '0'); }
+async function poll() {
+  try {
+    const r = await fetch('/api/state');
+    const s = await r.json();
+    document.getElementById('stPc').textContent = '0x' + fmtHex(s.cpu.pc, 4);
+    document.getElementById('stSym').textContent = s.cpu.symbol || '-';
+    document.getElementById('stSp').textContent = '0x' + fmtHex(s.cpu.sp, 4);
+    document.getElementById('stA').textContent = '0x' + fmtHex(s.cpu.a, 2);
+    const f = s.cpu.flags;
+    document.getElementById('stFlags').textContent =
+      (f.s?'S':'-') + (f.z?'Z':'-') + (f.ac?'A':'-') + (f.p?'P':'-') + (f.cy?'C':'-');
+    document.getElementById('stCycles').textContent = s.cpu.cycles.toLocaleString();
+    document.getElementById('stRunning').textContent = s.error ? 'ERROR' : (s.running ? 'running' : 'paused');
+    document.getElementById('error').textContent = s.error || '';
+
+    rowADigits.forEach((el, i) => setDigit(el, s.display.rowA[i]));
+    rowBDigits.forEach((el, i) => setDigit(el, s.display.rowB[i]));
+    setDigit(rowXDigits[0], s.display.extraHi);
+    setDigit(rowXDigits[1], s.display.extraLo);
+
+    document.getElementById('ledIe').classList.toggle('on', s.leds.ie);
+    document.getElementById('ledHalt').classList.toggle('on', s.leds.halted);
+    document.getElementById('ledBusy').classList.toggle('on', s.leds.busy);
+    document.getElementById('ledSample').classList.toggle('on', s.leds.sample);
+    document.getElementById('ledTick').classList.toggle('on', s.leds.tick);
+    document.getElementById('ledTx').classList.toggle('on', s.leds.tx);
+    document.getElementById('ledKdcIrq').classList.toggle('on', s.leds.kdcIrq);
+
+    s.uiState.digits.forEach((d, i) => {
+      const v = d === null ? 'blank' : String(d);
+      if (wheelState[i] !== v) { wheelState[i] = v; wheelWindows[i].textContent = v; }
+    });
+
+    if (s.serial.length !== lastSerialLen) {
+      serialOutEl.textContent = s.serial;
+      serialOutEl.scrollTop = serialOutEl.scrollHeight;
+      lastSerialLen = s.serial.length;
+    }
+
+    document.getElementById('rxSamples').textContent = s.receiver.samples.toLocaleString();
+
+    drawLoranMap(loranCanvas, s.loran);
+    renderLoranReadout(s.loran);
+  } catch (e) { /* transient fetch error, ignore and retry */ }
+  setTimeout(poll, 100);
+}
+poll();
+</script>
+</body>
+</html>

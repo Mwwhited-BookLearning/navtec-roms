@@ -506,7 +506,11 @@ const PHASE_CODES = {
 class ReceiverFrontEnd {
   constructor(cpu, pio2, which) {
     this.cpu = cpu; this.pio2 = pio2;
-    this.words = PHASE_CODES[which] || PHASE_CODES.master;
+    this.mode = PHASE_CODES[which] ? which : 'master';
+    this.words = PHASE_CODES[this.mode];
+    this.noise = 0; // 0..1, probability of flipping each shifted-out bit -- see setNoise()
+    this.sampleTotal = 0;
+    this.onSample = null; // optional callback, fired once per synthetic sample strobe
     this.shift1 = 0; this.shift2 = 0; this.bitCount = 0;
     this.lastPB = pio2.PB;
     this.tStateAcc = 0;
@@ -515,7 +519,15 @@ class ReceiverFrontEnd {
     pio2.pcIn = 0xFF;
     pio2.onPBWrite = (v) => this.onPBWrite(v);
   }
-  reloadShiftRegs() { this.shift1 = this.words[0]; this.shift2 = this.words[1]; this.bitCount = 0; }
+  setMode(which) { if (PHASE_CODES[which]) { this.mode = which; this.words = PHASE_CODES[which]; } }
+  setNoise(level) { this.noise = Math.max(0, Math.min(1, level)); }
+  applyNoise(byte) {
+    if (!this.noise) return byte;
+    let b = byte;
+    for (let i = 0; i < 8; i++) if (Math.random() < this.noise) b ^= (1 << i);
+    return b;
+  }
+  reloadShiftRegs() { this.shift1 = this.applyNoise(this.words[0]); this.shift2 = this.applyNoise(this.words[1]); this.bitCount = 0; }
   onPBWrite(v) {
     const rising = (bit) => !(this.lastPB & bit) && (v & bit);
     if (rising(0x04)) this.reloadShiftRegs(); // latch/reset strobe
@@ -533,6 +545,8 @@ class ReceiverFrontEnd {
     this.tStateAcc -= this.sampleInterval;
     // Present the epoch flag for this sample, then strobe RST 6.5.
     this.pio2.pcIn |= 0x04;
+    this.sampleTotal++;
+    if (this.onSample) this.onSample();
     this.cpu.requestInterrupt('6.5');
   }
 }
@@ -624,6 +638,12 @@ class Bus {
     this.pio1.tick(tstates);
     this.pio2.tick(tstates);
     if (this.frontEnd) this.frontEnd.tick(tstates);
+    // RST 5.5 is level-sensitive from the 8279's IRQ pin (hardware.md: "KDC -up-> CPU:
+    // IRQ -> RST 5.5"), not a one-shot request like the RST 6.5 sample strobe -- keep the
+    // CPU's pending flag continuously synced to the chip's live IRQ output rather than
+    // latching/clearing it by hand. This is what lets a switch changed at runtime (e.g.
+    // from the web front end) actually get noticed, not just at cold boot.
+    if (this._cpu) this._cpu.I55 = this.kdc.irqPending;
   }
 }
 
@@ -693,7 +713,7 @@ function applySwitches(kdc, sw, unitIdHex) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
-  const base = path.resolve(__dirname, '..');
+  const base = path.resolve(__dirname, '..', '..');
   const rom1Path = args.rom1 || path.join(base, 'originals', 'CN19229N NT3321 7943.BIN');
   const rom2Path = args.rom2 || path.join(base, 'originals', 'CN19230N NT3322 7943.BIN');
 

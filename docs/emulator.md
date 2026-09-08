@@ -1,4 +1,4 @@
-# 8085 emulator (`tools/emu8085.js`)
+# 8085 emulator (`src/emu/emu8085.js`)
 
 A from-scratch Intel 8085 interpreter plus the memory-mapped peripherals
 reconstructed in [hardware.md](hardware.md), able to boot the real ROM
@@ -56,6 +56,20 @@ confirming the RST 6.5 interrupt path, the 8155 timer/RST 7.5 path, and the
 acquisition code. It has not been driven all the way to `MASTER_FOUND`;
 see "Known limitations" below for why.
 
+Running under [the web front end](web-emulator.md) with that same switch
+combination reaches `REPORT_TASK`'s periodic serial output (real formatted
+report lines over the emulated 8251A) and shows the classic all-segments
+"88888888" lamp-test pattern on the display shortly after boot.
+
+**Fixed while building the web front end:** nothing previously connected
+the 8279's IRQ output to the CPU's RST 5.5 pending flag, so a switch
+changed after cold boot was never noticed - `READ_SWITCHES` only runs
+once, and front-panel.md's runtime re-scan path is gated on that IRQ.
+`Bus.tick()` now continuously syncs `cpu.I55` from the 8279's live
+`irqPending` (RST 5.5 is level-sensitive from an external pin per
+hardware.md's diagram, not something to latch and clear by hand). See
+[web-emulator.md](web-emulator.md#runtime-switch-changes-now-actually-work).
+
 One real bug found and fixed this way: the 8279's `writeCommand` case for
 the `CDH` (clear) command originally cleared `sensorRAM` along with
 `displayRAM`. On real hardware, sensor-matrix-mode sensor RAM is a live
@@ -67,7 +81,7 @@ forever. Fixed by only clearing `displayRAM` on that command.
 ## Architecture
 
 ```
-tools/emu8085.js
+src/emu/emu8085.js
   Cpu8085          registers, flags, the full opcode dispatch table, interrupts
   RomDevice, UnusedDevice, Intel8155 x2, Intel8251A, Intel8279
                    standalone devices: each exposes read8(addr)/write8(addr,val)
@@ -78,8 +92,10 @@ tools/emu8085.js
   ReceiverFrontEnd synthetic Loran-C signal generator (see below)
   CLI / REPL       argument parsing, tracing, breakpoints, interactive monitor
 
-tools/pal.js           generic PAL/GAL-style sum-of-products evaluator
-tools/addr-decode.js   this board's specific decode table + CUPL generator
+src/emu/pal.js           generic PAL/GAL-style sum-of-products evaluator
+src/emu/addr-decode.js   this board's specific decode table + CUPL generator
+src/emu/web-emu.js       HTTP server: runs the emulator continuously, serves the web UI
+src/emu/web/index.html   the browser front end -- see docs/web-emulator.md
 ```
 
 The CPU/bus/peripherals live in one file, matching `tools/dis8085.js`'s
@@ -151,17 +167,17 @@ hardware-verified model, and why:
 
 ```sh
 # Free-run from reset, symbol-resolved trace to stderr redirected off, stop after 1e6 instructions:
-node tools/emu8085.js --steps 1000000
+node src/emu/emu8085.js --steps 1000000
 
 # Boot with a valid switch panel (selector A=1, selector B=2, GRI 9940) and
 # drop into the interactive monitor once it settles:
-node tools/emu8085.js --switches 1,2,9,9,4,0 --repl
+node src/emu/emu8085.js --switches 1,2,9,9,4,0 --repl
 
 # Talk to the firmware's own serial monitor over the emulated 8251A, live:
-node tools/emu8085.js --switches 1,2,9,9,4,0 --serial
+node src/emu/emu8085.js --switches 1,2,9,9,4,0 --serial
 
 # Trace every instruction with symbol names, breaking at a specific address:
-node tools/emu8085.js --trace --break 12D
+node src/emu/emu8085.js --trace --break 12D
 ```
 
 REPL commands: `s[N]` step N instructions (default 1), `c [addr]` run
@@ -169,7 +185,7 @@ until a given PC or forever, `r` show registers, `m addr [len]` hex-dump
 memory, `tx <hex bytes>` inject bytes into the emulated 8251A's receive
 queue, `q` quit.
 
-See the top-of-file comment in `tools/emu8085.js` for the full option
+See the top-of-file comment in `src/emu/emu8085.js` for the full option
 list.
 
 ## Suggested next steps

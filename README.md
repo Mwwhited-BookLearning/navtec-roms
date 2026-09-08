@@ -30,6 +30,10 @@ that still need meter verification against the schematic).
 | `disasm/nt3321-22-refs.md` | generated cross-reference report (RAM, I/O, call graph) |
 | `tools/dis8085.js` | flow-tracing 8085 disassembler (Node.js, no dependencies) |
 | `tools/lstrange.sh` | print a listing address range |
+| `src/emu/emu8085.js` | 8085 emulator + peripherals: CPU core, CLI, symbol-aware trace/breakpoints |
+| `src/emu/web-emu.js` | browser front end: front panel, display, blinkenlights, serial console, position map |
+| `src/emu/pal.js`, `src/emu/addr-decode.js` | emulated PAL16R8/20R10 device-address decoder + CUPL generator |
+| `pal/*.pld` | generated CUPL source for the address decoder |
 | `docs/` | analysis documents (Markdown with embedded PlantUML) |
 
 ## Documents
@@ -44,6 +48,10 @@ that still need meter verification against the schematic).
 | [docs/routines.md](docs/routines.md) | subroutine catalog |
 | [docs/rom-status.md](docs/rom-status.md) | the ROM recovery story: how the missing halves were found and read (now resolved) |
 | [docs/jump-graph.md](docs/jump-graph.md) | jump-graph sequence diagrams, full jump-target/variable tables, analysis worklist |
+| [docs/emulator.md](docs/emulator.md) | the 8085 emulator (`src/emu/emu8085.js`): CPU, peripherals, synthetic receiver, CLI |
+| [docs/pal-decoder.md](docs/pal-decoder.md) | the emulated PAL16R8/20R10 device-address decoder + generated CUPL source |
+| [docs/web-emulator.md](docs/web-emulator.md) | the browser front end (`src/emu/web-emu.js`): front panel, display, serial console, position map |
+| [docs/playbooks/](docs/playbooks/README.md) | screenshotted walkthroughs of the web front end's user flows |
 
 ## Regenerating the listing
 

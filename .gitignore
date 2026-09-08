@@ -1,4 +1,4 @@
-tools/node_modules/
+node_modules/
 tools/asl/
 build/
 *.tmp
