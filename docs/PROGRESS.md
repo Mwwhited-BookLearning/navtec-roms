@@ -1,10 +1,70 @@
-# Progress notes / session handoff (2026-09-06/07)
+# Progress notes / session handoff
 
-## Update 5: hardware data, PAL/CUPL decoder, an 8085 emulator with a web
-front end, and an operator user-flow design document
+Read "Open items" first if you're picking this project back up - it's the
+current TODO list. Everything under "Change history" is a dated log of
+completed work, kept for context and reasoning trails, not something you
+need to read to know what's left.
 
-Follows on from Update 4 (below), which finished the renaming milestone.
-This update is a different kind of work: turning the finished analysis into
+## Open items
+
+1. **Physical-board verification.** The crystal question is resolved and
+   the 8205/decoder theory is confirmed (see Change history, Update 5),
+   but `docs/hardware.md`'s "Physical-verification checklist" (9 items -
+   RST 7.5 source, which 8155 is which, the U39/8212 conflict, the OPTION
+   socket wiring, the 8279 CLK source, etc.) is still open and needs
+   someone with the actual board and a meter.
+2. **Receiver front-end bit-protocol verification.** The emulator's
+   synthetic Loran-C front end (Update 5) hasn't been driven all the way to
+   `MASTER_FOUND` - `SHIFT_IN16`/`MATCH_PULSES`'s exact bit ordering needs
+   re-verification against the disassembly and the front end's timing
+   needs tuning to match, per `docs/emulator.md`'s suggested next step.
+3. **`disasm/nt3321-22.json` cleanup.** The hints file's `entries`/`extraCode`
+   lists may be worth revisiting now that flow analysis reaches so much more
+   of the image directly - some entries added earlier specifically to force
+   discovery of code in the (then-missing) upper halves might now be
+   redundant, though leaving them is harmless.
+4. **Open UX questions from the user-flow synthesis** (`docs/user-flows.md`):
+   what the two push-buttons do outside set-up mode, whether display
+   dimming is firmware-controlled at all, and what the display shows during
+   acquisition/tracking before a station locks.
+
+None of these are urgent - the ROM is fully recovered, analyzed, and named
+(0 generic routines/variables); everything above is either "needs the
+physical board" or "would be nice, not required."
+
+## Quick orientation if you're new to this repo
+
+- `originals/` - the ROM dumps, plus the read-procedure README. Don't hand-edit
+  the `.BIN` files; if a dump needs correcting, replace the whole file (it's
+  git-tracked, so any mistake is recoverable).
+- `disasm/nt3321-22.json` is the single source of truth for disassembly hints
+  (entry points, data regions, labels, comments). Everything else in `disasm/`
+  is generated from it by `tools/dis8085.js` - edit the JSON, not the `.lst`/
+  `.asm`/`-refs.md` files directly.
+- `docs/rom-status.md` has the full story of the ROM-reading problem and its
+  resolution, including the diagnostic reasoning (not just the answer) in
+  case a similar problem comes up with a different chip.
+- `docs/hardware.md` is the memory map / peripheral-programming reference;
+  now has both the code-derived analysis and the photo-derived board notes,
+  plus the physical-verification checklist mentioned above.
+- `src/emu/` is the 8085 emulator and its web front end (Update 5) - start
+  at `docs/emulator.md` and `docs/web-emulator.md`; `docs/playbooks/` has
+  screenshotted usage walkthroughs.
+- `docs/user-flows.md` is the operator-facing design document - what someone
+  in front of the unit or on the serial line actually experiences, as
+  opposed to the mechanism-focused docs everything else here is.
+
+## Change history
+
+Dated log of completed work, newest first. Old entries use the names in
+effect *at the time* - a name here may have since been superseded; treat
+this section as a historical record of reasoning, not a current reference
+(for current names, see `docs/jump-graph.md`).
+
+### Update 5 (2026-09-07): hardware data, PAL/CUPL decoder, an 8085 emulator with a web front end, and an operator user-flow design document
+
+Follows on from Update 4, which finished the renaming milestone. This
+update is a different kind of work: turning the finished analysis into
 running code and operator-facing documentation, plus folding in the first
 real physical-board data from the user.
 
@@ -59,7 +119,7 @@ real physical-board data from the user.
   and named the single biggest real gap: what the display actually shows
   *during* acquisition/tracking isn't established by any traced code path.
 
-## Update 4: every jump target AND every variable in the ROM now has a name
+### Update 4: every jump target AND every variable in the ROM now has a name
 
 Finished what Update 3 started: **0 of 137 routines and 0 of 175 variables
 remain generically named.** Two more passes closed out the last 25
@@ -104,7 +164,7 @@ confidence-raising on an explicitly-marked handful.
 Rebuild re-verified after every change in both passes: still 0 differences
 over 8192 bytes.
 
-## Update 3: every jump target in the ROM now has a name
+### Update 3: every jump target in the ROM now has a name
 
 Starting from Update 2's worklist (77 of 137 `CALL`ed jump targets generic),
 worked through the entire list cluster by cluster - **0 remain generic.**
@@ -148,7 +208,7 @@ current worklist - now reframed around raising confidence on the low-
 confidence names and naming the remaining variables, rather than first-pass
 routine naming.
 
-## Update 2: jump graph, worklist, and a real bug in the old analysis
+### Update 2: jump graph, worklist, and a real bug in the old analysis
 
 Built `docs/jump-graph.md`: PlantUML sequence diagrams for the call structure
 (system overview + two newly-decoded clusters) plus full tables of all 137
@@ -193,14 +253,10 @@ Rebuild re-verified after every change in this pass; still 0 differences over
 superseded rather than deleted, with a note on which guesses were right
 (`X_1990..X_19A9`) and wrong (`X_18C0`).
 
-# Progress notes / session handoff (2026-09-06)
+### Update (later same day) - earlier session (2026-09-06)
 
-Written for picking this project back up without needing the conversation
-that produced it. Read this first if you're resuming work here.
-
-## Update (later same day)
-
-Both of the top two open items from the previous handoff are now done:
+Both of the top two open items from that session's original handoff got
+done:
 
 1. **Rebuild verification.** Downloaded the precompiled AS build into
    `tools/asl/` (gitignored, per the README's instructions) and ran
@@ -233,10 +289,7 @@ Both of the top two open items from the previous handoff are now done:
 
    Rebuild re-verified after each change; still 0 differences over 8192 bytes.
 
-What's left is items 3 and 4 below (physical-board meter cross-check, and
-optional `entries`/`extraCode` cleanup in the JSON) - neither is urgent.
-
-## Where things stand
+### Where things stood after that session
 
 **Both ROMs are fully recovered.** The chips are Intel 8332 masked ROMs (the
 4Kx8 mask-ROM equivalent of the 2716/8316 pair, one step up), not generic
@@ -259,53 +312,3 @@ session is resolved in favor of **8279** - the existing code-analysis
 evidence (`hardware.md`) already had this as "certain" from actual 8279
 command bytes seen in the firmware, which is stronger evidence than a photo
 read of two easily-confused part numbers.
-
-## What's NOT done yet
-
-Items 1 and 2 from the original version of this list (rebuild verification,
-small remaining data regions) are done - see "Update (later same day)" above.
-The physical-board cross-check and JSON-cleanup items are still open, plus
-new items from Update 5:
-
-1. **Physical-board verification, now itemized.** The crystal question is
-   effectively resolved (Update 5) and the 8205/decoder theory is
-   confirmed, but `docs/hardware.md`'s "Physical-verification checklist"
-   (9 items - RST 7.5 source, which 8155 is which, the U39/8212 conflict,
-   the OPTION socket wiring, the 8279 CLK source, etc.) is still open and
-   needs someone with the actual board and a meter.
-2. **Receiver front-end bit-protocol verification.** The emulator's
-   synthetic Loran-C front end (Update 5) hasn't been driven all the way to
-   `MASTER_FOUND` - `SHIFT_IN16`/`MATCH_PULSES`'s exact bit ordering needs
-   re-verification against the disassembly and the front end's timing
-   needs tuning to match, per `docs/emulator.md`'s suggested next step.
-3. **`disasm/nt3321-22.json` cleanup.** The hints file's `entries`/`extraCode`
-   lists may be worth revisiting now that flow analysis reaches so much more
-   of the image directly - some entries added earlier specifically to force
-   discovery of code in the (then-missing) upper halves might now be
-   redundant, though leaving them is harmless.
-4. **Open UX questions from the user-flow synthesis** (`docs/user-flows.md`):
-   what the two push-buttons do outside set-up mode, whether display
-   dimming is firmware-controlled at all, and what the display shows during
-   acquisition/tracking before a station locks.
-
-## Quick orientation if you're new to this repo
-
-- `originals/` - the ROM dumps, plus the read-procedure README. Don't hand-edit
-  the `.BIN` files; if a dump needs correcting, replace the whole file (it's
-  git-tracked, so any mistake is recoverable).
-- `disasm/nt3321-22.json` is the single source of truth for disassembly hints
-  (entry points, data regions, labels, comments). Everything else in `disasm/`
-  is generated from it by `tools/dis8085.js` - edit the JSON, not the `.lst`/
-  `.asm`/`-refs.md` files directly.
-- `docs/rom-status.md` has the full story of the ROM-reading problem and its
-  resolution, including the diagnostic reasoning (not just the answer) in
-  case a similar problem comes up with a different chip.
-- `docs/hardware.md` is the memory map / peripheral-programming reference;
-  now has both the code-derived analysis and the photo-derived board notes,
-  plus the physical-verification checklist mentioned above.
-- `src/emu/` is the 8085 emulator and its web front end (Update 5) - start
-  at `docs/emulator.md` and `docs/web-emulator.md`; `docs/playbooks/` has
-  screenshotted usage walkthroughs.
-- `docs/user-flows.md` is the operator-facing design document - what someone
-  in front of the unit or on the serial line actually experiences, as
-  opposed to the mechanism-focused docs everything else here is.
