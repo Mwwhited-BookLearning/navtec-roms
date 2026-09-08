@@ -188,6 +188,46 @@ queue, `q` quit.
 See the top-of-file comment in `src/emu/emu8085.js` for the full option
 list.
 
+## Automated tests
+
+```sh
+npm test
+```
+
+Runs `node --test` (Node's built-in test runner, no extra dependency) over
+`src/emu/test/*.test.js` - 100+ tests covering:
+
+- `cpu.test.js` - the full opcode dispatch table against a bare RAM stub:
+  every documented instruction group (data movement, 8-bit/16-bit
+  arithmetic and flags including the ANA AC quirk and the INR/DCR-must-not-
+  touch-CY rule, rotates, stack, control flow), every undocumented opcode,
+  and the SIM/RIM bit layout, interrupt masking/pending, the one-instruction
+  EI delay, and HLT/wake behavior.
+- `peripherals.test.js` - `Intel8155`/`Intel8251A`/`Intel8279` against the
+  exact command bytes hardware.md documents, plus a regression test for the
+  sensor-RAM-wiped-by-clear bug (see "What's been checked" above).
+- `bus.test.js` - the standalone-component address decode (every group,
+  ROM read-only enforcement, 8155 RAM/register mirroring) and a regression
+  test for the RST 5.5/8279-IRQ live-sync fix.
+- `pal.test.js` / `addr-decode.test.js` - the generic PAL evaluator, and
+  the actual 8-output address-decode table against all 8 input
+  combinations, plus the CUPL generator's output for both device specs.
+- `loran-chains.test.js` - the projection round-trip, `wrapToBaseline`'s
+  range guarantee, and (most importantly) that every generated hyperbola
+  point actually satisfies its defining distance-difference equation,
+  including a regression test for the near-zero-`a` blowup bug fixed while
+  building the position map; `solveFix` is checked against a known,
+  hand-computed intersection.
+- `receiver-frontend.test.js` - mode/noise configuration, a regression test
+  for the sample-counter wiring bug, and the PB/PC bit-banged shift
+  protocol against hardware.md's documented bit assignments.
+- `boot.test.js` - integration-level: boots the real ROM images (no mocks)
+  with both an invalid and a valid switch panel, confirms no unimplemented
+  opcode ever fires, confirms the valid panel actually reaches the
+  documented background loop instead of the switch-error retry, and pins
+  an exact, reproducible register/cycle state after 300k instructions as a
+  golden-state check for accidental regressions.
+
 ## Suggested next steps
 
 - Re-verify `SHIFT_IN16` (04AE) and `MATCH_PULSES` (05C2) bit-for-bit

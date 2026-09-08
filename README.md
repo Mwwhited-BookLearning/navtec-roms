@@ -34,6 +34,7 @@ that still need meter verification against the schematic).
 | `src/emu/web-emu.js` | browser front end: front panel, display, blinkenlights, serial console, position map |
 | `src/emu/pal.js`, `src/emu/addr-decode.js` | emulated PAL16R8/20R10 device-address decoder + CUPL generator |
 | `pal/*.pld` | generated CUPL source for the address decoder |
+| `src/emu/test/` | emulator unit/integration tests (`npm test`, Node's built-in test runner, no dependency) |
 | `docs/` | analysis documents (Markdown with embedded PlantUML) |
 
 ## Documents
