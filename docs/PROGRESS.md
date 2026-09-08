@@ -61,6 +61,54 @@ effect *at the time* - a name here may have since been superseded; treat
 this section as a historical record of reasoning, not a current reference
 (for current names, see `docs/jump-graph.md`).
 
+### Update 7 (2026-09-07): named 9 of the 10 auto-generated `D_xxxx` labels
+
+Follow-up to Update 6's question "what about the auto-generated `D_`/`L_`
+labels too?" These are a different category from `VAR_`/`SUB_`/`X_`/`M_`:
+`tools/dis8085.js` auto-generates `D_xxxx` for an address referenced as an
+`LXI` operand (i.e. loaded as if it were a pointer) that happens to fall
+*inside* the loaded ROM image, and `L_xxxx` for a jump/branch target that's
+never `CALL`ed (a purely local label, as opposed to `SUB_`/named routines).
+Neither is tracked by the "0 generic" milestone, which was specifically
+about `CALL` targets and RAM/IO variables.
+
+`L_xxxx` (144 of them): investigated and left alone. These are internal
+branch targets within already-fully-understood, already-named routines -
+the "loop:"/"else:"/"done:" structural labels every assembly listing has.
+Giving each one a unique project-wide name would be noise, not signal; the
+owning routine's name and comment already say what each branch does.
+
+`D_xxxx` (10 of them): investigated individually, since there were few
+enough to actually trace. Turned out to be two real categories:
+
+- **Plain integer constants that coincidentally match a low ROM address**
+  (`LXI` loading a small number for arithmetic, not really "pointing" at
+  anything) - renamed for what they're actually used for: `POS_64`/`POS_128`
+  (mirroring the existing `NEG_64`/`NEG_128`/`NEG_200` convention - added
+  to `PHASE_QUAL_B` the same way those are added to `PHASE_QUAL_A`, a
+  confidence-band test in the `SLOT_TRACKING`-area code), `QUAL_CLAMP_95`/
+  `QUAL_CLAMP_511` (the `CLAMP_HL_BC` saturation magnitudes for
+  `MATCH_SCORE_HI` and `PHASE_QUAL_A`/`PHASE_QUAL_B` respectively - `511`
+  was previously called out in a comment as "the tool's D_01FF label... is
+  a labeling artifact, not real data," which is now a real, named
+  constant instead of an apologetic aside), `POS_92` (a similar clamp-style
+  test near `QUAL_STREAK_CNT`), and `REC_ROTATE_COUNT` (`3`, the loop count
+  for `INIT_REC_FROM_TOA`'s 3-byte rotate).
+- **Genuine embedded data**: `DISP_ALLSEGS_PATTERN` (the 3-byte `888888`
+  lamp-test pattern `DISP_TEST_TICK` writes to both display rows) and
+  `DISP_ZERO_DIGIT`/`DISP_ALT_PATTERN` (a companion ASCII `'0'` byte and a
+  3-byte display pattern, both consumed by the same display-commit path as
+  `ORPHAN_0031`'s byte).
+
+Left `D_1004` un-renamed - already flagged (see the `TAG_2002`/`DEBUG_BRANCH_TAG`
+comment at 0A4A) as likely an incidental instruction-boundary byte pattern,
+not confirmed real data; a name would overclaim.
+
+Updated `disasm/nt3321-22.json` only (equates/labels + affected block
+comments) - no other docs referenced these auto-generated names by name, so
+nothing else needed updating. Rebuild re-verified: 0 differences over 8192
+bytes. Test suite unaffected (106/106) - none of this touches the emulator.
+
 ### Update 6 (2026-09-07): renamed the last placeholder `VAR_xxxx` variables in two clusters, resolving an open ambiguity
 
 Prompted by a closer read of the code around the `VAR_` (placeholder-name)

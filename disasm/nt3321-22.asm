@@ -187,11 +187,12 @@ NEG_64       EQU  0FFC0H  ; rd=0 wr=0 lxi=1
 ; Reset vector. Interrupts off, jump to INIT.
 RESET:
         DI
-D_0003       EQU  $+2
+REC_ROTATE_COUNT EQU  $+2
         JMP INIT
 
 ; Table of six 4-byte packed-BCD constants (little-endian, LS byte first).
-; D_0005 (888888) is still unidentified. TOA_ADJ_2000/_3000/_6000/_1000 (0008-0014,
+; DISP_ALLSEGS_PATTERN (888888) is the classic all-segments-lit LED test pattern, consumed by
+; DISP_TEST_TICK (19E7). TOA_ADJ_2000/_3000/_6000/_1000 (0008-0014,
 ; overlapping 4-byte windows into the same byte run) are now confirmed pulse-interval
 ; adjustment constants - see PULSE_ALIGN_ADJ (0E6D) - values 2000, 3000, 6000, 1000 in
 ; CUR_TOA's BCD units, i.e. 2, 3, 6 and 1 times the ~1000us Loran-C inter-pulse spacing.
@@ -199,7 +200,7 @@ D_0003       EQU  $+2
 ; other 4 callers traced to say what they mean there).
 BCD_CONST_TBL:
         DB   08H
-D_0005:
+DISP_ALLSEGS_PATTERN:
         DB   88H,88H,88H
 TOA_ADJ_2000:
         DB   00H,00H,02H
@@ -238,8 +239,8 @@ CPY4_TO_TOA:
         JMP COPY4
 
 ; Not code: first byte (30H, ASCII '0') is read by LDA at 1A33 and copied into
-; DISP_ROW_A, paired with D_1A4D's matching 30H -> DISP_ROW_A_2 (see 1A4D). The other two
-; bytes, 18H and 3AH, have no references anywhere and are genuine orphans.
+; DISP_ROW_A, paired with DISP_ZERO_DIGIT's matching 30H -> DISP_ROW_A_2 (see 1A4D). The
+; other two bytes, 18H and 3AH, have no references anywhere and are genuine orphans.
 ORPHAN_0031:
         DB   30H,18H,3AH
 
@@ -254,7 +255,7 @@ RST65_ISR:
         ORI 01H
         STA PIO1_PC
         LDA PIO2_PC
-D_0040:
+POS_64:
         RLC
         RLC
         MOV B,A
@@ -270,10 +271,10 @@ D_0040:
         CMP M
         MOV A,B
         JNZ ISR_EXIT
-D_005C:
+POS_92:
         PUSH PSW
         PUSH D
-D_005F       EQU  $+1
+QUAL_CLAMP_95 EQU  $+1
         CALL PULSE_PB2
         CALL LATCH_REC_TO_PIO2PB
         MVI A,20H                   ; ' '
@@ -296,7 +297,7 @@ INIT:
         LXI SP,STACK_TOP
         CALL PULSE_PB2
         MVI A,0CDH
-D_0080       EQU  $+1
+POS_128      EQU  $+1
         STA KDC_CMD                 ; 8279: clear display and FIFO (CD=110 CA=1)
         MVI A,0D0H
         STA PIO1_TMRLO              ; 8155#1 timer = 07D0H (2000), square wave
@@ -464,7 +465,7 @@ SETTLE_LOOP:
         LDA SLOT_FLAGS
         ANI 20H                     ; ' '
         JZ ACQ_START
-D_01FF:
+QUAL_CLAMP_511:
         CALL QUAL_CHECK
         JC ACQ_START
         MVI A,03H
@@ -1935,7 +1936,7 @@ L_0A9E:
 ; memory locations - each is an LXI-immediate 16-bit negative constant added via DAD to test
 ; PHASE_QUAL_A or QUAL_STREAK_CNT against a magnitude threshold (sign of the sum = below/
 ; above threshold), in the SLOT_TRACKING-area code around 0A9E-0AE6 that also uses
-; D_0040/D_0080 (+64/+128) the same way against PHASE_QUAL_B. Confidence-band testing on the
+; POS_64/POS_128 (+64/+128) the same way against PHASE_QUAL_B. Confidence-band testing on the
 ; two phase-quality accumulators, feeding a CUR_REC/CUR_FLAGS bit update. NEG_100 (0FA2, was
 ; M_FF9C) is the same kind of constant but unrelated to this cluster - it's
 ; MASTER_SEC_PULSE_HANDOFF's state-2 threshold test against REC_MASTER_18 (0F9E).
@@ -1955,7 +1956,7 @@ L_0AB9:
         RLC
         JC L_0AD2
         LHLD PHASE_QUAL_B
-        LXI B,D_0040
+        LXI B,POS_64
         DAD B
         MOV A,H
         RLC
@@ -1969,7 +1970,7 @@ L_0AD2:
         RLC
         RC
         LHLD PHASE_QUAL_B
-        LXI B,D_0080
+        LXI B,POS_128
         DAD B
         MOV A,H
         RLC
@@ -2086,8 +2087,8 @@ L_0B8A:
 ; GRI switch value - just unused RAM at this call site). Uses NEG_HL and a two-sided
 ; DAD-based comparison between HL and BC to decide a sign, then conditionally returns
 ; either the original HL unchanged or a negated/adjusted version. Called right after
-; POPCOUNT_ADJ_HL with BC = 01FFH (511 - a plain integer constant; the tool's "D_01FF"
-; label for this LXI's immediate operand is a labeling artifact, not real data), which
+; POPCOUNT_ADJ_HL with BC = QUAL_CLAMP_511 (511, a plain integer constant coinciding with a
+; real ROM address only by accident - named for its role, not a real memory location), which
 ; together with the surrounding code (see PHASE_QUALITY_UPDATE, 0BC5) strongly suggests
 ; "clamp/limit signed HL to roughly +-511" - a saturating-accumulator helper. The exact
 ; register choreography (why GRI_SW, why two NEG_HL calls) isn't fully traced.
@@ -2165,13 +2166,13 @@ PHASE_QUALITY_UPDATE:
         LHLD PHASE_QUAL_A
         LDA PHASE_CODE
         CALL POPCOUNT_ADJ_HL
-        LXI B,D_01FF
+        LXI B,QUAL_CLAMP_511
         CALL CLAMP_HL_BC
         SHLD PHASE_QUAL_A
         LHLD PHASE_QUAL_B
         LDA PHASE_CODE_HI
         CALL POPCOUNT_ADJ_HL
-        LXI B,D_01FF
+        LXI B,QUAL_CLAMP_511
         CALL CLAMP_HL_BC
         SHLD PHASE_QUAL_B
         LDA PHASE_QUAL_A_HI
@@ -2347,8 +2348,8 @@ L_0CFE:
 ; inspection via the serial monitor's memory-dump command rather than firmware-consumed state.
 ; MATCH_SCORE_HI (6FB2, was M_6FB2, this block): a signed, +-95-clamped accumulator (sign-
 ; extended, adjusted by POPCOUNT_ADJ_HL on the COMPLEMENT of PHASE_CODE_HI - i.e. by match
-; count rather than PHASE_QUALITY_UPDATE's mismatch count - then CLAMP_HL_BC'd against a
-; D_005F/95 constant) - a second, faster/narrower-range quality indicator for channel 2,
+; count rather than PHASE_QUALITY_UPDATE's mismatch count - then CLAMP_HL_BC'd against
+; QUAL_CLAMP_95) - a second, faster/narrower-range quality indicator for channel 2,
 ; alongside PHASE_QUAL_B's slower +-511-range one. If MATCH_SCORE_HI is non-negative: reads
 ; CUR_FLAGS bit 7 to decide whether to reset QUAL_STREAK_CNT (6FB3, was M_6FB3, a 16-bit
 ; counter) to 0 or increment it, and sets/clears CUR_FLAGS bit 5 to match. (The preceding
@@ -2372,7 +2373,7 @@ L_0D1A:
         LDA PHASE_CODE_HI
         CMA
         CALL POPCOUNT_ADJ_HL
-        LXI B,D_005F
+        LXI B,QUAL_CLAMP_95
         CALL CLAMP_HL_BC
         MOV A,L
         STA MATCH_SCORE_HI
@@ -2408,7 +2409,7 @@ L_0D47:
         JNC L_0D6A
         MVI H,0FFH
         PUSH D
-        LXI D,D_005C
+        LXI D,POS_92
         DAD D
         POP D
         MOV A,H
@@ -2498,7 +2499,7 @@ INIT_REC_FROM_TOA:
         MOV D,A
         PUSH D
         LXI H,CUR_REC
-        LXI D,D_0003
+        LXI D,REC_ROTATE_COUNT
 L_0DD1:
         MOV A,M
         RAR
@@ -4405,8 +4406,8 @@ L_19C1:
 ; DISP_TEST_TICK (was X_19E7, called every 20 ticks from TICK_TASK). Only runs while
 ; SW_D4 is held at 0BH (the blank thumbwheel position). Counts DISP_TEST_CNT1 0..25 (0-19H):
 ; while counting, clears DISP_ROW_A_FLAG/DISP_ROW_B_FLAG and fills both DISP_ROW_A and
-; DISP_ROW_B with D_0005's bytes (88H,88H,88H - the classic all-segments-lit LED test
-; pattern) via COMMIT_DISP_ROWS. Once DISP_TEST_CNT1 reaches 25, counts DISP_TEST_CNT2 0..25
+; DISP_ROW_B with DISP_ALLSEGS_PATTERN's bytes (88H,88H,88H) via COMMIT_DISP_ROWS. Once
+; DISP_TEST_CNT1 reaches 25, counts DISP_TEST_CNT2 0..25
 ; the same way but sets both flag bytes to 3FH instead of clearing them. Reads as a display
 ; self-test sequence, held-thumbwheel-triggered (flash "88.88.88" then something else for
 ; ~25 ticks each) - the SW_D2-gated path at L_1A23 (normal, non-test operation) isn't traced
@@ -4425,8 +4426,8 @@ L_19FB:
         STA DISP_ROW_A_FLAG
         STA DISP_ROW_B_FLAG
 L_1A03:
-        LXI H,D_0005
-        LXI B,D_0005
+        LXI H,DISP_ALLSEGS_PATTERN
+        LXI B,DISP_ALLSEGS_PATTERN
         JMP L_1CEA
 L_1A0C:
         LDA DISP_TEST_CNT2
@@ -4449,19 +4450,20 @@ L_1A23:
         STA DISP_ROW_A
         MVI A,0FFH
         STA DISP_ROW_A_1
-        LDA D_1A4D
+        LDA DISP_ZERO_DIGIT
         STA DISP_ROW_A_2
         LXI H,DISP_ROW_A
-        LXI B,D_1A4E
+        LXI B,DISP_ALT_PATTERN
         JMP L_1CEA
 
-; D_1A4D: single byte 30H (ASCII '0'), read at 1A3E and copied into DISP_ROW_A_2
+; DISP_ZERO_DIGIT: single byte 30H (ASCII '0'), read at 1A3E and copied into DISP_ROW_A_2
 ; (companion to ORPHAN_0031's byte -> DISP_ROW_A; see 0031).
-; D_1A4E: 3-byte table {11H,0FFH,78H}; its address is loaded into BC at 1A47
+; DISP_ALT_PATTERN: 3-byte table {11H,0FFH,78H}; its address is loaded into BC at 1A47
 ; and consumed by COMMIT_DISP_ROWS (via L_1CEA), which copies it into DISP_ROW_B..DISP_ROW_B_2.
-D_1A4D:
+; Exact meaning of this specific pattern not traced further.
+DISP_ZERO_DIGIT:
         DB   30H
-D_1A4E:
+DISP_ALT_PATTERN:
         DB   11H,0FFH,78H
 L_1A51:
         CPI 0AH
@@ -4493,12 +4495,12 @@ L_1A5E:
         LDA BUTTONS
         ANI 40H                     ; '@'
         JZ L_1AA3
-        LXI H,D_0005
+        LXI H,DISP_ALLSEGS_PATTERN
 L_1AA3:
         LDA BUTTONS
         ANI 80H
         JZ L_1AAE
-        LXI B,D_0005
+        LXI B,DISP_ALLSEGS_PATTERN
 L_1AAE:
         JMP L_1CEA
 L_1AB1:
