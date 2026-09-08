@@ -69,9 +69,9 @@ if (SEL_B == blank (0CH)?) then (yes)
   if (BTN_STATE bit 7 set?) then (yes)
     if (SW_LATCHED == 0) then (yes)
       :SW_HI = D1:D2, SW_LO = D3:D4
-      SW_LATCHED = 1, VAR_704F = 0;
+      SW_LATCHED = 1, RUN_TICK_SEC = 0;
     else (no)
-      :clear VAR_70BD, VAR_70BE, VAR_7050, VAR_7051;
+      :clear STOPWATCH_B_TICK, STOPWATCH_B_SEC, STOPWATCH_B_MIN, STOPWATCH_B_HR;
     endif
   endif
   :button edges -> STATUS_BITS bit 7;
@@ -146,6 +146,23 @@ value while seeding a fresh station record from `CUR_TOA` during
 acquisition; neither routine touches the 8279 or the display buffer at all.
 See `disasm/nt3321-22.json`'s `0DB3` comment for the actual (BCD/binary
 round-trip) algorithm.
+
+### What set-up mode actually displays
+
+While `SEL_B` is dialed to blank (set-up mode, see "Run-time switch
+handling" above), the display isn't a TD readout at all: `DISP_ROW_A`
+(7034-7036) is copied directly from `SW_HI`:`SW_LO`:`RUN_TICK_SEC` and
+`DISP_ROW_B` (7037-7039) from
+`STOPWATCH_B_HR`:`STOPWATCH_B_MIN`:`STOPWATCH_B_SEC` on every refresh
+(1AD5-1B0B). Since `SW_HI`/`SW_LO` are exactly the digits just latched by
+the first button press and `RUN_TICK_SEC`/the `STOPWATCH_B_*` fields are
+free-running BCD counters that reset to 0 on the first/second button press
+respectively (see `firmware.md`'s `TICK_CLOCK_CASCADE`), **row A reads as
+"the value you just latched, plus elapsed time since you latched it" and
+row B as "elapsed time since you pressed the button a second time."** This
+resolves what was previously flagged as an unreconciled dual use between
+`SW_HI`/`SW_LO`'s roles as a latch and a clock digit - they're the same
+role, since the set-up display literally is these counters.
 
 ## Not yet known
 

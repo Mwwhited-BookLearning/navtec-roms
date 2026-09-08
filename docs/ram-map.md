@@ -66,10 +66,10 @@ M = consistent reading, L = placeholder name).
 | 6FDD | `MISS_LIMIT` | 1 | H | 100 (64H) or 130 (82H) |
 | 6FDE | `TOA_ALT` | 4 | M | TOA copied into `CUR_TOA` after `MISS_LIMIT` misses |
 | 6FDF | `PULSE_BCD` | 1 | M | BCD(pulse count + 1) |
-| 6FE2 | `VAR_6FE2` | 1 | L | bit 1 tested in `ADJ_PULSES` |
-| 6FE3 | `VAR_6FE3` | 1 | L | pointer returned by `CALC_TD` |
-| 6FE6 | `VAR_6FE6` | 1 | L | 4 after master lock |
-| 6FE7 | `VAR_6FE7` | 2 | L | 03,04 after master lock; 10H later |
+| 6FE2 | `MASTER_TOA_LSB_BIN` | 1 | M | for slot 0 (master), refreshed every `SAVE_CUR_REC` to `binary(CUR_TOA`'s last BCD byte`)`; for other slots, only bit 1 is tested (`SAVE_REC_SYNC`) to gate a temporary `TD_ADJ_SCRATCH` offset before reseeding |
+| 6FE3 | `TD_ADJ_SCRATCH` | 4 | M | fixed 4-byte BCD scratch buffer; `CALC_TD` always returns `HL` pointing here on exit (a convention, not dynamic data) - reused directly by `SAVE_REC_SYNC`/`PULSE_SCORE_UPDATE` as a temporary add-then-undo offset for `CUR_TOA` |
+| 6FE6 | `DEBUG_BRANCH_TAG` | 2 | L | one of two hardcoded 16-bit "tag" constants, selected by a `CUR_FLAGS` bit; never read back anywhere - likely a write-only field-diagnostic marker (inspectable via the serial monitor's memory dump), not a value the firmware itself consumes |
+| 6FE7 | `PULSE_SCORE_STEP` | 1 | M | correction step size for `PULSE_SCORE_UPDATE`'s running phase-match score when it over/underflows: `03` during settling (`MASTER_FOUND`'s init), overwritten to `10H` once tracking begins - finer correction while settling than during steady-state tracking |
 | 6FE9 | `BCD_TMP` | 4 | H | 4-byte BCD scratch for `SLOTREC_UPDATE` |
 | 6FEE | `SLOTREC_CNT` | 9 x n | H | per-slot 9-byte records; fields +1 `SLOTREC_1`, +3 `SLOTREC_3`, +5 `SLOTREC_5`, +6 `SLOTREC_6` |
 
@@ -85,8 +85,9 @@ M = consistent reading, L = placeholder name).
 | 703D | `TICK_BCD` | 1 | H | BCD tick counter, +2 per RST 7.5 |
 | 703E | `PRTBUF` | ~16 | H | serial print buffer; `PRTBUF_PTR` (70D1) points at the last char, drained downwards |
 | 704E | `TX_PENDING` | 1 | H | set when the print buffer ran dry, cleared by the report sequencer |
-| 704F | `VAR_704F` | 1 | L | cleared when set-up latches; gates the report; also cascaded as a BCD clock digit by `TICK_CLOCK_CASCADE` (unreconciled dual use, see firmware.md) |
-| 7050 | `VAR_7050` | 2 | L | cleared by second button press in set-up |
+| 704F | `RUN_TICK_SEC` | 1 | H | free-running mod-60H BCD tick counter, incremented every RST 7.5 pass by `TICK_CLOCK_CASCADE`, cascading into `SW_LO` then `SW_HI`; gates `BLINK_ROW_BLANK` (bit 0) and `DISP_SCAN_SLOT`'s rotation (low nibble); reset to 0 the moment `SW_HI`/`SW_LO` are freshly latched in set-up, and displayed alongside them as `DISP_ROW_A`'s third digit-pair while `SEL_B` is blank - see firmware.md's `TICK_CLOCK_CASCADE` |
+| 7050 | `STOPWATCH_B_MIN` | 1 | H | mod-60H BCD field of a second, independent free-running counter (see `STOPWATCH_B_TICK`); displayed as `DISP_ROW_B`'s middle digit-pair in set-up mode |
+| 7051 | `STOPWATCH_B_HR` | 1 | H | mod-24H BCD field (the "hours" digit) of the same counter; displayed as `DISP_ROW_B`'s first digit-pair in set-up mode |
 | 7053 | `SEL_COL_TBL` | 10 x n | M | 10-byte-stride per-selector display-column table, indexed by `SEL_A`/`SEL_B` via `MUL10_INDEX`; feeds `CHECK_SEL_RANGE`/`COMMIT_DISP_ROWS` |
 | 7054 | `SLOT_TBL` | n | L | one byte per slot, tested at 1000 |
 | 7057 | `ACCUM_TOA_TBL` | 10 x n | M | 10-byte-stride per-slot running-sum/count TOA accumulator, indexed like `SEL_COL_TBL`; filled by `ACCUM_SLOT_TOA` |
@@ -95,7 +96,8 @@ M = consistent reading, L = placeholder name).
 | 70BA | `DISP_SCAN_START` | 1 | M | snapshot of `DISP_SCAN_SLOT` at the start of a scan pass, for wrap detection |
 | 70BB | `DISP_TEST_CNT1` | 1 | M | first-stage 0..25 counter for `DISP_TEST_TICK`'s display self-test |
 | 70BC | `DISP_TEST_CNT2` | 1 | M | second-stage 0..25 counter for `DISP_TEST_TICK`'s display self-test |
-| 70BD | `VAR_70BD` | 2 | L | cleared with `VAR_7050`; also cascaded by `TICK_CLOCK_CASCADE`'s second clock when `STATUS_BITS` bit 7 is clear |
+| 70BD | `STOPWATCH_B_TICK` | 1 | H | fastest field of the second free-running counter `TICK_CLOCK_CASCADE` maintains (cascade order `STOPWATCH_B_TICK` -> `STOPWATCH_B_SEC` -> `STOPWATCH_B_MIN` -> `STOPWATCH_B_HR`) when `STATUS_BITS` bit 7 is clear; unlike every other clock field here it steps by 2 and wraps at BCD 100, not by 1 mod 60/24, and is never itself displayed - purely a carry generator. All four fields reset to 0 on the second set-up button press |
+| 70BE | `STOPWATCH_B_SEC` | 1 | H | mod-60H BCD field of the same counter; displayed as `DISP_ROW_B`'s last digit-pair in set-up mode |
 | 70BF | `STATUS_BITS` | 1 | M | bit 7 set/cleared by button edges in set-up |
 | 70C0 | `SEL_QUEUE_0`..`SEL_QUEUE_2` | 3 | H | 3-element FIFO of operator-selected slot numbers, filled by `QUEUE_SLOT_SEL` and drained by `DEQUEUE_SLOT_SEL` |
 | 70C3 | `MASTER_TOA_CORR` | 4 | M | master-only pulse-interval correction term, adjusted by `MASTER_CORR_ADJ`/`MASTER_CORR_ADD_3000`, added into the master's running sum by `ACCUM_SLOT_TOA` |

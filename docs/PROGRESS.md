@@ -61,6 +61,60 @@ effect *at the time* - a name here may have since been superseded; treat
 this section as a historical record of reasoning, not a current reference
 (for current names, see `docs/jump-graph.md`).
 
+### Update 6 (2026-09-07): renamed the last placeholder `VAR_xxxx` variables in two clusters, resolving an open ambiguity
+
+Prompted by a closer read of the code around the `VAR_` (placeholder-name)
+variables `docs/ram-map.md` had left as low-confidence. Two clusters, both
+in `disasm/nt3321-22.json` and re-verified (0 rebuild differences):
+
+- **`CALC_TD`/`PULSE_SCORE_UPDATE` cluster**: `VAR_6FE7` -> `PULSE_SCORE_STEP`
+  (the correction step `PULSE_SCORE_UPDATE`'s running phase-match score gets
+  nudged by on overflow - `03` while settling, `10H` once tracking); `VAR_6FE3`
+  -> `TD_ADJ_SCRATCH` (a fixed 4-byte BCD scratch buffer - `CALC_TD`
+  unconditionally returns a pointer to it on every exit path, a calling
+  convention rather than dynamic data); `VAR_6FE6` -> `DEBUG_BRANCH_TAG`
+  (written with one of two hardcoded 16-bit constants but never read back
+  anywhere - almost certainly a write-only field-diagnostic marker meant to
+  be inspected via the serial monitor's memory dump, not firmware-consumed
+  state); `VAR_6FE2` -> `MASTER_TOA_LSB_BIN` (the master's current TD's last
+  BCD byte, converted to binary and refreshed on every save; only its bit 1
+  is examined for other slots, gating a temporary `TD_ADJ_SCRATCH` offset
+  during reseeding).
+- **The "unreconciled dual use" resolved**: firmware.md and ram-map.md had
+  flagged `VAR_704F`/`SW_LO`/`SW_HI` as a possible naming conflict - the same
+  cells documented as latched set-up thumbwheel values were also being
+  cascaded as a live BCD clock by `TICK_CLOCK_CASCADE`. Tracing the actual
+  set-up-mode display consumer (1AD5-1B0B) resolved it: there is no
+  conflict. The set-up-mode display *is* these counters - row A is
+  `SW_HI`:`SW_LO`:`RUN_TICK_SEC` (renamed from `VAR_704F`) and row B is a
+  second, independent 4-field counter (`STOPWATCH_B_HR`/`_MIN`/`_SEC`/`_TICK`,
+  renamed from `VAR_7051`/`VAR_7050`/`VAR_70BE`/`VAR_70BD`). The first
+  button press latches the dialed digits into `SW_HI`/`SW_LO` and resets
+  `RUN_TICK_SEC` to 0 at that exact moment - i.e. row A reads as "the value
+  you just latched, counting up since you latched it." `RUN_TICK_SEC` turned
+  out to also gate `BLINK_ROW_BLANK` and `DISP_SCAN_SLOT` in normal
+  operation, confirming it's a genuine free-running heartbeat tick, not
+  something scoped to set-up mode. One more finding along the way:
+  `STOPWATCH_B_TICK` steps by 2 and wraps at BCD 100 (not by 1 mod 60 like
+  every other field) and is never displayed - it's a bare carry generator,
+  not a clock digit. Also corrected a downstream mis-guess in
+  serial-protocol.md: the `OPTIONS` report-gating bits that test
+  `RUN_TICK_SEC`/`SW_LO`/`SW_HI` were read as "operator has latched a value"
+  conditions, which doesn't hold now that those cells are known to be
+  free-running - the bits mostly just require nonzero time since the last
+  wraparound, true almost continuously in practice.
+
+Updated: `disasm/nt3321-22.json` (equates + block comments), `firmware.md`,
+`front-panel.md` (new "What set-up mode actually displays" section),
+`ram-map.md`, `jump-graph.md`, `routines.md`, `serial-protocol.md`,
+`user-flows.md`. Rebuild re-verified: still 0 differences over 8192 bytes.
+
+`VAR_6FCB`/`VAR_6FD9` were investigated too (both write-only at `INIT`,
+never read back anywhere by name in either ROM) but deliberately **not**
+renamed - a name implying a purpose would overclaim past what "probably
+dead, possibly reached only via indexed addressing not found here" actually
+supports. Left as `VAR_` with that finding on record.
+
 ### Update 5 (2026-09-07): hardware data, PAL/CUPL decoder, an 8085 emulator with a web front end, and an operator user-flow design document
 
 Follows on from Update 4, which finished the renaming milestone. This
@@ -231,7 +285,9 @@ Renamed/analyzed this pass (77 -> 62 generic routines, 6 new variable names):
   old guess) - it's a cascading BCD tick clock (HH:MM:SS-shaped) written into
   `SW_LO`/`SW_HI`/`VAR_704F` and a second one gated by `STATUS_BITS` bit 7.
   This conflicts with those same cells' other documented role as latched
-  thumbwheel values and is flagged, unresolved, in firmware.md.
+  thumbwheel values and is flagged, unresolved, in firmware.md. **Resolved in
+  Update 6 below** - `VAR_704F` is now `RUN_TICK_SEC`; there was no real
+  conflict.
 - **`DISP_ROW_A`/`DISP_ROW_B`/`DISP_EXTRA`** (7034/7037/703A): promoted from
   ram-map.md's unnamed "(display)" placeholder rows to real equates.
 - **A real bug fix, not just a rename:** `0515` (was `OLD_MUL10`, documented

@@ -156,10 +156,10 @@ start
 :press a button;
 if (SW_LATCHED == 0?) then (first press)
   :SW_HI = GRI digits 1:2, SW_LO = GRI digits 3:4
-  SW_LATCHED = 1, VAR_704F = 0;
+  SW_LATCHED = 1, RUN_TICK_SEC = 0;
   note right: GRI digit 2 now selects\na configuration item (below)
 else (second press)
-  :clear VAR_70BD, VAR_70BE, VAR_7050, VAR_7051;
+  :clear STOPWATCH_B_TICK, STOPWATCH_B_SEC, STOPWATCH_B_MIN, STOPWATCH_B_HR;
 endif
 stop
 @enduml
@@ -184,13 +184,17 @@ addressing share the same four thumbwheels and can't be set independently
 in one pass; changing just the baud rate also re-latches whatever `UNIT_ID`
 the other two wheels currently show.
 
-**(open)** `VAR_704F`/`SW_LO`/`SW_HI` are also cascaded as a live BCD
-clock by `TICK_CLOCK_CASCADE` in normal run mode (firmware.md's
-"unreconciled dual use") - so the same RAM cells that hold latched set-up
-values apparently also tick like a clock once you leave set-up. Whether
-that's intentional (e.g. a genuine time-of-day feature the display
-occasionally shows) or a naming/reading mistake in this reconstruction
-isn't settled.
+**(confirmed, resolved since this document was first written)**
+`RUN_TICK_SEC`/`SW_LO`/`SW_HI` are also cascaded as a live BCD counter by
+`TICK_CLOCK_CASCADE` at all times, not just in set-up mode - but this
+turned out not to be a conflict with the latch. Tracing the set-up-mode
+display path shows the display in set-up mode *is* these counters: row A
+is `SW_HI`:`SW_LO`:`RUN_TICK_SEC` and row B is a second, independent
+counter, both refreshed live. The first button press resets `RUN_TICK_SEC`
+to 0 right as it latches the dialed digits, so what the operator actually
+sees on row A is "the value you just latched, counting up the seconds
+since you latched it." See firmware.md's `TICK_CLOCK_CASCADE` section for
+the full trace.
 
 ## Flow E: Runtime error / recovery display
 

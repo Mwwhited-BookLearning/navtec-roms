@@ -242,16 +242,43 @@ only 6 fields are ever validated.
 
 ## `TICK_CLOCK_CASCADE` (18C0)
 
-Runs once every `TICK_BCD` wraparound (background task, RST 7.5 latched).
-Cascades a BCD add-and-carry through `VAR_704F` (mod 60H) -> `SW_LO` (mod 60H)
--> `SW_HI` (mod 24H), i.e. an HH:MM:SS-shaped clock. If `STATUS_BITS` bit 7 is
-clear, it also cascades a second HH:MM:SS-shaped clock through `VAR_70BD` ->
-`VAR_7050` -> `VAR_7051`. This was previously guessed to be the display
-refresh driver; it is not. It is **not yet reconciled** with `SW_LO`/`SW_HI`/
-`VAR_704F`'s other documented role as latched thumbwheel values during set-up
-(see front-panel.md) - either these RAM cells are genuinely dual-purpose
-(set-up latch vs. run-mode clock digit) or one of the two readings needs
-revisiting; settling it needs the physical unit's actual display behavior.
+Called unconditionally on every RST 7.5-latched background pass (from
+`WAIT_SAMPLE`), regardless of set-up mode - only each cascade's fastest
+digit is separately gated (this routine's own `TICK_BCD`==0 check for the
+first counter; `STATUS_BITS` bit 7 clear for the second). This was
+previously guessed to be the display refresh driver; it is not.
+
+Cascades a BCD add-and-carry through `RUN_TICK_SEC` (mod 60H) -> `SW_LO`
+(mod 60H) -> `SW_HI` (mod 24H), an HH:MM:SS-shaped counter in
+`SW_HI`:`SW_LO`:`RUN_TICK_SEC`. If `STATUS_BITS` bit 7 is clear, it also
+cascades a second, structurally *different* counter in
+`STOPWATCH_B_HR`:`STOPWATCH_B_MIN`:`STOPWATCH_B_SEC`:`STOPWATCH_B_TICK` -
+four fields, not three: `STOPWATCH_B_TICK` steps by 2 and wraps at BCD 100
+(not by 1 mod 60 like every other field), and is never itself displayed -
+it's purely a carry generator for `STOPWATCH_B_SEC`.
+
+**Resolved** (previously flagged here as an unreconciled dual use with
+`SW_LO`/`SW_HI`'s other documented role as latched thumbwheel values, see
+front-panel.md): there's no conflict. Tracing the set-up-mode display path
+(1AD5-1B0B) shows `DISP_ROW_A` is copied directly from
+`SW_HI`:`SW_LO`:`RUN_TICK_SEC` and `DISP_ROW_B` from
+`STOPWATCH_B_HR`:`STOPWATCH_B_MIN`:`STOPWATCH_B_SEC` on every refresh while
+`SEL_B` is blank - **the set-up-mode display simply *is* these running
+counters.** The first button press (front-panel.md's set-up flow) latches
+the dialed GRI digits into `SW_HI`/`SW_LO` and resets `RUN_TICK_SEC` to 0 -
+starting a fresh "time since latched" readout on row A at the moment of
+latching; the second press resets all four `STOPWATCH_B_*` fields to 0,
+restarting an independent counter shown on row B.
+
+`RUN_TICK_SEC` also has real consumers outside set-up mode - it gates
+`BLINK_ROW_BLANK`'s blink effect (bit 0) and `DISP_SCAN_SLOT`'s
+auto-rotation (low nibble), so it's a genuine free-running heartbeat tick,
+not something scoped to set-up mode. `SW_HI`/`SW_LO`/the `STOPWATCH_B_*`
+fields have no confirmed consumer besides that display path, and keep
+incrementing quietly in the background during normal tracking too -
+nothing found re-reads them for configuration purposes after the initial
+latch (baud rate/`OPTIONS`/`UNIT_ID` are read from `SW_D1`-`SW_D4` directly
+at the moment of the config-item button press, see front-panel.md).
 
 ## Evidence of in-place patching
 

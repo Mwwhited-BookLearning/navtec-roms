@@ -75,7 +75,7 @@ a destination pointer, HL a source pointer, A the value.
 | 067F | `CHK_NPULSE` | | CY | both `CUR_NPULSE` bytes >= 6 |
 | 0698 | `ADJ_PULSES` | | | pulse-position adjustment with BCD add/sub |
 | 0721 | `NEG_HL` | HL, E | HL, E+1 | negate |
-| 072A | `CALC_TD` | | HL = `VAR_6FE3` | form TD in `BCD_ACC`, store to `CUR_TOA` |
+| 072A | `CALC_TD` | | HL = `TD_ADJ_SCRATCH` | form TD in `BCD_ACC`, store to `CUR_TOA`; always returns HL pointing at the fixed `TD_ADJ_SCRATCH` buffer, regardless of path taken |
 | 0782 | `BCD_ADD4` | HL, BC | | (BC) += (HL), 4 bytes |
 | 0794 | `PTR_TO_MSB` | HL, BC, DE | | advance both pointers by DE-1 |
 | 079F | `BCD_SUB4` | HL, BC | | (BC) -= (HL), 4 bytes |

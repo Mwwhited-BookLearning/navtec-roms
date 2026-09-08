@@ -254,10 +254,10 @@ MASTER_FOUND:                                ; xref: j01AA
 01B5  CD 84 05   CALL CLEAR_PULSES
 01B8  3E 01      MVI A,01H
 01BA  32 B7 6F   STA CUR_MODE
-01BD  21 03 04   LXI H,0403H                 ; VAR_6FE7 = 03, VAR_6FE7+1 = 04
-01C0  22 E7 6F   SHLD VAR_6FE7
+01BD  21 03 04   LXI H,0403H                 ; PULSE_SCORE_STEP = 03, PULSE_SCORE_STEP+1 = 04 (settle-phase step; overwritten to 10H once tracking begins, see PULSE_SCORE_UPDATE)
+01C0  22 E7 6F   SHLD PULSE_SCORE_STEP
 01C3  3E 04      MVI A,04H
-01C5  32 E6 6F   STA VAR_6FE6
+01C5  32 E6 6F   STA DEBUG_BRANCH_TAG
 01C8  3E 14      MVI A,14H                   ; 20 settle passes
 01CA  32 54 6F   STA SETTLE_CNT
 01CD  2A 1D 6F   LHLD GRI_VAL
@@ -287,7 +287,7 @@ D_01FF:                                      ; refs: lxi0BDD lxi0BEF
 0205  3E 03      MVI A,03H
 0207  32 3A 6F   STA REC_MASTER_16
 020A  3E 10      MVI A,10H
-020C  32 E7 6F   STA VAR_6FE7
+020C  32 E7 6F   STA PULSE_SCORE_STEP
 020F  CD 05 1E   CALL DEQUEUE_SLOT_SEL
 0212  CD 23 0F   CALL SET_SLOT_ACTIVE
 0215  01 24 6F   LXI B,REC_MASTER
@@ -1118,7 +1118,7 @@ ADJ_ZERO:                                    ; xref: j06E2
 070F  3A BA 6F   LDA CUR_FLAGS
 0712  E6 08      ANI 08H
 0714  C8         RZ
-0715  3A E2 6F   LDA VAR_6FE2
+0715  3A E2 6F   LDA MASTER_TOA_LSB_BIN
 0718  0F         RRC
 0719  0F         RRC
 071A  D0         RNC
@@ -1139,6 +1139,11 @@ NEG_HL:                                      ; xref: c06C7 c06F7 c0B95 c0B9E c0B
 0729  C9         RET
 
 ; CALC_TD: form the time difference: copy TOA (or GRI) to BCD_ACC, adjust, store to CUR_TOA.
+; Every exit path (077E) unconditionally sets HL = &TD_ADJ_SCRATCH before returning - a fixed,
+; well-known scratch address handed back as a convention, not dynamically-computed data.
+; Callers who need a 4-byte BCD scratch buffer for a temporary add/subtract (SAVE_REC_SYNC,
+; PULSE_SCORE_UPDATE) reuse that same literal address directly rather than relying on the
+; return value each time.
 CALC_TD:                                     ; xref: c0BC5 c0B3A c0B45 c0B6B
 072A  3A BA 6F   LDA CUR_FLAGS
 072D  E6 08      ANI 08H
@@ -1173,7 +1178,7 @@ CALC_TD_STORE:                               ; xref: j0755
 0778  01 A5 6F   LXI B,CUR_TOA
 077B  CD BB 07   CALL COPY4
 CALC_TD_EXIT:                                ; xref: j0772
-077E  21 E3 6F   LXI H,VAR_6FE3
+077E  21 E3 6F   LXI H,TD_ADJ_SCRATCH
 0781  C9         RET
 
 ; BCD_ADD4: (BC) += (HL), 4 packed-BCD bytes, LS byte first.
@@ -1682,11 +1687,13 @@ L_0A22:                                      ; xref: j0A1B
 
 ; TAG_2002 (0A4A) and TAG_2010 (0C6E), despite the addresses falling in the optional-
 ; expansion-ROM range (2000-2FFF), do not appear to be calls into it - 0A4A's DE=2002H gets
-; conditionally XCHG'd with HL and stored into VAR_6FE6 as one of two 16-bit tag values (the
-; other being D_1004, itself a known instruction-boundary artifact), and 0C6E's BC=2010H is
-; never obviously consumed nearby. Likely incidental 16-bit constants reused for their
-; distinctive bit pattern, not deliberate expansion-ROM addresses - low confidence, not fully
-; traced. Named for clarity, not because they're confirmed real memory references.
+; conditionally XCHG'd with HL and stored into DEBUG_BRANCH_TAG as one of two 16-bit tag
+; values (the other being D_1004, itself a known instruction-boundary artifact), and 0C6E's
+; BC=2010H is never obviously consumed nearby. DEBUG_BRANCH_TAG itself is never read back by
+; name anywhere else in the ROM - a write-only cell, consistent with these being a field-
+; diagnostic marker (inspectable via the serial monitor's memory dump, see serial-protocol.md)
+; recording which branch was taken, rather than a value the firmware itself consumes. Named
+; for clarity, not because the constants are confirmed real memory references.
 0A4A  11 02 20   LXI D,TAG_2002
 0A4D  3A A1 6F   LDA CUR_REC
 0A50  47         MOV B,A
@@ -1695,7 +1702,7 @@ L_0A22:                                      ; xref: j0A1B
 0A56  CA 5A 0A   JZ L_0A5A
 0A59  EB         XCHG
 L_0A5A:                                      ; xref: j0A56
-0A5A  22 E6 6F   SHLD VAR_6FE6
+0A5A  22 E6 6F   SHLD DEBUG_BRANCH_TAG
 0A5D  78         MOV A,B
 0A5E  07         RLC
 0A5F  DA 37 0C   JC L_0C37
@@ -1808,12 +1815,14 @@ L_0AE6:                                      ; xref: j0ACE
 ; PHASE_CODE (a per-bit RRC over 8 iterations): for each mismatch bit (PHASE_CODE bit=1,
 ; since PHASE_CODE is already an XOR-vs-reference result) adds CUR_MODE to a running
 ; score, for each match bit subtracts it, then stores the score back into CUR_NPULSE.
-; If the score goes negative (bit 7 set), corrects it by adding VAR_6FE7 (up to twice)
-; and applies a matching -1-pulse TOA adjustment via CALC_TD/TOA_SUB_CONST each time
-; (mirrors the positive-side path with CALC_TD/TOA_ADD_CONST, not yet traced in as much
-; detail). Reads as a mismatch-weighted confidence score with automatic pulse-index
-; correction on underflow, but the good/bad direction of the score and VAR_6FE7's exact
-; role aren't fully pinned down - medium confidence only.
+; If the score overflows its 8-bit range, corrects it by adding/subtracting
+; PULSE_SCORE_STEP (up to twice) and applies a matching +-1-pulse TOA adjustment via
+; CALC_TD/TOA_ADD_CONST or TOA_SUB_CONST each time. PULSE_SCORE_STEP is 03 during
+; settling (MASTER_FOUND's init, 01BD) and overwritten to 10H once tracking begins
+; (020C) - a finer correction granularity while settling than during steady-state
+; tracking. Reads as a mismatch-weighted confidence score with automatic pulse-index
+; correction on overflow; the exact good/bad sign convention of the score itself
+; isn't fully pinned down - medium confidence only.
 PULSE_SCORE_UPDATE:                          ; xref: c0A6E c0C37
 0B07  21 AF 6F   LXI H,CUR_PULSE_PTR
 0B0A  34         INR M
@@ -1836,7 +1845,7 @@ L_0B22:                                      ; xref: j0B1E
 0B23  79         MOV A,C
 0B24  1D         DCR E
 0B25  C2 17 0B   JNZ L_0B17
-0B28  3A E7 6F   LDA VAR_6FE7
+0B28  3A E7 6F   LDA PULSE_SCORE_STEP
 0B2B  4F         MOV C,A
 0B2C  21 A9 6F   LXI H,CUR_NPULSE
 0B2F  70         MOV M,B
@@ -1854,14 +1863,14 @@ L_0B40:                                      ; xref: j0B37
 0B44  34         INR M
 0B45  CD 2A 07   CALL CALC_TD
 0B48  CD C1 0E   CALL TOA_ADD_CONST
-0B4B  3A E7 6F   LDA VAR_6FE7
+0B4B  3A E7 6F   LDA PULSE_SCORE_STEP
 0B4E  4F         MOV C,A
 0B4F  21 A9 6F   LXI H,CUR_NPULSE
 0B52  7E         MOV A,M
 0B53  91         SUB C
 0B54  FA 8A 0B   JM L_0B8A
 0B57  77         MOV M,A
-0B58  21 E3 6F   LXI H,VAR_6FE3
+0B58  21 E3 6F   LXI H,TD_ADJ_SCRATCH
 0B5B  CD C1 0E   CALL TOA_ADD_CONST
 0B5E  21 AA 6F   LXI H,CUR_PULSES
 0B61  34         INR M
@@ -1873,7 +1882,7 @@ L_0B65:                                      ; xref: j0B33
 0B6A  35         DCR M
 0B6B  CD 2A 07   CALL CALC_TD
 0B6E  CD A6 0E   CALL TOA_SUB_CONST
-0B71  3A E7 6F   LDA VAR_6FE7
+0B71  3A E7 6F   LDA PULSE_SCORE_STEP
 0B74  4F         MOV C,A
 0B75  21 A9 6F   LXI H,CUR_NPULSE
 0B78  7E         MOV A,M
@@ -1882,7 +1891,7 @@ L_0B65:                                      ; xref: j0B33
 0B7D  7E         MOV A,M
 0B7E  81         ADD C
 0B7F  77         MOV M,A
-0B80  21 E3 6F   LXI H,VAR_6FE3
+0B80  21 E3 6F   LXI H,TD_ADJ_SCRATCH
 0B83  CD A6 0E   CALL TOA_SUB_CONST
 0B86  21 AA 6F   LXI H,CUR_PULSES
 0B89  35         DCR M
@@ -2245,30 +2254,33 @@ INIT_REC_AND_SEND:                           ; xref: c019C
 
 ; SAVE_REC_SYNC (was SUB_0D7F, called only from SAVE_CUR_REC - runs on every record
 ; save). For slot 0 (master): BCD_TO_BIN's CUR_TOA_3 (CUR_TOA's last byte, 6FA5+3=6FA8,
-; confirmed by address arithmetic) into VAR_6FE2, then SEED_REC_STATUS. For other slots: if
-; VAR_6FE2's bits 1,0 (tested via two RRC) are both clear, just SEED_REC_STATUS; otherwise
-; temporarily bumps CUR_TOA by VAR_6FE3, reseeds CUR_REC from that bumped value, then
-; subtracts VAR_6FE3 back out - the same "offset, reseed, undo" pattern CALC_TD/
-; TOA_SUB_CONST uses elsewhere. Keeps some CUR_REC field in sync with CUR_TOA's last byte
-; after every save; VAR_6FE2/VAR_6FE3's deeper roles aren't traced further.
+; confirmed by address arithmetic) into MASTER_TOA_LSB_BIN, then SEED_REC_STATUS. For other
+; slots: if MASTER_TOA_LSB_BIN's bit 1 (tested via two RRC) is clear, just SEED_REC_STATUS;
+; otherwise temporarily bumps CUR_TOA by TD_ADJ_SCRATCH, reseeds CUR_REC from that bumped
+; value, then subtracts TD_ADJ_SCRATCH back out - the same "offset, reseed, undo" pattern
+; CALC_TD/TOA_SUB_CONST uses elsewhere. TD_ADJ_SCRATCH is the same fixed 4-byte BCD scratch
+; address CALC_TD always returns a pointer to on exit (077E), reused here directly rather
+; than through that return value. Keeps some CUR_REC field in sync with the master's current
+; TD (via MASTER_TOA_LSB_BIN) after every save, and uses that same bit to gate a small
+; TOA nudge for secondaries; the deeper reason for gating on that specific bit isn't traced.
 SAVE_REC_SYNC:                               ; xref: c0875
 0D7F  3A 11 6F   LDA SLOT_IDX
 0D82  FE 00      CPI 00H
 0D84  C2 93 0D   JNZ L_0D93
 0D87  3A A8 6F   LDA CUR_TOA_3
 0D8A  CD D9 07   CALL BCD_TO_BIN
-0D8D  32 E2 6F   STA VAR_6FE2
+0D8D  32 E2 6F   STA MASTER_TOA_LSB_BIN
 0D90  C3 B0 0D   JMP SEED_REC_STATUS
 L_0D93:                                      ; xref: j0D84
-0D93  3A E2 6F   LDA VAR_6FE2
+0D93  3A E2 6F   LDA MASTER_TOA_LSB_BIN
 0D96  0F         RRC
 0D97  0F         RRC
 0D98  D2 B0 0D   JNC SEED_REC_STATUS
-0D9B  21 E3 6F   LXI H,VAR_6FE3
+0D9B  21 E3 6F   LXI H,TD_ADJ_SCRATCH
 0D9E  01 A5 6F   LXI B,CUR_TOA
 0DA1  CD 82 07   CALL BCD_ADD4
 0DA4  CD B0 0D   CALL SEED_REC_STATUS
-0DA7  21 E3 6F   LXI H,VAR_6FE3
+0DA7  21 E3 6F   LXI H,TD_ADJ_SCRATCH
 0DAA  01 A5 6F   LXI B,CUR_TOA
 0DAD  C3 9F 07   JMP BCD_SUB4
 
@@ -3589,16 +3601,16 @@ SCAN_BTN_STORE:                              ; xref: j155B
 15AD  B0         ORA B
 15AE  32 CD 70   STA SW_LO
 15B1  3E 00      MVI A,00H
-15B3  32 4F 70   STA VAR_704F
+15B3  32 4F 70   STA RUN_TICK_SEC
 15B6  3E 01      MVI A,01H
 15B8  32 CE 70   STA SW_LATCHED
 15BB  C3 CC 15   JMP SCAN_BTN_EDGES
 SCAN_CLR_STATS:                              ; xref: j1588
 15BE  3E 00      MVI A,00H
-15C0  32 BD 70   STA VAR_70BD
-15C3  32 BE 70   STA VAR_70BE
-15C6  32 50 70   STA VAR_7050
-15C9  32 51 70   STA VAR_7051
+15C0  32 BD 70   STA STOPWATCH_B_TICK
+15C3  32 BE 70   STA STOPWATCH_B_SEC
+15C6  32 50 70   STA STOPWATCH_B_MIN
+15C9  32 51 70   STA STOPWATCH_B_HR
 SCAN_BTN_EDGES:                              ; xref: j1580 j15BB
 15CC  3A C4 6F   LDA BUTTONS
 15CF  47         MOV B,A
@@ -3798,14 +3810,14 @@ RPT_CHK_IDLE:                                ; xref: j1730
 1744  3A DF 70   LDA OPTIONS
 1747  07         RLC
 1748  D2 8F 17   JNC RPT_ARM
-174B  3A 4F 70   LDA VAR_704F
+174B  3A 4F 70   LDA RUN_TICK_SEC
 174E  E6 0F      ANI 0FH
 1750  FE 00      CPI 00H
 1752  C0         RNZ
 1753  3A DF 70   LDA OPTIONS
 1756  0F         RRC
 1757  DA 8F 17   JC RPT_ARM
-175A  3A 4F 70   LDA VAR_704F
+175A  3A 4F 70   LDA RUN_TICK_SEC
 175D  FE 00      CPI 00H
 175F  C0         RNZ
 1760  3A DF 70   LDA OPTIONS
@@ -3960,7 +3972,7 @@ L_1838:                                      ; xref: j1833
 ; RPT_HEADER_LINE (1940, xref j17B1, the last REPORT_TASK item): emits LF then CR
 ;   (printed in that order because PRTBUF drains downward, so they transmit CR,LF), a
 ;   status digit from BTN_STATE bits 6-7, then SW_D1/SEL_B/SEL_A as single digits and
-;   VAR_704F/SW_LO/SW_HI as hex-byte pairs - a header/status line for the report.
+;   RUN_TICK_SEC/SW_LO/SW_HI as hex-byte pairs - a header/status line for the report.
 PRTBUF_PUT:                                  ; xref: c1838 j184C j185C j1868 c187C c1880 c1887 c188F c1894 j1898 c189D c18A5 c1942 c1947 c1953 c197D j1981 j1987
 186D  E5         PUSH H
 186E  2A D1 70   LHLD PRTBUF_PTR
@@ -4016,26 +4028,43 @@ L_18BD:                                      ; xref: j18B8
 18BF  C9         RET
 
 ; TICK_CLOCK_CASCADE: NOT a display refresh (firmware.md's old guess for this
-; background task was wrong - fixed there too). Only runs once TICK_BCD wraps to 0.
-; Increments VAR_704F (mod 60H BCD), carrying into SW_LO (mod 60H) then SW_HI (mod 24H) -
-; an HH:MM:SS-shaped cascading BCD clock in SW_HI:SW_LO:VAR_704F. If STATUS_BITS bit 7
-; is clear, also cascades a second HH:MM:SS-shaped clock in VAR_7051:VAR_7050:VAR_70BD.
-; Not yet reconciled with SW_LO/SW_HI/VAR_704F's other documented role as latched
-; thumbwheel values (front-panel.md) - either these cells are genuinely dual-purpose
-; (set-up-mode latch vs. run-mode clock digit), or one of the two roles is misread;
-; needs the physical unit's display behavior to settle which.
+; background task was wrong - fixed there too). Called unconditionally on every RST 7.5-
+; latched background pass (see 0488), regardless of set-up mode - only the innermost digit
+; of each cascade is gated (this routine's own TICK_BCD==0 check for the first cascade;
+; STATUS_BITS bit 7 clear for the second). Increments RUN_TICK_SEC (mod 60H BCD), carrying
+; into SW_LO (mod 60H) then SW_HI (mod 24H) - an HH:MM:SS-shaped cascading BCD counter in
+; SW_HI:SW_LO:RUN_TICK_SEC. If STATUS_BITS bit 7 is clear, also cascades a second, structurally
+; different counter in STOPWATCH_B_HR:STOPWATCH_B_MIN:STOPWATCH_B_SEC:STOPWATCH_B_TICK (four
+; fields, not three - STOPWATCH_B_TICK steps by 2 and wraps at 100 decimal, not by 1 mod 60,
+; and is never itself displayed - it's purely a carry generator for STOPWATCH_B_SEC).
+; RESOLVED (was flagged as an unreconciled dual use with SW_LO/SW_HI's role as latched
+; thumbwheel values, front-panel.md): there is no conflict. Tracing the set-up-mode display
+; path (1AD5-1B0B) shows DISP_ROW_A is copied directly from SW_HI:SW_LO:RUN_TICK_SEC and
+; DISP_ROW_B from STOPWATCH_B_HR:STOPWATCH_B_MIN:STOPWATCH_B_SEC every refresh while SEL_B is
+; blank - the display in set-up mode simply *is* these running counters. The first button
+; press (15B1-15B8) latches the dialed GRI digits into SW_HI/SW_LO and resets RUN_TICK_SEC to
+; 0, i.e. starts a fresh "time since latched" readout at the moment of latching, shown on row
+; A; the second press (SCAN_CLR_STATS, 15BE-15C9) resets all four STOPWATCH_B_* fields to 0,
+; restarting an independent counter shown on row B. RUN_TICK_SEC also has real consumers
+; outside set-up mode - it gates BLINK_ROW_BLANK's blink effect (bit 0, see 1D45) and
+; DISP_SCAN_SLOT's auto-rotation (low nibble, see 1C65) - so it is a genuine free-running
+; heartbeat tick, not something scoped to set-up mode; SW_HI/SW_LO/the STOPWATCH_B_* fields
+; have no confirmed consumer besides this display path and keep incrementing quietly in the
+; background during normal tracking too, with nothing currently found that re-reads them for
+; configuration purposes after the initial latch (baud rate/OPTIONS/UNIT_ID are read from
+; SW_D1-4 directly at the moment of the config-item button press, see front-panel.md).
 TICK_CLOCK_CASCADE:                          ; xref: c0488
 18C0  3A 3D 70   LDA TICK_BCD
 18C3  FE 00      CPI 00H
 18C5  C2 FE 18   JNZ L_18FE
-18C8  3A 4F 70   LDA VAR_704F
+18C8  3A 4F 70   LDA RUN_TICK_SEC
 18CB  3C         INR A
 18CC  27         DAA
 18CD  FE 60      CPI 60H                     ; '`'
-18CF  32 4F 70   STA VAR_704F
+18CF  32 4F 70   STA RUN_TICK_SEC
 18D2  C2 FE 18   JNZ L_18FE
 18D5  3E 00      MVI A,00H
-18D7  32 4F 70   STA VAR_704F
+18D7  32 4F 70   STA RUN_TICK_SEC
 18DA  3A CD 70   LDA SW_LO
 18DD  3C         INR A
 18DE  27         DAA
@@ -4056,37 +4085,37 @@ L_18FE:                                      ; xref: j18C5 j18D2 j18E4 j18F6
 18FE  3A BF 70   LDA STATUS_BITS
 1901  07         RLC
 1902  D8         RC
-1903  3A BD 70   LDA VAR_70BD
+1903  3A BD 70   LDA STOPWATCH_B_TICK
 1906  3C         INR A
 1907  3C         INR A
 1908  27         DAA
-1909  32 BD 70   STA VAR_70BD
+1909  32 BD 70   STA STOPWATCH_B_TICK
 190C  FE 00      CPI 00H
 190E  C0         RNZ
-190F  3A BE 70   LDA VAR_70BE
+190F  3A BE 70   LDA STOPWATCH_B_SEC
 1912  3C         INR A
 1913  27         DAA
 1914  FE 60      CPI 60H                     ; '`'
-1916  32 BE 70   STA VAR_70BE
+1916  32 BE 70   STA STOPWATCH_B_SEC
 1919  C0         RNZ
 191A  3E 00      MVI A,00H
-191C  32 BE 70   STA VAR_70BE
-191F  3A 50 70   LDA VAR_7050
+191C  32 BE 70   STA STOPWATCH_B_SEC
+191F  3A 50 70   LDA STOPWATCH_B_MIN
 1922  3C         INR A
 1923  27         DAA
 1924  FE 60      CPI 60H                     ; '`'
-1926  32 50 70   STA VAR_7050
+1926  32 50 70   STA STOPWATCH_B_MIN
 1929  C0         RNZ
 192A  3E 00      MVI A,00H
-192C  32 50 70   STA VAR_7050
-192F  3A 51 70   LDA VAR_7051
+192C  32 50 70   STA STOPWATCH_B_MIN
+192F  3A 51 70   LDA STOPWATCH_B_HR
 1932  3C         INR A
 1933  27         DAA
 1934  FE 24      CPI 24H                     ; '$'
-1936  32 51 70   STA VAR_7051
+1936  32 51 70   STA STOPWATCH_B_HR
 1939  C0         RNZ
 193A  3E 00      MVI A,00H
-193C  32 51 70   STA VAR_7051
+193C  32 51 70   STA STOPWATCH_B_HR
 193F  C9         RET
 RPT_HEADER_LINE:                             ; xref: j17B1
 1940  3E 0A      MVI A,0AH
@@ -4105,7 +4134,7 @@ RPT_HEADER_LINE:                             ; xref: j17B1
 195F  CD 84 19   CALL PRT_DIGIT_LO
 1962  3A C5 6F   LDA SEL_A
 1965  CD 84 19   CALL PRT_DIGIT_LO
-1968  3A 4F 70   LDA VAR_704F
+1968  3A 4F 70   LDA RUN_TICK_SEC
 196B  CD 7A 19   CALL PRT_HEX_BYTE_A
 196E  3A CD 70   LDA SW_LO
 1971  CD 7A 19   CALL PRT_HEX_BYTE_A
@@ -4317,13 +4346,13 @@ L_1AD5:                                      ; xref: j1A5B
 1AEA  32 34 70   STA DISP_ROW_A
 1AED  3A CD 70   LDA SW_LO
 1AF0  32 35 70   STA DISP_ROW_A_1
-1AF3  3A 4F 70   LDA VAR_704F
+1AF3  3A 4F 70   LDA RUN_TICK_SEC
 1AF6  32 36 70   STA DISP_ROW_A_2
-1AF9  3A BE 70   LDA VAR_70BE
+1AF9  3A BE 70   LDA STOPWATCH_B_SEC
 1AFC  32 39 70   STA DISP_ROW_B_2
-1AFF  3A 50 70   LDA VAR_7050
+1AFF  3A 50 70   LDA STOPWATCH_B_MIN
 1B02  32 38 70   STA DISP_ROW_B_1
-1B05  3A 51 70   LDA VAR_7051
+1B05  3A 51 70   LDA STOPWATCH_B_HR
 1B08  32 37 70   STA DISP_ROW_B
 1B0B  21 34 70   LXI H,DISP_ROW_A
 1B0E  01 37 70   LXI B,DISP_ROW_B
@@ -4502,7 +4531,7 @@ L_1C51:                                      ; xref: j1BA5
 
 ; DISP_SCAN_SLOT/DISP_SCAN_START (was M_70B9/M_70BA): reached when SEL_B sits at the
 ; blank position (0BH). DISP_SCAN_SLOT cycles 0-9 once per second-ish (gated on TICK_BCD==0
-; and VAR_704F's low nibble==0), auto-rotating through slots for display when the operator
+; and RUN_TICK_SEC's low nibble==0), auto-rotating through slots for display when the operator
 ; hasn't picked a specific secondary. DISP_SCAN_START snapshots the starting value once per
 ; gating window; the search loop compares back against it to stop after a full cycle if no
 ; slot has flags bits 6+7 both set (active+acquiring), avoiding an infinite loop when
@@ -4514,7 +4543,7 @@ L_1C65:                                      ; xref: j1BAA j1CD8
 1C6A  3A 3D 70   LDA TICK_BCD
 1C6D  FE 00      CPI 00H
 1C6F  C2 A9 1C   JNZ L_1CA9
-1C72  3A 4F 70   LDA VAR_704F
+1C72  3A 4F 70   LDA RUN_TICK_SEC
 1C75  E6 0F      ANI 0FH
 1C77  C2 A9 1C   JNZ L_1CA9
 1C7A  3A B9 70   LDA DISP_SCAN_SLOT
@@ -4638,16 +4667,18 @@ L_1D3A:                                      ; xref: j1D26 j1D2E
 1D44  C9         RET
 
 ; BLINK_ROW_BLANK (was SUB_1D45). HL = DISP_ROW_A or DISP_ROW_B; A = that row's flag
-; byte (DISP_ROW_A_FLAG/DISP_ROW_B_FLAG). If bit 7 of A is set, AND VAR_704F bit 0 is set, AND TICK_BCD bit 6
+; byte (DISP_ROW_A_FLAG/DISP_ROW_B_FLAG). If bit 7 of A is set, AND RUN_TICK_SEC bit 0 is set, AND TICK_BCD bit 6
 ; is set, fills all 3 bytes at HL with 0FFH (blank on a 7447-style decoder) - a blink-to-
 ; blank effect timed by TICK_BCD's slow bit, gated by a per-row "needs blinking" flag and a
-; VAR_704F enable bit. Likely how a lost/re-acquiring station's TD display blinks instead
+; RUN_TICK_SEC enable bit (RUN_TICK_SEC is a free-running mod-60 tick counter incremented every
+; RST 7.5 pass by TICK_CLOCK_CASCADE, not something scoped to set-up mode - see 18C0).
+; Likely how a lost/re-acquiring station's TD display blinks instead
 ; of showing stale data.
 BLINK_ROW_BLANK:                             ; xref: c1D16 c1D1F
 1D45  F5         PUSH PSW
 1D46  E6 80      ANI 80H
 1D48  CA 66 1D   JZ L_1D66
-1D4B  3A 4F 70   LDA VAR_704F
+1D4B  3A 4F 70   LDA RUN_TICK_SEC
 1D4E  E6 01      ANI 01H
 1D50  CA 66 1D   JZ L_1D66
 1D53  3A 3D 70   LDA TICK_BCD

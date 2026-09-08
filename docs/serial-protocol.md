@@ -132,12 +132,20 @@ See [firmware.md](firmware.md)'s "Print-buffer formatting cluster" section for
 the full byte-formatting detail (`PRTBUF_PUT`, `BYTE_TO_HEX2`, etc.), now fully
 decoded.
 
-`OPTIONS` (70DF) bits gate the report: bit 7 requires `VAR_704F` low nibble
-non-zero, bit 0 requires `VAR_704F` non-zero, bit 1 requires `SW_LO` low nibble,
-bit 2 requires `SW_LO`, bit 3 requires `SW_HI`. These look like "report only
-when the operator has latched a value" conditions - but `VAR_704F`/`SW_LO`/
-`SW_HI` are the same cells `TICK_CLOCK_CASCADE` increments as a run-mode BCD
-clock (see firmware.md), a dual-use that isn't reconciled yet.
+`OPTIONS` (70DF) bits gate the report: bit 7 requires `RUN_TICK_SEC` low
+nibble non-zero, bit 0 requires `RUN_TICK_SEC` non-zero, bit 1 requires
+`SW_LO` low nibble, bit 2 requires `SW_LO`, bit 3 requires `SW_HI`.
+
+**Corrected:** these were previously guessed to be "report only when the
+operator has latched a value" conditions, on the theory that
+`RUN_TICK_SEC`/`SW_LO`/`SW_HI` were static latched set-up values. They
+aren't - `TICK_CLOCK_CASCADE` (see firmware.md) keeps `RUN_TICK_SEC`
+free-running at all times (mod 60H, incrementing every RST 7.5 pass) and
+cascades into `SW_LO`/`SW_HI` on overflow, so these bits mostly just
+require "some nonzero time has elapsed since the last cascade wraparound"
+- true almost continuously in practice, not a real "has the operator
+configured this" gate. What these `OPTIONS` bits are actually meant to
+select for is still an open question; it just isn't operator-latch state.
 
 ## Timing summary
 
