@@ -27,6 +27,11 @@ need to read to know what's left.
    what the two push-buttons do outside set-up mode, whether display
    dimming is firmware-controlled at all, and what the display shows during
    acquisition/tracking before a station locks.
+5. **8155/8251A exact pin numbers** (`docs/peripheral-pinouts.md`): pin
+   *functions* are confirmed but exact pin *numbers* weren't independently
+   verified against a real datasheet - only matters if someone's actually
+   wiring to these chips (the 8279's table, which is what most
+   `hardware-reuse.md` projects would need first, is fully verified).
 
 None of these are urgent - the ROM is fully recovered, analyzed, and named
 (0 generic routines/variables); everything above is either "needs the
@@ -60,6 +65,65 @@ Dated log of completed work, newest first. Old entries use the names in
 effect *at the time* - a name here may have since been superseded; treat
 this section as a historical record of reasoning, not a current reference
 (for current names, see `docs/jump-graph.md`).
+
+### Update 10 (2026-09-08): hardware-reuse proposal and peripheral pinout reference
+
+Two new design-proposal docs, on request, exploring what this hardware
+could become independent of Loran-C, plus the pin-level reference to
+actually wire something new:
+
+- `docs/hardware-reuse.md`: 13 project ideas across three tiers -
+  single-board (frequency/time-interval counter using the precision TCXO
+  and `RST 6.5` the same way the original firmware already uses that pin,
+  multi-drop remote instrument reusing `serial-protocol.md`'s addressing
+  scheme, a vintage-computing trainer, ham-radio station accessories, a
+  process/annunciator panel, a serial bridge), harvested-parts/breadboard
+  (a ground-up breadboard 8085 build, standalone 8279/8155 modules), and
+  dual-board (since the user has two identical units) - most notably,
+  actually proving out the multi-drop protocol with two real physical
+  nodes, which has only ever been confirmed by reading the code. Also
+  clarifies that the ROM sockets almost certainly accept genuine 2732
+  EPROMs directly with no rewiring (the mask-ROM-vs-EPROM pin-compatibility
+  this project's own ROM-reading work already established, though untested
+  here), and that "removing the Loran interface" is a firmware/wiring
+  choice, not a board modification.
+- `docs/peripheral-pinouts.md`: chip-level pin tables for the 8279, 8155,
+  and 8251A. The 8279's is fully verified (cross-checked against two
+  independent datasheet-derived sources via web search); the 8155/8251A
+  tables give verified pin *functions* but explicitly flag that exact pin
+  *numbers* weren't independently verified this session (several
+  datasheet-fetch attempts didn't yield a clean numbered diagram) rather
+  than presenting an unverified guess as fact. Also states plainly, in one
+  place, that the board's actual external connectors (`J1`/`P4`/`P5`/`P7`/
+  `J8`) have never been traced against any of these chips - still open per
+  `hardware.md`'s checklist.
+
+Neither doc claims anything has been built or tested - both are proposals
+grounded in the confirmed hardware inventory.
+
+### Update 9 (2026-09-07): five missing docs, plus CLAUDE.md/CONTEXT.md for cross-session resume
+
+Asked "what else would be good docs that are still missing," then "do all
+of these": added `docs/loran-c-primer.md` (conceptual grounding in Loran-C
+navigation - GRI, master/secondary, phase codes, TD, coding delay, lines
+of position - for readers who know 8085 assembly but not radio
+navigation), `docs/glossary.md` (domain terms plus this project's own
+naming/confidence conventions, consolidating explanations that were being
+re-derived from context repeatedly across sessions), `CONTRIBUTING.md`
+(the actual edit/validate/regenerate/rebuild-verify workflow, naming
+discipline, and stale-reference sweep pattern - previously living only in
+git history), `docs/pal-programming-guide.md` (step-by-step CUPL-compile-
+and-burn guide for the PAL decoder - not executed in this project, a guide
+for whoever does it next), and `docs/emulator-api.md` (the programmatic
+surface of every `src/emu/*.js` module).
+
+Also added `CLAUDE.md` (stable operating rules - the rebuild-verify
+non-negotiable, standing commit/push authorization, naming discipline,
+where things live - auto-loaded by Claude Code at the start of every
+session in this repo) and `CONTEXT.md` (a living current-state snapshot,
+overwritten each session, distinct from this changelog) specifically so a
+future session - here or elsewhere - can resume without replaying the
+conversation that produced any of this.
 
 ### Update 8 (2026-09-07): named the 10 `L_xxxx` labels in the lowest-confidence BCD cluster
 
