@@ -1758,7 +1758,7 @@ L_0972:
         MVI E,03H
         LDA CUR_REC
         ANI 80H
-        JNZ L_1E73
+        JNZ ACCUM_TOGGLE_BRANCH
 L_0991:
         MOV A,M
         MVI M,00H
@@ -5083,7 +5083,7 @@ L_1E5E:
 ; sitting between ROM_SELFTEST_BODY (ends 1E6C RET) and the live L_1E73.
 ORPHAN_1E6D:
         DB   0C4H,0AEH,19H,0C3H,6DH,1EH
-L_1E73:
+ACCUM_TOGGLE_BRANCH:
         MVI M,00H
         DCX H
         MVI M,00H
@@ -5094,14 +5094,14 @@ L_1E73:
         CALL SELECT_INCDEC
         RRC
         DCX H
-        JC L_1E8F
+        JC ACCUM_BCD_DECREMENT
         XRA A
         MOV A,M
         ADI 01H
         DAA
         MOV M,A
-        JMP L_1E98
-L_1E8F:
+        JMP ACCUM_TOGGLE_DONE
+ACCUM_BCD_DECREMENT:
         XRA A
         STC
         MVI A,98H
@@ -5109,20 +5109,22 @@ L_1E8F:
         ADD M
         DAA
         MOV M,A
-L_1E98:
+ACCUM_TOGGLE_DONE:
         JMP L_09CB
 
 ; SELECT_INCDEC (was SUB_1E9B/TOGGLE_70C7_BIT, sole caller 1E7E). Reads INCDEC_TOGGLE
 ; (6FC7, was M_70C7), rotates a copy left 3, XORs with the original, applies another
 ; RLC/CMC/RAL toggle pass (the same idiom PHASE_AB_SELECT uses to flip one bit) and stores
 ; back - so this flips one specific bit of INCDEC_TOGGLE each call. Confirmed effect at the
-; call site (1E7E-1E98): the caller zeroes a 4-byte BCD field, calls this, then tests bit 0
-; of ITS return value (via RRC) to choose between incrementing (ADI 01H;DAA) or
-; BCD-decrementing (99H+carry+M;DAA, the ten's-complement-minus-1 idiom) that same field -
-; i.e. INCDEC_TOGGLE's state picks increment-vs-decrement direction for a BCD counter,
+; call site (ACCUM_TOGGLE_BRANCH/ACCUM_BCD_DECREMENT/ACCUM_TOGGLE_DONE, 1E73-1E98): the
+; caller zeroes a 4-byte BCD field, calls this, then tests bit 0 of ITS return value (via
+; RRC) to choose between incrementing (ADI 01H;DAA, fallthrough) or BCD-decrementing at
+; ACCUM_BCD_DECREMENT (99H+carry+M;DAA, the ten's-complement-minus-1 idiom) that same field,
+; then both paths rejoin at ACCUM_TOGGLE_DONE and jump back into ACCUM_SLOT_TOA - i.e.
+; INCDEC_TOGGLE's state picks increment-vs-decrement direction for a BCD counter,
 ; alternating (or otherwise varying) each time SELECT_INCDEC runs. Which specific bit and
-; why it should alternate isn't identified - the caller (reached from 098E, inside
-; ACCUM_SLOT_TOA's neighborhood, gated on CUR_REC status bit 7) isn't traced further either.
+; why it should alternate isn't identified - ACCUM_TOGGLE_BRANCH itself (reached from 098E,
+; a CUR_REC-bit-7-gated branch inside ACCUM_SLOT_TOA) isn't traced further either.
 SELECT_INCDEC:
         LDA INCDEC_TOGGLE
         MOV B,A
@@ -5141,11 +5143,15 @@ SELECT_INCDEC:
 ; by 16 with round-to-nearest", or equivalently "drop the lowest BCD digit, rounding".
 ; Part of a small extended-precision BCD arithmetic cluster (1E9B-1F20) that is,
 ; structurally, clearly building toward a scaled comparison or division involving GRI_VAL
-; (see the caller at 1F35-1F75) - plausibly the TD-to-plot-column scaling PLOT_VALUES
-; needs, but not confirmed. Named mechanically rather than guessing the semantic role.
+; (see the caller starting at BCD_COMBINE_ENTRY, 1F30) - plausibly the TD-to-plot-column
+; scaling PLOT_VALUES needs, but not confirmed. Named mechanically rather than guessing the
+; semantic role - as are this cluster's internal branch points (SHR4_SHIFT_LOOP,
+; SHL4_SHIFT_LOOP, and BCD_COMBINE_ENTRY/_ADD_RETRY/_RESTORE_REGS/_CHECK_CARRY/_ROUND_FINISH),
+; named for the mechanical step each performs, not for a confirmed role in the overall
+; computation.
 SHR4_ROUND:
         MVI D,04H
-L_1EAC:
+SHR4_SHIFT_LOOP:
         STC
         CMC
         MOV A,H
@@ -5155,7 +5161,7 @@ L_1EAC:
         RAR
         MOV L,A
         DCR D
-        JNZ L_1EAC
+        JNZ SHR4_SHIFT_LOOP
         RNC
         INX H
         RET
@@ -5165,7 +5171,7 @@ L_1EAC:
 ; the left-shift/round-up counterpart to SHR4_ROUND. See 1EAA for the cluster context.
 SHL4_EHL:
         MVI D,04H
-L_1EBD:
+SHL4_SHIFT_LOOP:
         MOV A,E
         RAL
         MOV E,A
@@ -5176,7 +5182,7 @@ L_1EBD:
         RAL
         MOV H,A
         DCR D
-        JNZ L_1EBD
+        JNZ SHL4_SHIFT_LOOP
         MOV A,E
         RLC
         RNC
@@ -5184,8 +5190,9 @@ L_1EBD:
         RET
 
 ; LOAD3_BC (was SUB_1ECF). Loads 3 bytes from (BC), advancing BC each time, into H, L,
-; E respectively. A small loader feeding the SHR4_ROUND/SHL4_EHL arithmetic at 1F35-1F75
-; with 3-byte operands from GRI_VAL, M70D6_OPERAND and a caller-supplied pointer.
+; E respectively. A small loader feeding the SHR4_ROUND/SHL4_EHL arithmetic starting at
+; BCD_COMBINE_ENTRY (1F30) with 3-byte operands from GRI_VAL, M70D6_OPERAND and a
+; caller-supplied pointer.
 LOAD3_BC:
         LDAX B
         MOV H,A
@@ -5236,7 +5243,7 @@ BCD_COMPL_ADD_DEHL:
         MOV H,A
         RLC
         RET
-L_1F00:
+BCD_COMBINE_ADD_RETRY:
         XTHL
         XRA A
         MOV A,L
@@ -5248,11 +5255,11 @@ L_1F00:
         DAA
         MOV H,A
         XTHL
-        JMP L_1F61
+        JMP BCD_COMBINE_CHECK_CARRY
 
 ; SWAP_HL_STASH (was SUB_1F0E). Swaps H and L, stores the result to BCD_TMP_2, then
 ; zeroes 2 bytes at BCD_TMP. A cleanup/reset step at the tail of the 1E9B-1F20 cluster's
-; outer loop (1F35-1F75).
+; outer loop (BCD_COMBINE_ENTRY, 1F30).
 SWAP_HL_STASH:
         MOV A,L
         MOV L,H
@@ -5273,18 +5280,18 @@ SWAP_HL_STASH:
 ; value, hence the name, though the caller's BC isn't confirmed to be CUR_TOA specifically.
 ; For other slots: falls into a RESET-based (HL=0000H) path not fully traced. Medium
 ; confidence - this whole area (the SELECT_INCDEC/1E9B-1F20 BCD cluster and its caller here)
-; is plausibly related to PLOT-mode TD scaling (the outer routine at 1F35-1F75 uses GRI_VAL
-; and M70D6_OPERAND, another 3-byte LOAD3_BC operand, was M_70D6) but that connection is
+; is plausibly related to PLOT-mode TD scaling (BCD_COMBINE_ENTRY, 1F30, uses GRI_VAL and
+; M70D6_OPERAND, another 3-byte LOAD3_BC operand, was M_70D6) but that connection is
 ; not confirmed.
 SLOT0_SNAPSHOT_TOA:
         LDA SLOT_IDX
         CPI 00H
-        JNZ L_1F30
+        JNZ BCD_COMBINE_ENTRY
         PUSH B
         POP H
         LXI B,SLOT0_TOA_SNAPSHOT
         JMP COPY4
-L_1F30:
+BCD_COMBINE_ENTRY:
         PUSH B
         LXI H,RESET
         PUSH H
@@ -5302,25 +5309,25 @@ L_1F30:
         MVI A,01H
 
 ; BCD_RESULT_SIGN (was M_70D3): set to 0 or 1 partway through the 1E9B-1F20 BCD
-; cluster's outer routine (1F35-1F75) based on a carry test, then consumed at the very end
-; (1F75) to pick BCD_ADD4 vs BCD_SUB4 - i.e. this is that cluster's signed-result flag
-; (0=positive/add, 1=negative/subtract). Doesn't resolve what the overall computation
-; means, just confirms it produces a signed BCD result.
+; cluster's outer routine (BCD_COMBINE_ENTRY, 1F30) based on a carry test, then consumed at
+; the very end (1F75) to pick BCD_ADD4 vs BCD_SUB4 - i.e. this is that cluster's
+; signed-result flag (0=positive/add, 1=negative/subtract). Doesn't resolve what the overall
+; computation means, just confirms it produces a signed BCD result.
         STA BCD_RESULT_SIGN
-        JNC L_1F5D
+        JNC BCD_COMBINE_RESTORE_REGS
         XRA A
         STA BCD_RESULT_SIGN
         CALL BCD_COMPL_HL
-L_1F5D:
+BCD_COMBINE_RESTORE_REGS:
         PUSH H
         POP B
         POP D
         POP H
-L_1F61:
+BCD_COMBINE_CHECK_CARRY:
         CALL BCD_COMPL_ADD_DEHL
-        JC L_1F6A
-        JMP L_1F00
-L_1F6A:
+        JC BCD_COMBINE_ROUND_FINISH
+        JMP BCD_COMBINE_ADD_RETRY
+BCD_COMBINE_ROUND_FINISH:
         POP H
         CALL SHR4_ROUND
         CALL SWAP_HL_STASH

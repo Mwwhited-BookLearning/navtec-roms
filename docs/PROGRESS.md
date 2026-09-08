@@ -61,6 +61,44 @@ effect *at the time* - a name here may have since been superseded; treat
 this section as a historical record of reasoning, not a current reference
 (for current names, see `docs/jump-graph.md`).
 
+### Update 8 (2026-09-07): named the 10 `L_xxxx` labels in the lowest-confidence BCD cluster
+
+Follow-up to Update 7's `L_xxxx` survey: on request, traced and named the
+10 local-jump labels that happen to fall in the ROM's single
+lowest-confidence area - the "extended-precision BCD cluster" (1E9B-1F20)
+whose overall purpose (plausibly PLOT-mode TD-to-column scaling) still
+isn't confirmed. These aren't a blanket pass over all 144 `L_xxxx` labels
+(most of those sit inside routines that are already well understood, where
+a positional label costs nothing - see Update 7's reasoning); this is
+specifically the handful worth naming because the surrounding routines
+themselves are still under-named.
+
+Two sub-clusters:
+
+- **`ACCUM_SLOT_TOA`'s `CUR_REC`-bit-7 alternate path** (1E73-1E98, reached
+  by a conditional branch inside `ACCUM_SLOT_TOA` itself, not a separate
+  callable routine): `ACCUM_TOGGLE_BRANCH` (zeroes 4 bytes, calls
+  `SELECT_INCDEC`), `ACCUM_BCD_DECREMENT` (the ten's-complement-minus-1
+  branch taken when `SELECT_INCDEC`'s toggle bit is set), `ACCUM_TOGGLE_DONE`
+  (where both the increment and decrement paths rejoin before jumping back
+  into `ACCUM_SLOT_TOA`).
+- **The `SHR4_ROUND`/`SHL4_EHL`/BCD-combine cluster** (1EAC-1F6E):
+  `SHR4_SHIFT_LOOP`/`SHL4_SHIFT_LOOP` (each routine's own 4-pass shift
+  loop body), and `BCD_COMBINE_ENTRY`/`_ADD_RETRY`/`_RESTORE_REGS`/
+  `_CHECK_CARRY`/`_ROUND_FINISH` for the previously-unnamed "outer routine"
+  at 1F30-1F7D that comments had only ever referred to informally as "the
+  caller at 1F35-1F75" - it now has real names for its own control flow,
+  even though what the computation is *for* remains unconfirmed.
+
+Named mechanically (what each step does), matching this cluster's existing
+naming philosophy (`SHR4_ROUND`, `BCD_COMPL_ADD_DEHL`, etc. are named for
+their mechanical action too, explicitly not for a guessed semantic role) -
+consistent with not overclaiming past what's actually confirmed.
+
+Only `disasm/nt3321-22.json` needed updating (new label entries + five
+existing block comments that referenced these addresses by bare hex range
+instead of a name). Rebuild re-verified: 0 differences over 8192 bytes.
+
 ### Update 7 (2026-09-07): named 9 of the 10 auto-generated `D_xxxx` labels
 
 Follow-up to Update 6's question "what about the auto-generated `D_`/`L_`

@@ -1575,7 +1575,7 @@ L_0972:                                      ; xref: j096B
 0987  1E 03      MVI E,03H
 0989  3A A1 6F   LDA CUR_REC
 098C  E6 80      ANI 80H
-098E  C2 73 1E   JNZ L_1E73
+098E  C2 73 1E   JNZ ACCUM_TOGGLE_BRANCH
 L_0991:                                      ; xref: j09B3
 0991  7E         MOV A,M
 0992  36 00      MVI M,00H
@@ -4900,7 +4900,7 @@ L_1E5E:                                      ; xref: j1E62 j1E67
 ; sitting between ROM_SELFTEST_BODY (ends 1E6C RET) and the live L_1E73.
 ORPHAN_1E6D:                                 
 1E6D  C4 AE 19 C3 6D 1E  DB   0C4H,0AEH,19H,0C3H,6DH,1EH; |....m.|
-L_1E73:                                      ; xref: j098E
+ACCUM_TOGGLE_BRANCH:                         ; xref: j098E
 1E73  36 00      MVI M,00H
 1E75  2B         DCX H
 1E76  36 00      MVI M,00H
@@ -4911,14 +4911,14 @@ L_1E73:                                      ; xref: j098E
 1E7E  CD 9B 1E   CALL SELECT_INCDEC
 1E81  0F         RRC
 1E82  2B         DCX H
-1E83  DA 8F 1E   JC L_1E8F
+1E83  DA 8F 1E   JC ACCUM_BCD_DECREMENT
 1E86  AF         XRA A
 1E87  7E         MOV A,M
 1E88  C6 01      ADI 01H
 1E8A  27         DAA
 1E8B  77         MOV M,A
-1E8C  C3 98 1E   JMP L_1E98
-L_1E8F:                                      ; xref: j1E83
+1E8C  C3 98 1E   JMP ACCUM_TOGGLE_DONE
+ACCUM_BCD_DECREMENT:                         ; xref: j1E83
 1E8F  AF         XRA A
 1E90  37         STC
 1E91  3E 98      MVI A,98H
@@ -4926,20 +4926,22 @@ L_1E8F:                                      ; xref: j1E83
 1E95  86         ADD M
 1E96  27         DAA
 1E97  77         MOV M,A
-L_1E98:                                      ; xref: j1E8C
+ACCUM_TOGGLE_DONE:                           ; xref: j1E8C
 1E98  C3 CB 09   JMP L_09CB
 
 ; SELECT_INCDEC (was SUB_1E9B/TOGGLE_70C7_BIT, sole caller 1E7E). Reads INCDEC_TOGGLE
 ; (6FC7, was M_70C7), rotates a copy left 3, XORs with the original, applies another
 ; RLC/CMC/RAL toggle pass (the same idiom PHASE_AB_SELECT uses to flip one bit) and stores
 ; back - so this flips one specific bit of INCDEC_TOGGLE each call. Confirmed effect at the
-; call site (1E7E-1E98): the caller zeroes a 4-byte BCD field, calls this, then tests bit 0
-; of ITS return value (via RRC) to choose between incrementing (ADI 01H;DAA) or
-; BCD-decrementing (99H+carry+M;DAA, the ten's-complement-minus-1 idiom) that same field -
-; i.e. INCDEC_TOGGLE's state picks increment-vs-decrement direction for a BCD counter,
+; call site (ACCUM_TOGGLE_BRANCH/ACCUM_BCD_DECREMENT/ACCUM_TOGGLE_DONE, 1E73-1E98): the
+; caller zeroes a 4-byte BCD field, calls this, then tests bit 0 of ITS return value (via
+; RRC) to choose between incrementing (ADI 01H;DAA, fallthrough) or BCD-decrementing at
+; ACCUM_BCD_DECREMENT (99H+carry+M;DAA, the ten's-complement-minus-1 idiom) that same field,
+; then both paths rejoin at ACCUM_TOGGLE_DONE and jump back into ACCUM_SLOT_TOA - i.e.
+; INCDEC_TOGGLE's state picks increment-vs-decrement direction for a BCD counter,
 ; alternating (or otherwise varying) each time SELECT_INCDEC runs. Which specific bit and
-; why it should alternate isn't identified - the caller (reached from 098E, inside
-; ACCUM_SLOT_TOA's neighborhood, gated on CUR_REC status bit 7) isn't traced further either.
+; why it should alternate isn't identified - ACCUM_TOGGLE_BRANCH itself (reached from 098E,
+; a CUR_REC-bit-7-gated branch inside ACCUM_SLOT_TOA) isn't traced further either.
 SELECT_INCDEC:                               ; xref: c1E7E
 1E9B  3A C7 70   LDA INCDEC_TOGGLE
 1E9E  47         MOV B,A
@@ -4958,11 +4960,15 @@ SELECT_INCDEC:                               ; xref: c1E7E
 ; by 16 with round-to-nearest", or equivalently "drop the lowest BCD digit, rounding".
 ; Part of a small extended-precision BCD arithmetic cluster (1E9B-1F20) that is,
 ; structurally, clearly building toward a scaled comparison or division involving GRI_VAL
-; (see the caller at 1F35-1F75) - plausibly the TD-to-plot-column scaling PLOT_VALUES
-; needs, but not confirmed. Named mechanically rather than guessing the semantic role.
+; (see the caller starting at BCD_COMBINE_ENTRY, 1F30) - plausibly the TD-to-plot-column
+; scaling PLOT_VALUES needs, but not confirmed. Named mechanically rather than guessing the
+; semantic role - as are this cluster's internal branch points (SHR4_SHIFT_LOOP,
+; SHL4_SHIFT_LOOP, and BCD_COMBINE_ENTRY/_ADD_RETRY/_RESTORE_REGS/_CHECK_CARRY/_ROUND_FINISH),
+; named for the mechanical step each performs, not for a confirmed role in the overall
+; computation.
 SHR4_ROUND:                                  ; xref: c1F42 c1F6B
 1EAA  16 04      MVI D,04H
-L_1EAC:                                      ; xref: j1EB5
+SHR4_SHIFT_LOOP:                             ; xref: j1EB5
 1EAC  37         STC
 1EAD  3F         CMC
 1EAE  7C         MOV A,H
@@ -4972,7 +4978,7 @@ L_1EAC:                                      ; xref: j1EB5
 1EB2  1F         RAR
 1EB3  6F         MOV L,A
 1EB4  15         DCR D
-1EB5  C2 AC 1E   JNZ L_1EAC
+1EB5  C2 AC 1E   JNZ SHR4_SHIFT_LOOP
 1EB8  D0         RNC
 1EB9  23         INX H
 1EBA  C9         RET
@@ -4982,7 +4988,7 @@ L_1EAC:                                      ; xref: j1EB5
 ; the left-shift/round-up counterpart to SHR4_ROUND. See 1EAA for the cluster context.
 SHL4_EHL:                                    ; xref: c1F38
 1EBB  16 04      MVI D,04H
-L_1EBD:                                      ; xref: j1EC7
+SHL4_SHIFT_LOOP:                             ; xref: j1EC7
 1EBD  7B         MOV A,E
 1EBE  17         RAL
 1EBF  5F         MOV E,A
@@ -4993,7 +4999,7 @@ L_1EBD:                                      ; xref: j1EC7
 1EC4  17         RAL
 1EC5  67         MOV H,A
 1EC6  15         DCR D
-1EC7  C2 BD 1E   JNZ L_1EBD
+1EC7  C2 BD 1E   JNZ SHL4_SHIFT_LOOP
 1ECA  7B         MOV A,E
 1ECB  07         RLC
 1ECC  D0         RNC
@@ -5001,8 +5007,9 @@ L_1EBD:                                      ; xref: j1EC7
 1ECE  C9         RET
 
 ; LOAD3_BC (was SUB_1ECF). Loads 3 bytes from (BC), advancing BC each time, into H, L,
-; E respectively. A small loader feeding the SHR4_ROUND/SHL4_EHL arithmetic at 1F35-1F75
-; with 3-byte operands from GRI_VAL, M70D6_OPERAND and a caller-supplied pointer.
+; E respectively. A small loader feeding the SHR4_ROUND/SHL4_EHL arithmetic starting at
+; BCD_COMBINE_ENTRY (1F30) with 3-byte operands from GRI_VAL, M70D6_OPERAND and a
+; caller-supplied pointer.
 LOAD3_BC:                                    ; xref: c1F35 c1F3F c1F49
 1ECF  0A         LDAX B
 1ED0  67         MOV H,A
@@ -5053,7 +5060,7 @@ BCD_COMPL_ADD_DEHL:                          ; xref: c1F61
 1EFD  67         MOV H,A
 1EFE  07         RLC
 1EFF  C9         RET
-L_1F00:                                      ; xref: j1F67
+BCD_COMBINE_ADD_RETRY:                       ; xref: j1F67
 1F00  E3         XTHL
 1F01  AF         XRA A
 1F02  7D         MOV A,L
@@ -5065,11 +5072,11 @@ L_1F00:                                      ; xref: j1F67
 1F08  27         DAA
 1F09  67         MOV H,A
 1F0A  E3         XTHL
-1F0B  C3 61 1F   JMP L_1F61
+1F0B  C3 61 1F   JMP BCD_COMBINE_CHECK_CARRY
 
 ; SWAP_HL_STASH (was SUB_1F0E). Swaps H and L, stores the result to BCD_TMP_2, then
 ; zeroes 2 bytes at BCD_TMP. A cleanup/reset step at the tail of the 1E9B-1F20 cluster's
-; outer loop (1F35-1F75).
+; outer loop (BCD_COMBINE_ENTRY, 1F30).
 SWAP_HL_STASH:                               ; xref: c1F6E
 1F0E  7D         MOV A,L
 1F0F  6C         MOV L,H
@@ -5090,18 +5097,18 @@ SWAP_HL_STASH:                               ; xref: c1F6E
 ; value, hence the name, though the caller's BC isn't confirmed to be CUR_TOA specifically.
 ; For other slots: falls into a RESET-based (HL=0000H) path not fully traced. Medium
 ; confidence - this whole area (the SELECT_INCDEC/1E9B-1F20 BCD cluster and its caller here)
-; is plausibly related to PLOT-mode TD scaling (the outer routine at 1F35-1F75 uses GRI_VAL
-; and M70D6_OPERAND, another 3-byte LOAD3_BC operand, was M_70D6) but that connection is
+; is plausibly related to PLOT-mode TD scaling (BCD_COMBINE_ENTRY, 1F30, uses GRI_VAL and
+; M70D6_OPERAND, another 3-byte LOAD3_BC operand, was M_70D6) but that connection is
 ; not confirmed.
 SLOT0_SNAPSHOT_TOA:                          ; xref: c097D
 1F20  3A 11 6F   LDA SLOT_IDX
 1F23  FE 00      CPI 00H
-1F25  C2 30 1F   JNZ L_1F30
+1F25  C2 30 1F   JNZ BCD_COMBINE_ENTRY
 1F28  C5         PUSH B
 1F29  E1         POP H
 1F2A  01 D4 70   LXI B,SLOT0_TOA_SNAPSHOT
 1F2D  C3 BB 07   JMP COPY4
-L_1F30:                                      ; xref: j1F25
+BCD_COMBINE_ENTRY:                           ; xref: j1F25
 1F30  C5         PUSH B
 1F31  21 00 00   LXI H,RESET
 1F34  E5         PUSH H
@@ -5119,25 +5126,25 @@ L_1F30:                                      ; xref: j1F25
 1F4E  3E 01      MVI A,01H
 
 ; BCD_RESULT_SIGN (was M_70D3): set to 0 or 1 partway through the 1E9B-1F20 BCD
-; cluster's outer routine (1F35-1F75) based on a carry test, then consumed at the very end
-; (1F75) to pick BCD_ADD4 vs BCD_SUB4 - i.e. this is that cluster's signed-result flag
-; (0=positive/add, 1=negative/subtract). Doesn't resolve what the overall computation
-; means, just confirms it produces a signed BCD result.
+; cluster's outer routine (BCD_COMBINE_ENTRY, 1F30) based on a carry test, then consumed at
+; the very end (1F75) to pick BCD_ADD4 vs BCD_SUB4 - i.e. this is that cluster's
+; signed-result flag (0=positive/add, 1=negative/subtract). Doesn't resolve what the overall
+; computation means, just confirms it produces a signed BCD result.
 1F50  32 D3 70   STA BCD_RESULT_SIGN
-1F53  D2 5D 1F   JNC L_1F5D
+1F53  D2 5D 1F   JNC BCD_COMBINE_RESTORE_REGS
 1F56  AF         XRA A
 1F57  32 D3 70   STA BCD_RESULT_SIGN
 1F5A  CD D9 1E   CALL BCD_COMPL_HL
-L_1F5D:                                      ; xref: j1F53
+BCD_COMBINE_RESTORE_REGS:                    ; xref: j1F53
 1F5D  E5         PUSH H
 1F5E  C1         POP B
 1F5F  D1         POP D
 1F60  E1         POP H
-L_1F61:                                      ; xref: j1F0B
+BCD_COMBINE_CHECK_CARRY:                     ; xref: j1F0B
 1F61  CD ED 1E   CALL BCD_COMPL_ADD_DEHL
-1F64  DA 6A 1F   JC L_1F6A
-1F67  C3 00 1F   JMP L_1F00
-L_1F6A:                                      ; xref: j1F64
+1F64  DA 6A 1F   JC BCD_COMBINE_ROUND_FINISH
+1F67  C3 00 1F   JMP BCD_COMBINE_ADD_RETRY
+BCD_COMBINE_ROUND_FINISH:                    ; xref: j1F64
 1F6A  E1         POP H
 1F6B  CD AA 1E   CALL SHR4_ROUND
 1F6E  CD 0E 1F   CALL SWAP_HL_STASH
