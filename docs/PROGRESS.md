@@ -13,11 +13,11 @@ need to read to know what's left.
    RST 7.5 source, which 8155 is which, the U39/8212 conflict, the OPTION
    socket wiring, the 8279 CLK source, etc.) is still open and needs
    someone with the actual board and a meter.
-2. **Receiver front-end bit-protocol verification.** The emulator's
-   synthetic Loran-C front end (Update 5) hasn't been driven all the way to
-   `MASTER_FOUND` - `SHIFT_IN16`/`MATCH_PULSES`'s exact bit ordering needs
-   re-verification against the disassembly and the front end's timing
-   needs tuning to match, per `docs/emulator.md`'s suggested next step.
+2. **Receiver front-end model: verify against hardware / exercise lock.**
+   The synthetic front end now drives the firmware to `MASTER_FOUND` and
+   `TRACK_LOOP` (Update 11), but its timing/tap/offset assumptions are
+   unverified against a real board, and secondary mode, moving TD and lock
+   loss are untested.
 3. **`disasm/nt3321-22.json` cleanup.** The hints file's `entries`/`extraCode`
    lists may be worth revisiting now that flow analysis reaches so much more
    of the image directly - some entries added earlier specifically to force
@@ -65,6 +65,21 @@ Dated log of completed work, newest first. Old entries use the names in
 effect *at the time* - a name here may have since been superseded; treat
 this section as a historical record of reasoning, not a current reference
 (for current names, see `docs/jump-graph.md`).
+
+### Update 11 (2026-10-13): emulator reaches MASTER_FOUND and TRACK_LOOP
+
+Rebuilt `ReceiverFrontEnd` (`src/emu/emu8085.js`) from a fresh trace of
+`SHIFT_IN16`, `MATCH_PULSES`, `SEARCH_VERIFY`, `REC_TO_FRONTEND` and the
+settle/QUAL chain. Key findings: `SHIFT_IN16` reads PC before the first
+clock (MSB must be presented at latch/strobe - the old model was off by
+one); the firmware's CUR_REC is decodable back to ms, so the front end
+places the synthetic master relative to the firmware's own gate; after
+`MASTER_FOUND` the firmware resets TOA := GRI (01D3), so the model
+re-bases, and both channels must read the master code for the QUAL/phase
+chain to set SLOT_FLAGS bit 5 and pass `QUAL_CHECK`. Result: MASTER_FOUND
+at ~970k instructions, settle loop passes, TRACK_LOOP reached and held.
+Tests: rewrote the protocol tests, added decode/epoch tests and
+`lock-acquisition.test.js` (110 pass). No disasm changes; rebuild 0 diffs.
 
 ### Update 10 (2026-09-08): hardware-reuse proposal and peripheral pinout reference
 

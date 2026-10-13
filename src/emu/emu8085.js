@@ -486,16 +486,47 @@ class Intel8279 {
 }
 
 // =====================================================================
-// Synthetic receiver front end (best-effort -- see docs/emulator.md)
+// Synthetic receiver front end -- a *model*, not a verified protocol.
 //
-// Drives 8155 #2 (F000) per the protocol reconstructed in hardware.md:
-//   PB bit2 = latch/reset strobe, PB bit4 = shift clock, PB bit5 = sample ack
-//   PC bit2 = epoch flag, PC bit3/4 = the two serial data streams
-// and periodically raises RST 6.5 to represent the receiver's sample strobe.
-// The exact bit-ordering SHIFT_IN16 expects has not been re-verified against
-// the disassembly for this emulator; this generator produces the master (or
-// secondary) Loran-C phase code bytes documented in hardware.md so the
-// firmware sees *a* plausible signal, not a verified-correct one.
+// What the firmware demonstrably does with the receiver (traced from
+// RST65_ISR 0034, WAIT_EPOCH 049B, SHIFT_IN16 04AE, FIRST_SAMPLE 05AF,
+// MATCH_PULSES 05C2, SEARCH_VERIFY 018E and REC_TO_FRONTEND 0DE6):
+//
+//   RST 6.5          one strobe per "sample" (1 ms, since TOA_TO_BIN/WIN_END
+//                    count whole milliseconds -- one slot of the 8-pulse
+//                    Loran-C group, whose pulses are 1000 us apart).
+//   PIO2_PC bit 5    the sample's pulse sign. The ISR rotates PC left twice
+//                    and MP_NEXT_SAMPLE RLCs once more, shifting it into
+//                    SAMPLE_LO, an 8-bit sliding window compared to 0CAH.
+//   PIO2_PC bit 2    epoch flag: set on the first strobe of each GRI-
+//                    synchronous window (WAIT_EPOCH).
+//   PIO2_PB bit 5    sample acknowledge (pulsed by the ISR).
+//   PIO2_PB bit 2    latch/reset strobe (window end, INIT).
+//   PIO2_PB bit 4    shift clock for SHIFT_IN16, which reads PC bit 4 -> B
+//                    and PC bit 3 -> C, *first bit before any clock*, then 7
+//                    clocks, MSB first (each RLC x4 / RAL pair).
+//   PIO1_PB, PIO1_PA, PIO2_PA   the record REC_TO_FRONTEND writes: CUR_TOA
+//                    halved as a 32-bit binary chain (INIT_REC_FROM_TOA).
+//                    Decoded here by inverting that same transform, giving
+//                    the receiver's current TOA estimate in milliseconds --
+//                    taken to be where the receiver gates the 8 pulse slots.
+//
+// World model: one master station whose 8-pulse group begins at stationMs in
+// the same TOA frame the records use. A group alternates the phase-code words
+// per GRI interval (CA = "A" interval, 9F = "B" interval, per MATCH_PULSES'
+// two passes). Sample index j counts strobes since the epoch strobe (j = 0);
+// the sample at index j is taken at time gateMs + 4 + j -- the "+4" falls out
+// of the firmware itself: SEARCH_VERIFY applies delta = SAMPLE_CNT - 9 and
+// SAMPLE_CNT = j + 6, so a group whose first pulse sits at j = -4 needs
+// delta 0.
+//   C word (shift register 2, PC bit 3): the last 8 sample bits, oldest
+//        first -- the window FIRST_SAMPLE preloads SAMPLE_LO with.
+//   B word (shift register 1, PC bit 4): the 8 pulse slots starting at the
+//        gate (sample indices -4..3) -- equals the phase code exactly when the
+//        programmed TOA matches the station, which is what SEARCH_VERIFY tests
+//        with XRI 0CAH.
+// Not verified against hardware: the +4 offset, the 1 ms/sample assumption,
+// the B/C tap assignment, and the interval period (99 samples).
 // =====================================================================
 
 const PHASE_CODES = {
@@ -503,39 +534,97 @@ const PHASE_CODES = {
   secondary: [0xF9, 0xAC],
 };
 
+const bcd2bin = (v) => ((v >> 4) & 0xF) * 10 + (v & 0xF);
+
 class ReceiverFrontEnd {
-  constructor(cpu, pio2, which) {
-    this.cpu = cpu; this.pio2 = pio2;
+  constructor(cpu, pio2, which, pio1) {
+    this.cpu = cpu; this.pio2 = pio2; this.pio1 = pio1 || null; // Bus fills pio1 in on first tick if omitted
     this.mode = PHASE_CODES[which] ? which : 'master';
     this.words = PHASE_CODES[this.mode];
-    this.noise = 0; // 0..1, probability of flipping each shifted-out bit -- see setNoise()
+    this.noise = 0; // 0..1, probability of flipping each presented bit -- see setNoise()
     this.sampleTotal = 0;
     this.onSample = null; // optional callback, fired once per synthetic sample strobe
-    this.shift1 = 0; this.shift2 = 0; this.bitCount = 0;
+    this.shift1 = 0; this.shift2 = 0; // the two PB-clocked shift registers (-> PC4, PC3)
     this.lastPB = pio2.PB;
     this.tStateAcc = 0;
     this.sampleInterval = 20000; // T-states between synthetic samples (approximate, not real-time)
-    this.pcBits = 0;
-    pio2.pcIn = 0xFF;
+    this.periodSamples = 99;     // samples per GRI-synchronous epoch window
+    this.groupCnt = 40;          // SAMPLE_CNT at which the group first completes, for the first committed record
+    this.gateMs = null;          // decoded TOA of the last committed record
+    this.stationMs = null;       // true group start in the same frame (set from the first record + groupCnt)
+    this.sinceEpoch = this.periodSamples; // first strobe is an epoch
+    this.index = 0;              // sample index of the current strobe (0 = epoch strobe)
+    this.interval = -1;          // GRI interval counter (parity picks phase-code word)
+    this.recordCount = 0;
+    this.alignedSeen = false;    // a gated read saw the group exactly at the programmed TOA
+    this.rebased = false;        // the firmware has re-based its TOA frame after lock (see commitRecord)
+    pio2.pcIn = 0xFF & ~0x04;
     pio2.onPBWrite = (v) => this.onPBWrite(v);
+    pio2.onPAWrite = (v) => this.commitRecord(v);
   }
   setMode(which) { if (PHASE_CODES[which]) { this.mode = which; this.words = PHASE_CODES[which]; } }
   setNoise(level) { this.noise = Math.max(0, Math.min(1, level)); }
-  applyNoise(byte) {
-    if (!this.noise) return byte;
-    let b = byte;
-    for (let i = 0; i < 8; i++) if (Math.random() < this.noise) b ^= (1 << i);
-    return b;
+  // Invert INIT_REC_FROM_TOA: CUR_REC[1..3] are bytes 1..3 of (TOA32 >> 1), with
+  // byte 0 replaced by the status byte -- TOA byte 0's low bit survives as bit 7 of CUR_REC[1].
+  decodeRecord(x1, x2, x3) {
+    const t0 = x1 >> 7;
+    const t1 = ((x1 << 1) & 0xFF) | (x2 >> 7);
+    const t2 = ((x2 << 1) & 0xFF) | (x3 >> 7);
+    const t3 = (x3 << 1) & 0xFF;
+    return t0 * 100 + bcd2bin(t1) + bcd2bin(t2) / 100 + bcd2bin(t3) / 10000;
   }
-  reloadShiftRegs() { this.shift1 = this.applyNoise(this.words[0]); this.shift2 = this.applyNoise(this.words[1]); this.bitCount = 0; }
+  commitRecord(pio2PA) {
+    if (!this.pio1) return;
+    this.gateMs = this.decodeRecord(this.pio1.PB, this.pio1.PA, pio2PA & 0xFF);
+    if (!(this.pio2.PB & 1)) {
+      // Search-mode record (status 0EH: PB bit 0 clear). Anchor the synthetic station to the
+      // first search estimate (or re-anchor after a lock was lost and acquisition restarted).
+      if (this.stationMs === null || this.rebased) { this.stationMs = this.gateMs + (this.groupCnt - 9); this.rebased = false; }
+      this.alignedSeen = false;
+    } else if (this.alignedSeen && !this.rebased) {
+      // First record after a verified alignment: the firmware has just reset CUR_TOA to the GRI
+      // (MASTER_FOUND, 01D3), i.e. it re-bases its own time frame so the master's TOA is the GRI.
+      // Mirror that: the station now sits wherever this record gates, and further movement of
+      // the gate (the firmware's own tracking corrections) is measured from here.
+      this.stationMs = this.gateMs; this.rebased = true;
+    }
+    this.recordCount++;
+  }
+  groupWord() { return this.words[this.interval & 1]; }
+  // Sign bit of the station's pulse at sample index k (0 if no pulse there), before noise.
+  pulseBit(k) {
+    if (this.stationMs === null || this.gateMs === null) return 0;
+    const m = k - (Math.round(this.stationMs - this.gateMs) - 4);
+    return (m >= 0 && m < 8) ? ((this.groupWord() >> (7 - m)) & 1) : 0;
+  }
+  noisy(bit) { return (this.noise && Math.random() < this.noise) ? bit ^ 1 : bit; }
+  word(fromIndex) {
+    let w = 0;
+    for (let i = 0; i < 8; i++) w = (w << 1) | this.noisy(this.pulseBit(fromIndex + i));
+    return w;
+  }
+  presentBits() {
+    const b = (this.shift1 & 0x80) ? 0x10 : 0, c = (this.shift2 & 0x80) ? 0x08 : 0;
+    this.pio2.pcIn = (this.pio2.pcIn & ~0x18) | b | c;
+  }
+  reloadShiftRegs() {
+    this.shift1 = this.word(-4);             // B: the 8 gated pulse slots
+    // C: while searching (status bit 0 clear) the last 8 samples; once records carry status 0FH
+    // (verify/settle/track) the second channel is gated onto the same group as B -- READ_PHASE
+    // XORs both bytes against the same PHASE_REF byte, so a locked master has to read the same.
+    const gated = (this.pio2.PB & 1) !== 0;
+    this.shift2 = gated ? this.word(-4) : this.word(this.index - 7);
+    if (gated && !this.rebased && this.stationMs !== null && this.gateMs !== null &&
+        Math.round(this.stationMs - this.gateMs) === 0) this.alignedSeen = true;
+    this.presentBits();
+  }
   onPBWrite(v) {
     const rising = (bit) => !(this.lastPB & bit) && (v & bit);
     if (rising(0x04)) this.reloadShiftRegs(); // latch/reset strobe
-    if (rising(0x10)) { // shift clock: present next bit on PC4/PC3
-      const bit1 = (this.shift1 & 0x80) ? 1 : 0; this.shift1 = (this.shift1 << 1) & 0xFF;
-      const bit2 = (this.shift2 & 0x80) ? 1 : 0; this.shift2 = (this.shift2 << 1) & 0xFF;
-      this.pcBits = (this.pcBits & ~0x18) | (bit1 ? 0x10 : 0) | (bit2 ? 0x08 : 0);
-      this.pio2.pcIn = (this.pio2.pcIn & ~0x18) | this.pcBits;
+    if (rising(0x10)) { // shift clock: advance both registers, present the next MSBs
+      this.shift1 = (this.shift1 << 1) & 0xFF;
+      this.shift2 = (this.shift2 << 1) & 0xFF;
+      this.presentBits();
     }
     this.lastPB = v;
   }
@@ -543,9 +632,14 @@ class ReceiverFrontEnd {
     this.tStateAcc += tstates;
     if (this.tStateAcc < this.sampleInterval) return;
     this.tStateAcc -= this.sampleInterval;
-    // Present the epoch flag for this sample, then strobe RST 6.5.
-    this.pio2.pcIn |= 0x04;
+    const epoch = this.sinceEpoch >= this.periodSamples;
+    if (epoch) { this.sinceEpoch = 0; this.interval++; } else this.sinceEpoch++;
+    this.index = this.sinceEpoch;
     this.sampleTotal++;
+    // Present this sample: epoch flag (PC2), pulse sign (PC5), and the parallel-loaded shift words.
+    this.pio2.pcIn = epoch ? (this.pio2.pcIn | 0x04) : (this.pio2.pcIn & ~0x04);
+    this.pio2.pcIn = (this.pio2.pcIn & ~0x20) | (this.noisy(this.pulseBit(this.index)) ? 0x20 : 0);
+    this.reloadShiftRegs();
     if (this.onSample) this.onSample();
     this.cpu.requestInterrupt('6.5');
   }
@@ -637,7 +731,10 @@ class Bus {
   tick(tstates) {
     this.pio1.tick(tstates);
     this.pio2.tick(tstates);
-    if (this.frontEnd) this.frontEnd.tick(tstates);
+    if (this.frontEnd) {
+      if (!this.frontEnd.pio1) this.frontEnd.pio1 = this.pio1; // the front end decodes the PIO1 half of the record
+      this.frontEnd.tick(tstates);
+    }
     // RST 5.5 is level-sensitive from the 8279's IRQ pin (hardware.md: "KDC -up-> CPU:
     // IRQ -> RST 5.5"), not a one-shot request like the RST 6.5 sample strobe -- keep the
     // CPU's pending flag continuously synced to the chip's live IRQ output rather than

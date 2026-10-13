@@ -5,7 +5,7 @@ const { ReceiverFrontEnd } = require('../emu8085.js');
 
 function makeFrontEnd(mode) {
   const cpu = { requested: [], requestInterrupt(name) { this.requested.push(name); } };
-  const pio2 = { PB: 0, pcIn: 0xFF, onPBWrite: null };
+  const pio2 = { PB: 0, PA: 0, pcIn: 0xFF, onPBWrite: null, onPAWrite: null };
   const fe = new ReceiverFrontEnd(cpu, pio2, mode || 'master');
   return { fe, cpu, pio2 };
 }
@@ -62,36 +62,71 @@ describe('ReceiverFrontEnd: sample strobe (regression: the sampleTotal/onSample 
   });
 });
 
-describe('ReceiverFrontEnd: port B/C protocol (hardware.md\'s bit assignments)', () => {
+describe('ReceiverFrontEnd: port B/C protocol (hardware.md bit assignments)', () => {
+  // Station sits exactly at the programmed TOA, even interval -> B reads the CA (A-interval) word.
+  function aligned(mode) {
+    const r = makeFrontEnd(mode);
+    r.fe.gateMs = 0; r.fe.stationMs = 0; r.fe.interval = 0;
+    return r;
+  }
+
   it('a rising edge on PB bit 2 (latch/reset) reloads the shift registers', () => {
-    const { fe, pio2 } = makeFrontEnd('master');
+    const { fe, pio2 } = aligned('master');
     fe.shift1 = 0; fe.shift2 = 0; // perturb them first
     pio2.PB = 0;
     fe.onPBWrite(0x04); // rising edge on bit 2
     assert.equal(fe.shift1, fe.words[0]);
-    assert.equal(fe.shift2, fe.words[1]);
+    // searching (status bit 0 clear): C is the last 8 samples, window ending at index 0 -> top 5 bits of CA
+    assert.equal(fe.shift2, 0xCA >> 3);
+    pio2.PB = 1; fe.lastPB = 0; // status bit 0 set -> gated: both channels read the group
+    fe.onPBWrite(0x05);
+    assert.equal(fe.shift2, fe.words[0], 'while gated both channels read the same group');
   });
 
-  it('a rising edge on PB bit 4 (shift clock) shifts out the MSB of each word onto PC bits 4/3', () => {
-    const { fe, pio2 } = makeFrontEnd('master'); // master words: [0xCA, 0x9F] = [11001010, 10011111]
-    pio2.PB = 0;
-    fe.onPBWrite(0x04); // reload first
-    pio2.pcIn = 0x00; // zero it so the assertion actually proves the bits get set, not leftover 0xFF
-    pio2.PB = 0x04;
-    fe.onPBWrite(0x04 | 0x10); // rising edge on bit 4 (bit 2 stays high, not a new rising edge there)
-    // MSB of 0xCA is 1 -> PC bit4 set; MSB of 0x9F is 1 -> PC bit3 set
+  it('presents the MSB of each word immediately at latch (SHIFT_IN16 reads PC before any clock)', () => {
+    const { fe, pio2 } = aligned('master'); // 0xCA = 11001010 -> MSB 1
+    pio2.pcIn = 0x00;
+    pio2.PB = 1; fe.lastPB = 0; // gated
+    fe.onPBWrite(0x05);
     assert.equal(pio2.pcIn & 0x10, 0x10);
     assert.equal(pio2.pcIn & 0x08, 0x08);
+  });
+
+  it('a rising edge on PB bit 4 (shift clock) shifts both registers and presents the next MSBs', () => {
+    const { fe, pio2 } = aligned('master');
+    pio2.PB = 0;
+    fe.onPBWrite(0x04);
+    pio2.PB = 0x04;
+    fe.onPBWrite(0x04 | 0x10);
     assert.equal(fe.shift1, (0xCA << 1) & 0xFF);
-    assert.equal(fe.shift2, (0x9F << 1) & 0xFF);
+    // next MSB of 0xCA (bit 6) is 1 -> PC4 set
+    assert.equal(fe.pio2.pcIn & 0x10, 0x10);
   });
 
   it('does not reshift on a non-rising edge (bit already high)', () => {
-    const { fe, pio2 } = makeFrontEnd('master');
+    const { fe, pio2 } = aligned('master');
     pio2.PB = 0x10;
-    fe.lastPB = 0x10; // bit 4 already high last time
+    fe.lastPB = 0x10;
     const before = fe.shift1;
-    fe.onPBWrite(0x10); // no rising edge
+    fe.onPBWrite(0x10);
     assert.equal(fe.shift1, before);
+  });
+});
+
+describe('ReceiverFrontEnd: record decode and epoch/interval model', () => {
+  it('decodeRecord inverts INIT_REC_FROM_TOA: record 83 A4 C0 is 107.498 ms', () => {
+    const { fe } = makeFrontEnd();
+    assert.ok(Math.abs(fe.decodeRecord(0x83, 0xA4, 0xC0) - 107.498) < 1e-9);
+  });
+
+  it('epoch flag is set only on epoch strobes and the interval parity alternates every period', () => {
+    const { fe, pio2 } = makeFrontEnd();
+    const epochs = [];
+    const P = fe.periodSamples + 1; // strobes per epoch: sinceEpoch runs 0..periodSamples
+    for (let i = 0; i < P * 2 + 1; i++) {
+      fe.tick(fe.sampleInterval);
+      if (pio2.pcIn & 0x04) epochs.push([i, fe.interval]);
+    }
+    assert.deepEqual(epochs, [[0, 0], [P, 1], [P * 2, 2]]);
   });
 });

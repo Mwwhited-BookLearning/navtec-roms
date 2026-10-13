@@ -1,6 +1,6 @@
 # Context snapshot
 
-**Last updated:** 2026-09-07. This file is a living snapshot, overwritten
+**Last updated:** 2026-10-13. This file is a living snapshot, overwritten
 each session - it's the "what's true right now" complement to
 [docs/PROGRESS.md](docs/PROGRESS.md)'s permanent dated changelog. Read
 [CLAUDE.md](CLAUDE.md) alongside this for the operating rules.
@@ -24,10 +24,11 @@ index.
   differences over 8192 bytes as of the last commit.
 - **Emulator: working.** `src/emu/emu8085.js` boots both real ROM images
   through `INIT`/self-test/`READ_SWITCHES` and, with a valid switch panel,
-  into the real background tracking loop. 106/106 tests passing
-  (`npm test`). Has not been driven to `MASTER_FOUND` - the synthetic
-  receiver front end's bit protocol isn't verified against
-  `SHIFT_IN16`/`MATCH_PULSES` (see Open item 2 below).
+  into the real background tracking loop. 110/110 tests passing
+  (`npm test`). **Now reaches `MASTER_FOUND` and `TRACK_LOOP`** against the
+  rebuilt synthetic front end (a model; assumptions listed in
+  `docs/emulator.md` limitation 5). Locked-state behaviour (moving TD,
+  secondary mode, dropout) is untested.
 - **Web front end: working.** `src/emu/web-emu.js` + `src/emu/web/` -
   front panel, display, blinkenlights, serial console, and an illustrative
   (not real) Loran-C position-fix map. Six playbooks with screenshots in

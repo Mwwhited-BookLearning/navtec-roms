@@ -53,8 +53,10 @@ real background loop, cycling through `SERIAL_POLL`, `TX_SERVICE`,
 `WAIT_SAMPLE`, `MP_NEXT_SAMPLE` (part of `MATCH_PULSES`) and `TICK_TASK` -
 confirming the RST 6.5 interrupt path, the 8155 timer/RST 7.5 path, and the
 8279 switch-read path all work together well enough to reach the
-acquisition code. It has not been driven all the way to `MASTER_FOUND`;
-see "Known limitations" below for why.
+acquisition code. With the revised front end model it now reaches `MASTER_FOUND`
+(~970k instructions), runs the 20-pass settle loop and sits in `TRACK_LOOP`
+(`src/emu/test/lock-acquisition.test.js`); see limitation 5 for what that does
+and does not prove.
 
 Running under [the web front end](web-emulator.md) with that same switch
 combination reaches `REPORT_TASK`'s periodic serial output (real formatted
@@ -140,19 +142,29 @@ hardware-verified model, and why:
    board; nothing in the reconstructed address-decode table gives it a
    chip-select, so there was nothing to wire it to. If tracing the board
    turns up where it lives in the address space, add it to `Bus`.
-5. **The synthetic receiver front end is a plausible stimulus generator,
-   not a verified protocol implementation.** It hooks 8155 #2's port B
-   writes (bit 2 = latch/reset, bit 4 = shift clock, bit 5 = sample ack per
-   hardware.md) and shifts out the master phase-code bytes (`0xCA`, `0x9F`)
-   MSB-first on port C bits 4/3, and raises RST 6.5 on a fixed T-state
-   interval (`ReceiverFrontEnd.sampleInterval`, currently 20000 T-states -
-   picked to keep the emulator responsive, not derived from a real Loran-C
-   GRI timing budget). `SHIFT_IN16`'s exact bit-ordering expectations
-   haven't been re-verified against the disassembly for this project, so
-   getting the firmware to actually declare `MASTER_FOUND` would need that
-   verification plus tuning the strobe timing against `WAIT_EPOCH`/
-   `MATCH_PULSES`'s real windowing logic - a good next research step, not
-   done here.
+5. **The synthetic receiver front end is a model, not a verified protocol
+   implementation - but it is now a model the firmware accepts.** It was
+   rebuilt from a trace of `SHIFT_IN16` (04AE), `MATCH_PULSES`,
+   `SEARCH_VERIFY`, `REC_TO_FRONTEND` (0DE6) and the settle/QUAL chain:
+   - One RST 6.5 strobe per sample (assumed 1 ms; `WIN_END` is whole ms),
+     epoch flag on PC2 once per period, PC5 = per-sample pulse sign.
+   - `SHIFT_IN16` reads PC *before* any clock, so latch (PB bit 2) presents
+     the MSB of both words immediately; each PB bit 4 rising edge shifts.
+     B <- PC4, C <- PC3.
+   - The front end decodes each CUR_REC the firmware writes (status to
+     PIO2_PB, bytes to PIO1_PB/PIO1_PA/PIO2_PA; commit on the PIO2_PA
+     write) back to ms, and places a synthetic master (CA on even GRI
+     intervals, 9F on odd) relative to that gate. Search records
+     (status bit 0 clear) anchor it; once a verify read is aligned and
+     the firmware re-bases TOA := GRI (01D3) the model re-bases too, and
+     from then on both channels read the gated group (what READ_PHASE
+     XORs against PHASE_REF).
+   **Unverified assumptions:** the +4 gate offset, 1 ms/sample, the B/C tap
+   assignment, the 100-strobe epoch (99 + 1), record decode as ms, and the
+   post-lock re-basing. Only the master mode has been driven to lock;
+   secondary mode and timing-difference tracking under a moving signal are
+   untested. `sampleInterval` (20000 T-states) is still a responsiveness
+   choice, not real timing.
 6. **`OUT`/`IN` (8085's port-mapped I/O instructions) are stubbed as
    no-ops / open-bus reads.** hardware.md confirms the firmware never uses
    them ("No `IN`/`OUT` instructions appear anywhere. All peripherals are
@@ -230,9 +242,9 @@ Runs `node --test` (Node's built-in test runner, no extra dependency) over
 
 ## Suggested next steps
 
-- Re-verify `SHIFT_IN16` (04AE) and `MATCH_PULSES` (05C2) bit-for-bit
-  against `disasm/nt3321-22.json` and tune `ReceiverFrontEnd` to match, to
-  actually drive the emulator to `MASTER_FOUND` and into `TRACK_LOOP`.
+- Exercise the locked state: drive a moving TD, secondary mode, and signal
+  dropout (lock loss -> `ACQ_START`) against the front end, and check
+  `TRACK_LOOP`'s slot handling (`FIND_NEXT_TRACK_SLOT`, `SLOT_TRACKING`).
 - Once the [physical-verification checklist](hardware.md#physical-verification-checklist)
   is done, fold real answers back in here: the RST 7.5 source (item 2), the
   U39/8212 purpose and address if any (item 8), and the crystal path (item
