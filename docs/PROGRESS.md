@@ -7,7 +7,7 @@ need to read to know what's left.
 
 ## Open items
 
-1. **Physical-board verification.** The crystal question is resolved and
+1. **Physical-board verification** (executable plan: [board-trace-plan.md](board-trace-plan.md)). The crystal question is resolved and
    the 8205/decoder theory is confirmed (see Change history, Update 5),
    but `docs/hardware.md`'s "Physical-verification checklist" (9 items -
    RST 7.5 source, which 8155 is which, the U39/8212 conflict, the OPTION
