@@ -24,7 +24,7 @@ need to read to know what's left.
    of the image directly - some entries added earlier specifically to force
    discovery of code in the (then-missing) upper halves might now be
    redundant, though leaving them is harmless.
-4. **Datasheet gaps:** read 8251A pp.18-25 (timing diagrams) and 8279 pp.11-16 for timing (8251A sync-mode layout now verified); identify the 74-series counter/divider parts on the board and add them when read.
+4. **Datasheet gaps:** read 8251A pp.18-25 (timing diagrams) and 8279 pp.11-16 for timing (8279 pp.11-16 now read; 8251A sync-mode layout now verified); identify the 74-series counter/divider parts on the board and add them when read.
 5. **Hardware-session aids to maintain:** keep `docs/board-trace-results.md` and `docs/boot-sequence.md` in step with whatever the trace shows.
 6. **Open UX questions from the user-flow synthesis** (`docs/user-flows.md`):
    what the two push-buttons do outside set-up mode, whether display
