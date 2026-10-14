@@ -64,6 +64,12 @@ effect *at the time* - a name here may have since been superseded; treat
 this section as a historical record of reasoning, not a current reference
 (for current names, see `docs/jump-graph.md`).
 
+### Update 18 (2026-10-14): loss-of-signal switch
+
+`ReceiverFrontEnd.setSignal(on)` added (+ a unit test). 85M steps with the
+signal off produced no lock-loss/re-acquire (see `docs/emulator.md`); the
+restart path via `RESTART_REQ` (button) is the next thing to try.
+
 ### Update 17 (2026-10-14): regression tests and locked-state exploration
 
 `src/emu/test/bcd-layout.test.js` pins the big-endian 0.1 us BCD layout

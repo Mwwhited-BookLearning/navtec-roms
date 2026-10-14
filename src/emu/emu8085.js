@@ -546,6 +546,7 @@ class ReceiverFrontEnd {
     this.cpu = cpu; this.pio2 = pio2; this.pio1 = pio1 || null; // Bus fills pio1 in on first tick if omitted
     this.mode = PHASE_CODES[which] ? which : 'master';
     this.words = PHASE_CODES[this.mode];
+    this.signalOn = true; // false = the station is off the air: no pulses are presented (lock-loss testing)
     this.noise = 0; // 0..1, probability of flipping each presented bit -- see setNoise()
     this.sampleTotal = 0;
     this.onSample = null; // optional callback, fired once per synthetic sample strobe
@@ -568,6 +569,7 @@ class ReceiverFrontEnd {
     pio2.onPAWrite = (v) => this.commitRecord(v);
   }
   setMode(which) { if (PHASE_CODES[which]) { this.mode = which; this.words = PHASE_CODES[which]; } }
+  setSignal(on) { this.signalOn = !!on; }
   setNoise(level) { this.noise = Math.max(0, Math.min(1, level)); }
   // Invert INIT_REC_FROM_TOA: CUR_REC[1..3] are bytes 1..3 of (TOA32 >> 1), with
   // byte 0 replaced by the status byte -- TOA byte 0's low bit survives as bit 7 of CUR_REC[1].
@@ -598,7 +600,7 @@ class ReceiverFrontEnd {
   groupWord() { return this.words[this.interval & 1]; }
   // Sign bit of the station's pulse at sample index k (0 if no pulse there), before noise.
   pulseBit(k) {
-    if (this.stationMs === null || this.gateMs === null) return 0;
+    if (!this.signalOn || this.stationMs === null || this.gateMs === null) return 0;
     const m = k - (Math.round(this.stationMs - this.gateMs) - this.gateOffset);
     return (m >= 0 && m < 8) ? ((this.groupWord() >> (7 - m)) & 1) : 0;
   }

@@ -148,3 +148,15 @@ describe('ReceiverFrontEnd: sensitivity options', () => {
     assert.equal(pio2.pcIn & 0x18, 0x08, 'B word MSB now appears on PC3');
   });
 });
+
+describe('ReceiverFrontEnd: signal on/off', () => {
+  it('setSignal(false) makes pulseBit return 0 even with a station anchored', () => {
+    const { fe } = makeFrontEnd();
+    fe.stationMs = 10; fe.gateMs = 10; fe.interval = 0;
+    assert.equal(fe.signalOn, true);
+    const anyOn = [0, 1, 2, 3, 4, 5, 6, 7].some((k) => fe.pulseBit(k - 4 + 4) === 1);
+    assert.ok(anyOn, 'with the signal on, some pulse slot should be 1');
+    fe.setSignal(false);
+    for (let k = -8; k < 12; k++) assert.equal(fe.pulseBit(k), 0);
+  });
+});

@@ -293,3 +293,12 @@ nothing visible in the same window (the 80H state persists; slot 0 keeps
 being re-seeded), so a true lock-loss -> re-acquire path still needs a model
 that can drop the master (not yet written). `lock-acquisition.test.js` now
 asserts only no-runaway (PC stays in ROM, state stays in the known set).
+
+**Loss of signal.** `ReceiverFrontEnd.setSignal(false)` takes the station off
+the air (no pulses presented). Run for 85M steps after `TRACK_LOOP` with the
+signal off, the firmware never reaches `SLOT_TRK_LOST` (0366) or re-enters
+`ACQ_START` - it just keeps counting misses (about 1 per 225k steps, reset
+by the `MISS_LIMIT` `TOA_ALT` swap). So in this model a lost master does not
+force re-acquisition within a practical run length; whether the real firmware
+drops back only via the `SLOT_TRACKING` miss-limit path or needs a front-panel
+restart (`RESTART_REQ`) is still untested.
