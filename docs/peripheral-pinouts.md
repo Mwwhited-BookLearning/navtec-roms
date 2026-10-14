@@ -12,9 +12,9 @@ confidence, marked explicitly per chip. Don't skip the caveats.
 
 | Chip | IC pin numbers | Board connector pinout (J1/P4/P5/P7/J8) |
 |---|---|---|
-| 8279 (U36) | **Verified** - cross-checked against two independent pin-diagram sources | Not known - see below |
-| 8155 x2 (U22/U35) | Pin *functions* confirmed from a real datasheet description; exact pin **numbers** not independently verified in this session | Not known |
-| 8251A (U32) | Pin *functions* well-established for this chip family; exact pin **numbers** not independently verified in this session | Not known |
+| 8279 (U36) | **Verified** - Intel datasheet 290123-002 pin diagram, plus two earlier independent sources | Not known - see below |
+| 8155 x2 (U22/U35) | **Verified** - Intel 8155H/8156H datasheet 231719-001, Figure 2 (pin diagram read from the scan) | Not known |
+| 8251A (U32) | **Verified** - Intel 8251A datasheet 205222-002, Figure 2 (pin diagram read from the scan) | Not known |
 
 **The board's actual external connectors (J1 `READOUT`, P4 `PWR/DIM`, P5
 `IO/TLS`, P7 `TRF`, J8 `OPTION`) have never been traced pin-by-pin against
@@ -75,8 +75,30 @@ unknown `J1` connector pinout entirely.
 
 ## Intel 8155 (U22/U35) - RAM/IO/timer, one per chip
 
-Pin **functions** (both chips are identical parts, wired to different
-address ranges - see hardware.md):
+Pin numbers verified against Intel's 8155H/8156H datasheet (231719-001,
+Dec 1986, Figure 2). Both chips are identical parts, wired to different
+address ranges - see hardware.md.
+
+| Pin | Signal | Pin | Signal |
+|---|---|---|---|
+| 1 | PC3 | 21-28 | PA0-PA7 (PA0 = 21) |
+| 2 | PC4 | 29-36 | PB0-PB7 (PB0 = 29) |
+| 3 | TIMER IN | 37 | PC0 |
+| 4 | RESET | 38 | PC1 |
+| 5 | PC5 | 39 | PC2 |
+| 6 | TIMER OUT | 40 | Vcc |
+| 7 | IO/M | 12-19 | AD0-AD7 |
+| 8 | CE (8155/8155H: active low `CE`; **8156/8156H: active high `CE`**) | 20 | Vss |
+| 9 | RD | 10 | WR |
+| 11 | ALE | | |
+
+So for the firmware's front-end use of 8155 #2: PB2 = pin 31 (latch),
+PB4 = pin 33 (shift clock), PB5 = pin 34 (ack); PC2 = pin 39 (epoch flag),
+PC3 = pin 1, PC4 = pin 2 (the two serial streams), PC5 = pin 5 (sample
+pulse). Check the part marking: an 8155 and an 8156 differ only in the
+polarity of pin 8, which matters when tracing the decoder output to it.
+
+Functions:
 
 | Signal | Function |
 |---|---|
@@ -93,10 +115,8 @@ address ranges - see hardware.md):
 | `TIMER OUT` | Timer output (hardware.md's guessed RST 7.5 source, for the 8155 at E000) |
 | `Vcc`, `Vss` | Power |
 
-**Pin numbers not independently verified in this session** - the 8155 is a
-40-pin DIP; cross-check against the actual Intel 8155/8156 datasheet
-before wiring. What *is* confirmed (from hardware.md's software-derived
-analysis) is which ports do what in this firmware:
+What is confirmed (from hardware.md's software-derived analysis) is which
+ports do what in this firmware:
 
 | Chip (assumed per hardware.md, not physically confirmed - see checklist item 3) | Port | Use in this firmware |
 |---|---|---|
@@ -109,8 +129,26 @@ analysis) is which ports do what in this firmware:
 
 ## Intel 8251A (U32) - USART
 
-Pin **functions** (28-pin DIP; pin numbers not independently verified in
-this session - cross-check the datasheet):
+Pin numbers verified against Intel's 8251A datasheet (205222-002, Figure 2):
+
+| Pin | Signal | Pin | Signal |
+|---|---|---|---|
+| 1 | D2 | 15 | TxRDY |
+| 2 | D3 | 16 | SYNDET/BD |
+| 3 | RxD | 17 | CTS |
+| 4 | GND | 18 | TxEMPTY |
+| 5 | D4 | 19 | TxD |
+| 6 | D5 | 20 | CLK |
+| 7 | D6 | 21 | RESET |
+| 8 | D7 | 22 | DSR |
+| 9 | TxC | 23 | RTS |
+| 10 | WR | 24 | DTR |
+| 11 | CS | 25 | RxC |
+| 12 | C/D | 26 | Vcc |
+| 13 | RD | 27 | D0 |
+| 14 | RxRDY | 28 | D1 |
+
+Functions:
 
 | Signal | Function |
 |---|---|
@@ -132,9 +170,8 @@ photos, which is what actually reaches the multi-drop RS-422/485 bus - the
 ## What to do if you need real numbers
 
 1. **Read the actual chip.** All three parts have their part number
-   printed on the package; look it up directly rather than trusting any
-   pin-numbered table (including this one for the 8155/8251A) without
-   cross-checking.
+   printed on the package; confirm 8155 vs 8156 (pin 8 polarity) and the
+   speed grade/suffix.
 2. **If reverse-engineering the existing board**, the
    [physical-verification checklist](hardware.md#physical-verification-checklist)'s
    item 9 (trace `J1` against the 8279) is the natural next step, and the
@@ -143,5 +180,5 @@ photos, which is what actually reaches the multi-drop RS-422/485 bus - the
 3. **If building new**, you don't need the original connector pinout at
    all - wire your new panel/interface directly to the chip pins per the
    function tables above (using the 8279's *verified* numbers, and
-   datasheet-confirmed numbers for the other two), and define your own
+   datasheet-verified numbers for all three), and define your own
    connector pinout as part of the new design.
