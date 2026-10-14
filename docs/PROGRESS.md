@@ -27,6 +27,7 @@ need to read to know what's left.
    what the two push-buttons do outside set-up mode, whether display
    dimming is firmware-controlled at all, and what the display shows during
    acquisition/tracking before a station locks.
+
 None of these are urgent - the ROM is fully recovered, analyzed, and named
 (0 generic routines/variables); everything above is either "needs the
 physical board" or "would be nice, not required."
@@ -60,13 +61,21 @@ effect *at the time* - a name here may have since been superseded; treat
 this section as a historical record of reasoning, not a current reference
 (for current names, see `docs/jump-graph.md`).
 
+### Update 13 (2026-10-13): datasheet recreations
+
+New `docs/datasheets/` with own-words markdown recreations (PlantUML block
+diagrams, pinouts, register bit fields, tables, "this firmware" sections) of
+the 8155H, 8251A and 8279 datasheets, built from the Intel scans. Index in
+`docs/datasheets/README.md`. 8085/8205/8212/AM26LS32 not done (no readable
+source located).
+
 ### Update 12 (2026-10-13): datasheet-verified pin numbers, board trace plan
 
-Added  (phased plan for a bare board: power-off
+Added `docs/board-trace-plan.md` (phased plan for a bare board: power-off
 inspection, continuity tracing, first power-up, live probes). Pulled Intel's
 own 8155H (231719-001), 8251A (205222-002) and 8279 (290123-002) datasheets
 and read their pin diagrams: 8155/8251A pin numbers in
- are now verified (Open item 5 closed); the
+`docs/peripheral-pinouts.md` are now verified (Open item 5 closed); the
 8279 table matched. Note the 8155/8156 CE polarity difference for tracing.
 8085 and 8205 pin numbers come from secondary sources/74LS138 equivalence
 (no Intel scan found) and are marked so.

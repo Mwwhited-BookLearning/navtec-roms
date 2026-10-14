@@ -16,6 +16,11 @@ index.
 
 ## Current state
 
+- **Datasheets:** `docs/datasheets/` holds recreated 8155/8251A/8279
+  datasheets; pin numbers are verified (see `docs/peripheral-pinouts.md`).
+  Board work is gated on the user powering the bare board - see
+  `docs/board-trace-plan.md`.
+
 - **Disassembly: complete.** 0 of 137 routines and 0 of 175 variables
   remain generically named. 3 addresses (`VAR_6FCB`, `VAR_6FD9`, `D_1004`)
   are deliberately still placeholder-named - each individually
