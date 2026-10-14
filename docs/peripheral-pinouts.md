@@ -182,3 +182,8 @@ photos, which is what actually reaches the multi-drop RS-422/485 bus - the
    function tables above (using the 8279's *verified* numbers, and
    datasheet-verified numbers for all three), and define your own
    connector pinout as part of the new design.
+
+## Other ICs
+
+Pin tables for the 8085, 8205 (verified), 8212 and AM26LS32 are in
+[datasheets/](datasheets/README.md).

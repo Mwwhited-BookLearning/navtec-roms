@@ -24,7 +24,7 @@ need to read to know what's left.
    of the image directly - some entries added earlier specifically to force
    discovery of code in the (then-missing) upper halves might now be
    redundant, though leaving them is harmless.
-4. **Remaining datasheets:** 8205 (74LS138 equivalent, no Intel scan), 8212, AM26LS32; read 8251A pp.15-25 and 8279 pp.11-16 for timing and verify the 8251A sync-mode bit layout (written from memory).
+4. **Datasheet gaps:** read 8251A pp.15-25 and 8279 pp.11-16 for timing and verify the 8251A sync-mode bit layout (written from memory); identify the 74-series counter/divider parts on the board and add them when read.
 5. **Hardware-session aids to maintain:** keep `docs/board-trace-results.md` and `docs/boot-sequence.md` in step with whatever the trace shows.
 6. **Open UX questions from the user-flow synthesis** (`docs/user-flows.md`):
    what the two push-buttons do outside set-up mode, whether display
@@ -63,6 +63,14 @@ Dated log of completed work, newest first. Old entries use the names in
 effect *at the time* - a name here may have since been superseded; treat
 this section as a historical record of reasoning, not a current reference
 (for current names, see `docs/jump-graph.md`).
+
+### Update 15 (2026-10-14): remaining datasheets
+
+Added `docs/datasheets/8205.md`, `8212.md`, `AM26LS32.md`. The 8205 and 8212
+are from Intel's Component Data Catalog (Jan 1982) - the 8205 pinout and
+truth table are now **verified** rather than assumed from the 74LS138; the
+AM26LS32 is from the TI AM26LS32A datasheet (compatible part, noted as such).
+Trace plan 1.1 updated accordingly (E3 is active high).
 
 ### Update 14 (2026-10-14): pre-hardware preparation
 
