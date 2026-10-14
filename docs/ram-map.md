@@ -47,7 +47,7 @@ M = consistent reading, L = placeholder name).
 | 6FBB | `PHASE_REF` | 1 | H | XOR reference for `PHASE_CODE` (channel 1) |
 | 6FBC | `PHASE_REF_HI` | 1 | H | XOR reference for `PHASE_CODE_HI` (channel 2); `EPOCH_PHASE_UPDATE` copies this into `PHASE_REF` after the alternator runs, forcing both channels to the same reference each epoch - why is unresolved |
 | 6FBD | `PHASE_QUAL_FLAGS` | 1 | M | set by `PHASE_QUALITY_UPDATE` when a quality accumulator saturates; copied into `PULSE_ALIGN_FLAGS` each epoch |
-| 6FBE | `PULSE_ALIGN_FLAGS` | 1 | M | refreshed from `PHASE_QUAL_FLAGS` every epoch by `EPOCH_PHASE_UPDATE`; consumed by `PULSE_ALIGN_ADJ` to correct `CUR_TOA` by whole pulse-intervals |
+| 6FBE | `PULSE_ALIGN_FLAGS` | 1 | M | refreshed from `PHASE_QUAL_FLAGS` every epoch by `EPOCH_PHASE_UPDATE`; consumed by `PULSE_ALIGN_ADJ` to correct `CUR_TOA` by whole 10 us carrier cycles (10/20/30/60 us) |
 | 6FBF | `PHASE_CODE` | 2 | H | last shift-register words after XOR (`PHASE_CODE_HI` = 6FC0) |
 | 6FC1 | `DISP_MODE` | 1 | M | 1 -> `MASTER_SEC_PULSE_HANDOFF`, 2 -> `ACTIVATE_SELECTED_SLOT` in the track loop; despite the name, neither task touches the display (see firmware.md's correction) |
 | 6FC4 | `BUTTONS` | 1 | H | push-button bits from sensor rows 6/7 (bits 7, 6) |
@@ -100,7 +100,7 @@ M = consistent reading, L = placeholder name).
 | 70BE | `STOPWATCH_B_SEC` | 1 | H | mod-60H BCD field of the same counter; displayed as `DISP_ROW_B`'s last digit-pair in set-up mode |
 | 70BF | `STATUS_BITS` | 1 | M | bit 7 set/cleared by button edges in set-up |
 | 70C0 | `SEL_QUEUE_0`..`SEL_QUEUE_2` | 3 | H | 3-element FIFO of operator-selected slot numbers, filled by `QUEUE_SLOT_SEL` and drained by `DEQUEUE_SLOT_SEL` |
-| 70C3 | `MASTER_TOA_CORR` | 4 | M | master-only pulse-interval correction term, adjusted by `MASTER_CORR_ADJ`/`MASTER_CORR_ADD_3000`, added into the master's running sum by `ACCUM_SLOT_TOA` |
+| 70C3 | `MASTER_TOA_CORR` | 4 | M | master-only TOA correction term (10-60 us cycle steps), adjusted by `MASTER_CORR_ADJ`/`MASTER_CORR_ADD_30US`, added into the master's running sum by `ACCUM_SLOT_TOA` |
 | 70C8 | `SW_D1`..`SW_D4` | 4 | H | GRI wheels as read (0BH = blank) |
 | 70CC | `SW_HI`, `SW_LO` | 2 | H | latched wheels as two packed BCD bytes; also cascaded as BCD clock digits by `TICK_CLOCK_CASCADE` (unreconciled dual use, see firmware.md) |
 | 70CE | `SW_LATCHED` | 1 | H | 1 after latching in set-up |

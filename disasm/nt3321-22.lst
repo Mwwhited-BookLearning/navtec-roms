@@ -9,23 +9,28 @@ REC_ROTATE_COUNT:                            ; = 0003, inside the next instructi
 
 ; Table of six 4-byte packed-BCD constants (little-endian, LS byte first).
 ; DISP_ALLSEGS_PATTERN (888888) is the classic all-segments-lit LED test pattern, consumed by
-; DISP_TEST_TICK (19E7). TOA_ADJ_2000/_3000/_6000/_1000 (0008-0014,
-; overlapping 4-byte windows into the same byte run) are now confirmed pulse-interval
-; adjustment constants - see PULSE_ALIGN_ADJ (0E6D) - values 2000, 3000, 6000, 1000 in
-; CUR_TOA's BCD units, i.e. 2, 3, 6 and 1 times the ~1000us Loran-C inter-pulse spacing.
-; BCD_K_00080980 and BCD_K_00000110 are passed to TOA_ADD_CONST (0EC1, still needs its
-; other 4 callers traced to say what they mean there).
+; DISP_TEST_TICK (19E7). TOA_ADJ_20US/_30US/_60US/_10US (0008-0014,
+; overlapping 4-byte windows into the same byte run) are TOA adjustment constants - see
+; PULSE_ALIGN_ADJ (0E6D). BCD_ADD4 carries from the HIGHEST address down, so the bytes are
+; big-endian in memory (MS byte at the lowest address) and CUR_TOA is in units of 0.1 us:
+; measured in the emulator, GRI 9940 sits in GRI_BCD as 00 99 40 00 = 99,400.0 us. So these
+; windows are 00000200 / 300 / 600 / 100 = 20, 30, 60 and 10 us - whole 100 kHz carrier
+; cycles (10 us each), NOT multiples of the 1000 us pulse spacing as an earlier reading of
+; these bytes as '2000' etc. had it (hence the _20US/_30US/_60US/_10US names).
+; BCD_K_00080980 = 8098.0 us is added to the master record in ACQ_START (014C) to seed the
+; secondary search record; BCD_K_00000110 = 11.0 us is added on each missed group in
+; SLOT_TRK_MISS (034D) - a slide of the search window. Both go through TOA_ADD_CONST (0EC1).
 BCD_CONST_TBL:                               
 0004  08         DB   08H                    ; |.|
 DISP_ALLSEGS_PATTERN:                        ; refs: lxi1A03 lxi1A06 lxi1AA0 lxi1AAB
 0005  88 88 88   DB   88H,88H,88H            ; |...|
-TOA_ADJ_2000:                                ; refs: lxi0EAC lxi0EC7 lxi0CCE
+TOA_ADJ_20US:                                ; refs: lxi0EAC lxi0EC7 lxi0CCE
 0008  00 00 02   DB   00H,00H,02H            ; |...|
-TOA_ADJ_3000:                                ; refs: lxi0EB2 lxi0ECD lxi0CF5
+TOA_ADJ_30US:                                ; refs: lxi0EB2 lxi0ECD lxi0CF5
 000B  00 00 03   DB   00H,00H,03H            ; |...|
-TOA_ADJ_6000:                                ; refs: lxi0ED3 lxi0EB8 lxi0CDF
+TOA_ADJ_60US:                                ; refs: lxi0ED3 lxi0EB8 lxi0CDF
 000E  00 00 06   DB   00H,00H,06H            ; |...|
-TOA_ADJ_1000:                                ; refs: lxi0EBE lxi0EA3
+TOA_ADJ_10US:                                ; refs: lxi0EBE lxi0EA3
 0011  00 00 01   DB   00H,00H,01H            ; |...|
 BCD_K_00080980:                              ; refs: lxi0149
 0014  00 08 09 80  DB   00H,08H,09H,80H        ; |....|
@@ -1333,7 +1338,7 @@ L_0810:                                      ; xref: j0813
 ; this is a single 16-bit store, so it sets BOTH PHASE_REF (low byte, e.g. CAH) AND
 ; PHASE_REF_HI (high byte, e.g. F9H) in one instruction. Then CALL LOAD_CUR_REC, then a
 ; conditional block gated on PULSE_ALIGN_FLAGS bit 0, running PULSE_ALIGN_ADJ and
-; conditionally TOA_ADD_1000/TOA_SUB_1000/TOA_SUB_3000. After that block (taken or not),
+; conditionally TOA_ADD_10US/TOA_SUB_10US/TOA_SUB_30US. After that block (taken or not),
 ; PHASE_REF's LOW byte only is overwritten with PHASE_REF_HI's value (LDA PHASE_REF_HI;
 ; STA PHASE_REF - previously misread as an independent "M_6FBC" variable with an
 ; unreconciled role; it's PHASE_REF's own second byte, not separate state). Net effect: after
@@ -1355,14 +1360,14 @@ EPOCH_PHASE_UPDATE:                          ; xref: c01E7 c023A
 0825  CA 3A 08   JZ L_083A
 0828  CD 6D 0E   CALL PULSE_ALIGN_ADJ
 082B  F5         PUSH PSW
-082C  DC BE 0E   CC TOA_ADD_1000
+082C  DC BE 0E   CC TOA_ADD_10US
 082F  F1         POP PSW
 0830  07         RLC
 0831  F5         PUSH PSW
-0832  DC A3 0E   CC TOA_SUB_1000
+0832  DC A3 0E   CC TOA_SUB_10US
 0835  F1         POP PSW
 0836  07         RLC
-0837  DC B2 0E   CC TOA_SUB_3000
+0837  DC B2 0E   CC TOA_SUB_30US
 L_083A:                                      ; xref: j0825
 083A  CD 1B 09   CALL ACCUM_SLOT_TOA
 083D  3A BC 6F   LDA PHASE_REF_HI
@@ -1424,7 +1429,7 @@ L_089F:                                      ; xref: j0896
 
 ; HANDLE_ACQUIRING_SLOT (was X_08A9; called from TRACK_NEXT_SLOT when the current
 ; slot's flags bit 6 - "acquiring" - is set, per firmware.md). Calls SLOT_STALE_CHECK,
-; then PULSE_ALIGN_ADJ_6FBE plus two more RLCs and a CC TOA_SUB_3000 (that pair of extra
+; then PULSE_ALIGN_ADJ_6FBE plus two more RLCs and a CC TOA_SUB_30US (that pair of extra
 ; RLCs tests PULSE_ALIGN_FLAGS's original bit 1, after the 5 the cascade already consumed
 ; testing bits 7,6,5,4). If RESTART_REQ==1, falls to SAVE_CUR_REC. Otherwise reads BUTTONS and
 ; the byte right after it (SEL_A) and branches on SEL_A against 0AH/0BH/0CH (the same
@@ -1438,7 +1443,7 @@ HANDLE_ACQUIRING_SLOT:                       ; xref: c025C
 08AC  CD 6A 0E   CALL PULSE_ALIGN_ADJ_6FBE
 08AF  07         RLC
 08B0  07         RLC
-08B1  DC B2 0E   CC TOA_SUB_3000
+08B1  DC B2 0E   CC TOA_SUB_30US
 08B4  3A CE 6F   LDA RESTART_REQ
 08B7  FE 01      CPI 01H
 08B9  C2 75 08   JNZ SAVE_CUR_REC
@@ -2085,8 +2090,8 @@ L_0C96:                                      ; xref: j0C73
 0C96  3E 01      MVI A,01H
 0C98  32 B7 6F   STA CUR_MODE
 0C9B  73         MOV M,E
-0C9C  CD E8 0C   CALL MASTER_CORR_ADD_3000
-0C9F  CD CD 0E   CALL TOA_ADD_3000
+0C9C  CD E8 0C   CALL MASTER_CORR_ADD_30US
+0C9F  CD CD 0E   CALL TOA_ADD_30US
 0CA2  0E 02      MVI C,02H
 
 ; SET_QUAL_FLAGS (was SUB_0CA4). Clears MATCH_SCORE_HI, ORs C's bits into PHASE_QUAL_FLAGS,
@@ -2112,13 +2117,13 @@ L_0CB1:                                      ; xref: j0C5D j0C78 j0C93
 0CB1  CD A4 0C   CALL SET_QUAL_FLAGS
 0CB4  07         RLC
 0CB5  CD BE 0C   CALL MASTER_CORR_ADJ
-0CB8  DA B8 0E   JC TOA_SUB_6000
+0CB8  DA B8 0E   JC TOA_SUB_60US
 0CBB  C3 C7 0E   JMP L_0EC7
 
 ; MASTER_CORR_ADJ (was SUB_0CBE). Only acts when SLOT_IDX==0 (master): adds
-; TOA_ADJ_2000 or subtracts TOA_ADJ_6000 to/from MASTER_TOA_CORR (70C3) depending on a
-; carry flag passed in from the caller. MASTER_CORR_ADD_3000 (0CE8) is the same shape,
-; always adding TOA_ADJ_3000, no carry test. Both correct MASTER_TOA_CORR rather than
+; TOA_ADJ_20US or subtracts TOA_ADJ_60US to/from MASTER_TOA_CORR (70C3) depending on a
+; carry flag passed in from the caller. MASTER_CORR_ADD_30US (0CE8) is the same shape,
+; always adding TOA_ADJ_30US, no carry test. Both correct MASTER_TOA_CORR rather than
 ; CUR_TOA directly - MASTER_TOA_CORR is the term ACCUM_SLOT_TOA (091B) adds into the
 ; master's running sum, so these are indirect, master-only pulse-interval corrections
 ; that only take effect on the next accumulation pass.
@@ -2130,24 +2135,24 @@ MASTER_CORR_ADJ:                             ; xref: c0CB5
 0CC6  3A 11 6F   LDA SLOT_IDX
 0CC9  FE 00      CPI 00H
 0CCB  C2 FB 0C   JNZ L_0CFB
-0CCE  21 08 00   LXI H,TOA_ADJ_2000
+0CCE  21 08 00   LXI H,TOA_ADJ_20US
 0CD1  CD 82 07   CALL BCD_ADD4
 0CD4  C3 FB 0C   JMP L_0CFB
 L_0CD7:                                      ; xref: j0CC3
 0CD7  3A 11 6F   LDA SLOT_IDX
 0CDA  FE 00      CPI 00H
 0CDC  C2 FB 0C   JNZ L_0CFB
-0CDF  21 0E 00   LXI H,TOA_ADJ_6000
+0CDF  21 0E 00   LXI H,TOA_ADJ_60US
 0CE2  CD 9F 07   CALL BCD_SUB4
 0CE5  C3 FB 0C   JMP L_0CFB
-MASTER_CORR_ADD_3000:                        ; xref: c0C9C
+MASTER_CORR_ADD_30US:                        ; xref: c0C9C
 0CE8  F5         PUSH PSW
 0CE9  C5         PUSH B
 0CEA  01 C3 70   LXI B,MASTER_TOA_CORR
 0CED  3A 11 6F   LDA SLOT_IDX
 0CF0  FE 00      CPI 00H
 0CF2  C2 FB 0C   JNZ L_0CFB
-0CF5  21 0B 00   LXI H,TOA_ADJ_3000
+0CF5  21 0B 00   LXI H,TOA_ADJ_30US
 0CF8  CD 82 07   CALL BCD_ADD4
 L_0CFB:                                      ; xref: j0CCB j0CD4 j0CDC j0CE5 j0CF2
 0CFB  C1         POP B
@@ -2457,38 +2462,39 @@ PULSE_ALIGN_ADJ_6FBE:                        ; xref: c08AC
 
 ; PULSE_ALIGN_ADJ: A = flags byte (normally PULSE_ALIGN_FLAGS, was M_6FBE). Tests bits
 ; 7,6,5,4 in that order (successive RLC), independently CALLing (any/all can fire):
-; bit7 -> TOA_SUB_1000, bit6 -> TOA_ADD_1000, bit5 -> TOA_ADD_6000, bit4 -> TOA_SUB_2000.
-; Corrects CUR_TOA by whole multiples of the ~1000us Loran-C inter-pulse spacing - the fix
-; for the phase-code correlator locking onto the wrong pulse within the 8-pulse group.
+; bit7 -> TOA_SUB_10US, bit6 -> TOA_ADD_10US, bit5 -> TOA_ADD_60US, bit4 -> TOA_SUB_20US.
+; Corrects CUR_TOA by whole carrier cycles (10, 20, 30, 60 us at 0.1 us/unit; see 0004) -
+; a cycle-slip / cycle-selection style correction. (An earlier reading of these as ~1000 us
+; pulse-spacing multiples, i.e. a wrong-pulse fix, came from misreading the constants.)
 ; PULSE_ALIGN_ADJ_6FBE (0E6A) is the same cascade pre-loaded with A = PULSE_ALIGN_FLAGS.
 ; PULSE_ALIGN_ADJ2 (0E87) is a shorter 2-bit variant (bit7/bit6 only, i.e. just the
-; +-1000 pair).
+; +-10 us pair).
 PULSE_ALIGN_ADJ:                             ; xref: c0828
 0E6D  07         RLC
 0E6E  F5         PUSH PSW
-0E6F  DC A3 0E   CC TOA_SUB_1000
+0E6F  DC A3 0E   CC TOA_SUB_10US
 0E72  F1         POP PSW
 0E73  07         RLC
 0E74  F5         PUSH PSW
-0E75  DC BE 0E   CC TOA_ADD_1000
+0E75  DC BE 0E   CC TOA_ADD_10US
 0E78  F1         POP PSW
 0E79  07         RLC
 0E7A  F5         PUSH PSW
-0E7B  DC D3 0E   CC TOA_ADD_6000
+0E7B  DC D3 0E   CC TOA_ADD_60US
 0E7E  F1         POP PSW
 0E7F  07         RLC
 0E80  F5         PUSH PSW
-0E81  DC AC 0E   CC TOA_SUB_2000
+0E81  DC AC 0E   CC TOA_SUB_20US
 0E84  F1         POP PSW
 0E85  07         RLC
 0E86  C9         RET
 PULSE_ALIGN_ADJ2:                            ; xref: c0E92 c08E5
 0E87  07         RLC
 0E88  F5         PUSH PSW
-0E89  DC A3 0E   CC TOA_SUB_1000
+0E89  DC A3 0E   CC TOA_SUB_10US
 0E8C  F1         POP PSW
 0E8D  07         RLC
-0E8E  DC BE 0E   CC TOA_ADD_1000
+0E8E  DC BE 0E   CC TOA_ADD_10US
 0E91  C9         RET
 PULSE_ALIGN_ADJ2_AND_CLEAR:                  ; xref: c0872 j0C34
 0E92  CD 87 0E   CALL PULSE_ALIGN_ADJ2
@@ -2505,43 +2511,44 @@ CLEAR_TRACK_VARS:                            ; xref: c08EB
 0E9E  7C         MOV A,H
 0E9F  32 B2 6F   STA MATCH_SCORE_HI
 0EA2  C9         RET
-TOA_SUB_1000:                                ; xref: c0E89 c0E6F c0832
-0EA3  21 11 00   LXI H,TOA_ADJ_1000
+TOA_SUB_10US:                                ; xref: c0E89 c0E6F c0832
+0EA3  21 11 00   LXI H,TOA_ADJ_10US
 
 ; TOA_SUB_CONST: HL = pointer to a 4-byte BCD constant. CUR_TOA -= (HL). The subtract
-; sibling of TOA_ADD_CONST (0EC1); TOA_SUB_1000/_2000/_3000/_6000 are fixed-constant
+; sibling of TOA_ADD_CONST (0EC1); TOA_SUB_10US/_20US/_30US/_60US are fixed-constant
 ; entry points into this same tail (see PULSE_ALIGN_ADJ, 0E6D).
 TOA_SUB_CONST:                               ; xref: j0EB5 j0EAF c0B6E c0B83 j0EBB
 0EA6  01 A5 6F   LXI B,CUR_TOA
 0EA9  C3 9F 07   JMP BCD_SUB4
-TOA_SUB_2000:                                ; xref: c0E81
-0EAC  21 08 00   LXI H,TOA_ADJ_2000
+TOA_SUB_20US:                                ; xref: c0E81
+0EAC  21 08 00   LXI H,TOA_ADJ_20US
 0EAF  C3 A6 0E   JMP TOA_SUB_CONST
-TOA_SUB_3000:                                ; xref: c08B1 c0837
-0EB2  21 0B 00   LXI H,TOA_ADJ_3000
+TOA_SUB_30US:                                ; xref: c08B1 c0837
+0EB2  21 0B 00   LXI H,TOA_ADJ_30US
 0EB5  C3 A6 0E   JMP TOA_SUB_CONST
-TOA_SUB_6000:                                ; xref: j0CB8
-0EB8  21 0E 00   LXI H,TOA_ADJ_6000
+TOA_SUB_60US:                                ; xref: j0CB8
+0EB8  21 0E 00   LXI H,TOA_ADJ_60US
 0EBB  C3 A6 0E   JMP TOA_SUB_CONST
-TOA_ADD_1000:                                ; xref: c0E8E c0E75 c082C
-0EBE  21 11 00   LXI H,TOA_ADJ_1000
+TOA_ADD_10US:                                ; xref: c0E8E c0E75 c082C
+0EBE  21 11 00   LXI H,TOA_ADJ_10US
 
 ; TOA_ADD_CONST (was X_0EC1; the old rom-status.md guess "add BCD constant to CUR_TOA"
 ; was exactly right). HL = pointer to a 4-byte BCD constant. CUR_TOA += (HL).
-; TOA_ADD_1000/_3000/_6000 are fixed-constant entry points into this same tail (see
-; PULSE_ALIGN_ADJ, 0E6D); the other 4 callers pass BCD_K_00080980 or BCD_K_00000110
-; (0004's table) or another caller-chosen constant, not yet individually traced.
+; TOA_ADD_10US/_30US/_60US are fixed-constant entry points into this same tail (see
+; PULSE_ALIGN_ADJ, 0E6D). The direct callers: ACQ_START (014C, BCD_K_00080980 = 8098.0 us),
+; SEARCH_VERIFY (0197, BCD_DELTA_2), SLOT_TRK_MISS (034D, BCD_K_00000110 = 11.0 us) and
+; PULSE_SCORE_UPDATE (0B48/0B5B, HL = TD_ADJ_SCRATCH as returned by CALC_TD).
 TOA_ADD_CONST:                               ; xref: c014C c0197 j0ED6 c0B48 c0B5B j0ECA j0ED0 c034D
 0EC1  01 A5 6F   LXI B,CUR_TOA
 0EC4  C3 82 07   JMP BCD_ADD4
 L_0EC7:                                      ; xref: j0CBB
-0EC7  21 08 00   LXI H,TOA_ADJ_2000
+0EC7  21 08 00   LXI H,TOA_ADJ_20US
 0ECA  C3 C1 0E   JMP TOA_ADD_CONST
-TOA_ADD_3000:                                ; xref: c0C9F
-0ECD  21 0B 00   LXI H,TOA_ADJ_3000
+TOA_ADD_30US:                                ; xref: c0C9F
+0ECD  21 0B 00   LXI H,TOA_ADJ_30US
 0ED0  C3 C1 0E   JMP TOA_ADD_CONST
-TOA_ADD_6000:                                ; xref: c0E7B
-0ED3  21 0E 00   LXI H,TOA_ADJ_6000
+TOA_ADD_60US:                                ; xref: c0E7B
+0ED3  21 0E 00   LXI H,TOA_ADJ_60US
 0ED6  C3 C1 0E   JMP TOA_ADD_CONST
 
 ; TICK_DISP_AND_RESTART (was X_0ED9, called once per epoch from TRACK_LOOP).

@@ -21,6 +21,8 @@ index.
   (`docs/board-trace-results.md`), blink bring-up ROM
   (`tools/make-blink-rom.js`). Open question: CLK is 5 MHz or 2.5 MHz
   (Open item 1b).
+- **Units fix (2026-10-14):** `CUR_TOA` is 0.1 us units, big-endian BCD; the
+  `TOA_*_n US` constants are 10-60 us carrier cycles (PROGRESS Update 16).
 - **Datasheets:** `docs/datasheets/` holds own-words recreations of the
   8085, 8155, 8205, 8212, 8251A, 8279 and AM26LS32 datasheets. Pin numbers
   are verified against Intel/TI documents (see `docs/peripheral-pinouts.md`);

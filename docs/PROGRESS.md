@@ -64,6 +64,24 @@ effect *at the time* - a name here may have since been superseded; treat
 this section as a historical record of reasoning, not a current reference
 (for current names, see `docs/jump-graph.md`).
 
+### Update 16 (2026-10-14): TOA constants corrected (units were wrong by 100x)
+
+Coverage check: 7,992 of 8,192 bytes decode as code; the 200 data bytes are
+the BCD constant table, a few dead orphans and a 128-byte dead tail at
+1F80-1FFF (see the listing). So remaining decoding work is *interpretation*,
+not coverage. Tracing the last un-traced `TOA_ADD_CONST` callers exposed a
+real error: `BCD_ADD4` carries from the highest address down, so 4-byte BCD
+values are big-endian in memory and `CUR_TOA` is in 0.1 us units (measured:
+GRI 9940 -> `00 99 40 00`; +`BCD_K_00080980` -> `01 07 49 80`). The
+"2000/3000/6000/1000" constants are therefore 20/30/60/10 us - whole
+100 kHz carrier cycles, not multiples of the 1000 us pulse spacing. Renamed
+`TOA_{ADJ,ADD,SUB}_{1000,2000,3000,6000}` -> `_{10,20,30,60}US` and
+`MASTER_CORR_ADD_3000` -> `_30US`; corrected the comments at 0004, 0E6D,
+0EA6, 0EC1 and `ram-map.md`; all `TOA_ADD_CONST` callers now documented.
+Rebuild: 0 differences. Still inferred (medium): that the ADJ cascade is a
+cycle-selection correction; the reason for 8098.0 us at `ACQ_START` is not
+traced.
+
 ### Update 15 (2026-10-14): remaining datasheets
 
 Added `docs/datasheets/8205.md`, `8212.md`, `AM26LS32.md`. The 8205 and 8212
