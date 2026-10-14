@@ -190,7 +190,7 @@ RESET:
 REC_ROTATE_COUNT EQU  $+2
         JMP INIT
 
-; Table of six 4-byte packed-BCD constants (little-endian, LS byte first).
+; Table of six 4-byte packed-BCD constants (BIG-endian in memory: MS byte at the lowest address, see BCD_ADD4).
 ; DISP_ALLSEGS_PATTERN (888888) is the classic all-segments-lit LED test pattern, consumed by
 ; DISP_TEST_TICK (19E7). TOA_ADJ_20US/_30US/_60US/_10US (0008-0014,
 ; overlapping 4-byte windows into the same byte run) are TOA adjustment constants - see
@@ -1370,11 +1370,14 @@ CALC_TD_EXIT:
         LXI H,TD_ADJ_SCRATCH
         RET
 
-; BCD_ADD4: (BC) += (HL), 4 packed-BCD bytes, LS byte first.
-; PTR_TO_MSB: HL += DE-1, BC += DE-1 (point both at the MS byte).
+; BCD_ADD4: (BC) += (HL), 4 packed-BCD bytes, MS byte at the lowest address (big-endian; the add starts at the
+; highest address with carry 0 and carries toward lower addresses - verified numerically in
+; the emulator, see PROGRESS Update 16).
+; PTR_TO_LSB (was PTR_TO_LSB): HL += DE-1, BC += DE-1 - points both at the LAST byte, which
+;  is the LS byte in this layout.
 BCD_ADD4:
         LXI D,0004H                 ; DE = 4 bytes
-        CALL PTR_TO_MSB
+        CALL PTR_TO_LSB
         XRA A
 BCD_ADD4_LOOP:
         LDAX B
@@ -1386,7 +1389,7 @@ BCD_ADD4_LOOP:
         DCX B
         DCX H
         JMP BCD_ADD4_LOOP
-PTR_TO_MSB:
+PTR_TO_LSB:
         DAD D
         DCX H
         PUSH H
@@ -1402,7 +1405,7 @@ PTR_TO_MSB:
 ; BCD_SUB4: (BC) -= (HL), 4 packed-BCD bytes, ten's-complement subtract.
 BCD_SUB4:
         LXI D,0004H                 ; DE = 4 bytes
-        CALL PTR_TO_MSB
+        CALL PTR_TO_LSB
         PUSH D
         PUSH B
         POP D

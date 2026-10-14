@@ -165,7 +165,7 @@ control flow inside an already-named routine, not independent things to name.
 | 0721 | `NEG_HL` | 5 | named |
 | 072A | `CALC_TD` | 4 | named |
 | 0782 | `BCD_ADD4` | 7 | named |
-| 0794 | `PTR_TO_MSB` | 2 | named |
+| 0794 | `PTR_TO_LSB` | 2 | named |
 | 079F | `BCD_SUB4` | 3 | named |
 | 07BB | `COPY4` | 9 | named |
 | 07BD | `COPY_E` | 1 | named |

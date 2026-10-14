@@ -78,6 +78,8 @@ GRI 9940 -> `00 99 40 00`; +`BCD_K_00080980` -> `01 07 49 80`). The
 `TOA_{ADJ,ADD,SUB}_{1000,2000,3000,6000}` -> `_{10,20,30,60}US` and
 `MASTER_CORR_ADD_3000` -> `_30US`; corrected the comments at 0004, 0E6D,
 0EA6, 0EC1 and `ram-map.md`; all `TOA_ADD_CONST` callers now documented.
+Also corrected the "little-endian, LS byte first" comments at 0004/0782 and renamed
+`PTR_TO_MSB` -> `PTR_TO_LSB` (it points at the last byte, the LS byte).
 Rebuild: 0 differences. Still inferred (medium): that the ADJ cascade is a
 cycle-selection correction; the reason for 8098.0 us at `ACQ_START` is not
 traced.

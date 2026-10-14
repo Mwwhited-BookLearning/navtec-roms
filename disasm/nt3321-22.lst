@@ -7,7 +7,7 @@ RESET:                                       ; refs: lxi0E95 lxi0887 lxi0A77 lxi
 REC_ROTATE_COUNT:                            ; = 0003, inside the next instruction (entered by jumping past the 21H prefix)
 0001  C3 72 00   JMP INIT
 
-; Table of six 4-byte packed-BCD constants (little-endian, LS byte first).
+; Table of six 4-byte packed-BCD constants (BIG-endian in memory: MS byte at the lowest address, see BCD_ADD4).
 ; DISP_ALLSEGS_PATTERN (888888) is the classic all-segments-lit LED test pattern, consumed by
 ; DISP_TEST_TICK (19E7). TOA_ADJ_20US/_30US/_60US/_10US (0008-0014,
 ; overlapping 4-byte windows into the same byte run) are TOA adjustment constants - see
@@ -1187,11 +1187,14 @@ CALC_TD_EXIT:                                ; xref: j0772
 077E  21 E3 6F   LXI H,TD_ADJ_SCRATCH
 0781  C9         RET
 
-; BCD_ADD4: (BC) += (HL), 4 packed-BCD bytes, LS byte first.
-; PTR_TO_MSB: HL += DE-1, BC += DE-1 (point both at the MS byte).
+; BCD_ADD4: (BC) += (HL), 4 packed-BCD bytes, MS byte at the lowest address (big-endian; the add starts at the
+; highest address with carry 0 and carries toward lower addresses - verified numerically in
+; the emulator, see PROGRESS Update 16).
+; PTR_TO_LSB (was PTR_TO_LSB): HL += DE-1, BC += DE-1 - points both at the LAST byte, which
+;  is the LS byte in this layout.
 BCD_ADD4:                                    ; xref: c10BA j0704 c0DA1 j0EC4 c0933 c0939 c0CD1 c0CF8 j1F7A c0942
 0782  11 04 00   LXI D,0004H                 ; DE = 4 bytes
-0785  CD 94 07   CALL PTR_TO_MSB
+0785  CD 94 07   CALL PTR_TO_LSB
 0788  AF         XRA A
 BCD_ADD4_LOOP:                               ; xref: j0791
 0789  0A         LDAX B
@@ -1203,7 +1206,7 @@ BCD_ADD4_LOOP:                               ; xref: j0791
 078F  0B         DCX B
 0790  2B         DCX H
 0791  C3 89 07   JMP BCD_ADD4_LOOP
-PTR_TO_MSB:                                  ; xref: c0785 c07A2
+PTR_TO_LSB:                                  ; xref: c0785 c07A2
 0794  19         DAD D
 0795  2B         DCX H
 0796  E5         PUSH H
@@ -1219,7 +1222,7 @@ PTR_TO_MSB:                                  ; xref: c0785 c07A2
 ; BCD_SUB4: (BC) -= (HL), 4 packed-BCD bytes, ten's-complement subtract.
 BCD_SUB4:                                    ; xref: c1088 c109E j0707 j0DAD j0EA9 c0CE2 j1F7D
 079F  11 04 00   LXI D,0004H                 ; DE = 4 bytes
-07A2  CD 94 07   CALL PTR_TO_MSB
+07A2  CD 94 07   CALL PTR_TO_LSB
 07A5  D5         PUSH D
 07A6  C5         PUSH B
 07A7  D1         POP D
