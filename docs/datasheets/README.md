@@ -7,9 +7,10 @@ abbreviated - use the originals for those.
 
 | Part | File | Role on this board |
 |---|---|---|
+| 8085 | [8085.md](8085.md) | CPU (U40) |
 | 8155H | [8155.md](8155.md) | I/O + RAM + timer (x2, E000 / F000) |
 | 8251A | [8251A.md](8251A.md) | Host serial port (C000) |
 | 8279 | [8279.md](8279.md) | Keyboard/display controller (D000) |
 
-Not yet written (no readable source found): 8085, 8205, 8212, AM26LS32.
+Not yet written (no readable source found): 8205 (a 74LS138 equivalent), 8212, AM26LS32.
 See [../peripheral-pinouts.md](../peripheral-pinouts.md) for their pins.

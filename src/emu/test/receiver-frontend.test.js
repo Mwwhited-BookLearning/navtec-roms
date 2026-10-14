@@ -130,3 +130,21 @@ describe('ReceiverFrontEnd: record decode and epoch/interval model', () => {
     assert.deepEqual(epochs, [[0, 0], [P, 1], [P * 2, 2]]);
   });
 });
+
+describe('ReceiverFrontEnd: sensitivity options', () => {
+  it('defaults match the documented model (gate +4, 99 samples, B=PC4/C=PC3)', () => {
+    const { fe } = makeFrontEnd();
+    assert.equal(fe.gateOffset, 4);
+    assert.equal(fe.periodSamples, 99);
+    assert.equal(fe.swapBC, false);
+  });
+
+  it('swapBC exchanges which port C bit carries each shift register MSB', () => {
+    const cpu = { requestInterrupt() {} };
+    const pio2 = { PB: 0, PA: 0, pcIn: 0xFF };
+    const fe = new ReceiverFrontEnd(cpu, pio2, 'master', null, { swapBC: true });
+    fe.shift1 = 0x80; fe.shift2 = 0;
+    fe.presentBits();
+    assert.equal(pio2.pcIn & 0x18, 0x08, 'B word MSB now appears on PC3');
+  });
+});

@@ -68,10 +68,8 @@ skinparam monochrome true
 skinparam defaultFontName monospaced
 title 8085 address space as used by the firmware
 
-rectangle "0000-07FF  ROM1 NT3321 (dumped)" as r1
-rectangle "0800-0FFF  ROM1 upper half (NOT in dump, code is referenced)" as r1b #ffdddd
-rectangle "1000-17FF  ROM2 NT3322 (dumped)" as r2
-rectangle "1800-1FFF  ROM2 upper half (NOT in dump, code is referenced)" as r2b #ffdddd
+rectangle "0000-0FFF  ROM1 NT3321 (complete 4 KB image)" as r1
+rectangle "1000-1FFF  ROM2 NT3322 (complete 4 KB image)" as r2
 rectangle "2000-2FFF  optional expansion ROM (2000 = A5H signature, 2001 = entry)" as r3 #eeeeee
 rectangle "3000-5FFF  unused / mirrors" as r4 #eeeeee
 rectangle "6F00-6FFF  RAM (8155 #1)" as ram1
@@ -81,10 +79,8 @@ rectangle "D000-D001  8279 KDC     (D000 data, D001 command/status)" as k
 rectangle "E000-E005  8155 #1 I/O  (cmd/status, PA, PB, PC, timer lo, timer hi)" as p1
 rectangle "F000-F005  8155 #2 I/O  (cmd/status, PA, PB, PC, timer lo, timer hi)" as p2
 
-r1 -[hidden]down- r1b
-r1b -[hidden]down- r2
-r2 -[hidden]down- r2b
-r2b -[hidden]down- r3
+r1 -[hidden]down- r2
+r2 -[hidden]down- r3
 r3 -[hidden]down- r4
 r4 -[hidden]down- ram1
 ram1 -[hidden]down- ram2

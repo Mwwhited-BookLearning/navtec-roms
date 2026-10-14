@@ -537,7 +537,12 @@ const PHASE_CODES = {
 const bcd2bin = (v) => ((v >> 4) & 0xF) * 10 + (v & 0xF);
 
 class ReceiverFrontEnd {
-  constructor(cpu, pio2, which, pio1) {
+  // opts (all optional, defaults = the documented model): gateOffset (samples between the gate
+  // and the first pulse slot, default 4), swapBC (swap which PC bit carries B vs C), periodSamples.
+  constructor(cpu, pio2, which, pio1, opts) {
+    opts = opts || {};
+    this.gateOffset = opts.gateOffset === undefined ? 4 : opts.gateOffset;
+    this.swapBC = !!opts.swapBC;
     this.cpu = cpu; this.pio2 = pio2; this.pio1 = pio1 || null; // Bus fills pio1 in on first tick if omitted
     this.mode = PHASE_CODES[which] ? which : 'master';
     this.words = PHASE_CODES[this.mode];
@@ -548,7 +553,7 @@ class ReceiverFrontEnd {
     this.lastPB = pio2.PB;
     this.tStateAcc = 0;
     this.sampleInterval = 20000; // T-states between synthetic samples (approximate, not real-time)
-    this.periodSamples = 99;     // samples per GRI-synchronous epoch window
+    this.periodSamples = opts.periodSamples || 99; // samples per GRI-synchronous epoch window
     this.groupCnt = 40;          // SAMPLE_CNT at which the group first completes, for the first committed record
     this.gateMs = null;          // decoded TOA of the last committed record
     this.stationMs = null;       // true group start in the same frame (set from the first record + groupCnt)
@@ -594,7 +599,7 @@ class ReceiverFrontEnd {
   // Sign bit of the station's pulse at sample index k (0 if no pulse there), before noise.
   pulseBit(k) {
     if (this.stationMs === null || this.gateMs === null) return 0;
-    const m = k - (Math.round(this.stationMs - this.gateMs) - 4);
+    const m = k - (Math.round(this.stationMs - this.gateMs) - this.gateOffset);
     return (m >= 0 && m < 8) ? ((this.groupWord() >> (7 - m)) & 1) : 0;
   }
   noisy(bit) { return (this.noise && Math.random() < this.noise) ? bit ^ 1 : bit; }
@@ -604,16 +609,17 @@ class ReceiverFrontEnd {
     return w;
   }
   presentBits() {
-    const b = (this.shift1 & 0x80) ? 0x10 : 0, c = (this.shift2 & 0x80) ? 0x08 : 0;
+    let b = (this.shift1 & 0x80) ? 0x10 : 0, c = (this.shift2 & 0x80) ? 0x08 : 0;
+    if (this.swapBC) { const t = b ? 0x08 : 0; b = c ? 0x10 : 0; c = t; }
     this.pio2.pcIn = (this.pio2.pcIn & ~0x18) | b | c;
   }
   reloadShiftRegs() {
-    this.shift1 = this.word(-4);             // B: the 8 gated pulse slots
+    this.shift1 = this.word(-this.gateOffset);             // B: the 8 gated pulse slots
     // C: while searching (status bit 0 clear) the last 8 samples; once records carry status 0FH
     // (verify/settle/track) the second channel is gated onto the same group as B -- READ_PHASE
     // XORs both bytes against the same PHASE_REF byte, so a locked master has to read the same.
     const gated = (this.pio2.PB & 1) !== 0;
-    this.shift2 = gated ? this.word(-4) : this.word(this.index - 7);
+    this.shift2 = gated ? this.word(-this.gateOffset) : this.word(this.index - 7);
     if (gated && !this.rebased && this.stationMs !== null && this.gateMs !== null &&
         Math.round(this.stationMs - this.gateMs) === 0) this.alignedSeen = true;
     this.presentBits();

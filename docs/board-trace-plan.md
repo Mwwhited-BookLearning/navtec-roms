@@ -67,7 +67,7 @@ silkscreen ([hardware.md designator table](hardware.md)).
 
 | # | Probe | Expected (from the emulator) | What a mismatch tells us |
 |---|---|---|---|
-| 3.1 | CLK OUT frequency | 5.000 MHz if TCXO is 10 MHz and divides by 2 | Crystal question |
+| 3.1 | CLK OUT frequency, and the 8155 CLK pin separately | 5.000 MHz at CLK OUT if the TCXO feeds X1 directly (8085 divides by 2); the baud table implies 2.5 MHz at the 8155 - see [boot-sequence.md](boot-sequence.md) | Crystal question |
 | 3.2 | 8155 TIMER OUT on both chips | One continuous square wave, count 07D0H = 2000; the other is the baud-rate timer (e.g. 8 / 130 / 520 / 1418 counts) | Which chip is which, and the RST 7.5 period |
 | 3.3 | 8279 CLK | roughly 600 kHz (the firmware programs prescaler 6, which a 100 kHz internal rate would want); record the real value | Open question 3 |
 | 3.4 | 8251A TXD with a serial terminal on the host link | 7 data bits, odd parity, 2 stop (7O2) at the baud chosen by the switches; the firmware prints a report a few seconds after INIT if the switch panel is valid | Whether `docs/serial-protocol.md` matches reality; **without the switch panel / front end the firmware may stall in `READ_SWITCHES` validation**, so a quiet UART at first is not a fault |

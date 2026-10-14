@@ -253,3 +253,29 @@ Runs `node --test` (Node's built-in test runner, no extra dependency) over
 - A small regression harness (run N steps from reset, assert PC visits a
   known set of routines) would catch peripheral regressions like the
   sensor-RAM bug found above without needing a human to eyeball a trace.
+
+## Front-end sensitivity (what the firmware actually depends on)
+
+`node src/emu/sensitivity.js [maxSteps]` re-runs the stock ROMs from reset
+with one front-end assumption changed at a time (`ReceiverFrontEnd` options
+`gateOffset`, `swapBC`, `periodSamples`) and reports whether `MASTER_FOUND`
+and `TRACK_LOOP` are reached. Result (8M-step budget, master mode):
+
+| Variant | MASTER_FOUND | TRACK_LOOP |
+|---|---|---|
+| baseline (gate +4, B=PC4/C=PC3, 99 samples) | 970,109 | 5,472,859 |
+| B/C taps swapped | 970,109 | 5,472,859 |
+| epoch 98 / 100 samples | 961,105 / 979,045 | 5,418,937 / 5,526,767 |
+| epoch 49 samples | no | no |
+| gate offset 0 / 3 / 5 | no | no |
+
+How to read it: **the firmware cannot distinguish the B/C tap assignment**
+(identical step counts) - only a probe of the real board answers that - and
+it tolerates +/-1 sample of epoch length but not half the epoch. The gate
+offset rows are *not* evidence about the hardware: the model anchors the
+station at `gateMs + (groupCnt - 9)`, which bakes in the +4 the firmware's
+own arithmetic implies, so changing only the offset breaks the model's own
+consistency. Treat +4 as firmware-derived, not hardware-confirmed.
+
+`node src/emu/boot-trace.js` prints the I/O access sequence after reset;
+see [boot-sequence.md](boot-sequence.md).

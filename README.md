@@ -61,6 +61,9 @@ that still need meter verification against the schematic).
 | [CONTRIBUTING.md](CONTRIBUTING.md) | the disassembly edit/verify/sweep workflow, naming discipline, and commit conventions |
 | [CLAUDE.md](CLAUDE.md) / [CONTEXT.md](CONTEXT.md) | operating rules and current-state snapshot for resuming work in a new session |
 | [docs/hardware-reuse.md](docs/hardware-reuse.md) | proposed reuse projects for this hardware with all-new firmware, no Loran interface required - single-board, breadboard/harvested-parts, and dual-board ideas |
+| [docs/datasheets/](docs/datasheets/README.md) | own-words recreations of the 8085, 8155, 8251A and 8279 datasheets with PlantUML diagrams |
+| [docs/boot-sequence.md](docs/boot-sequence.md) | the I/O access order after reset, for comparing against a live board; plus the 5 MHz vs 2.5 MHz clock question |
+| [docs/board-trace-results.md](docs/board-trace-results.md) | fill-in sheet for the board trace plan |
 | [docs/peripheral-pinouts.md](docs/peripheral-pinouts.md) | chip-level pinouts for the 8279/8155/8251A, for anyone wiring a new panel or interfacing new hardware |
 
 ## Regenerating the listing

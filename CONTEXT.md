@@ -16,7 +16,10 @@ index.
 
 ## Current state
 
-- **Datasheets:** `docs/datasheets/` holds recreated 8155/8251A/8279
+- **Pre-hardware prep done (2026-10-14):** boot sequence, sensitivity sweep,
+  results sheet, blink bring-up ROM, 8085 datasheet. New open question:
+  CLK is 5 MHz or 2.5 MHz (docs/boot-sequence.md).
+- **Datasheets:** `docs/datasheets/` holds recreated 8085/8155/8251A/8279
   datasheets; pin numbers are verified (see `docs/peripheral-pinouts.md`).
   Board work is gated on the user powering the bare board - see
   `docs/board-trace-plan.md`.

@@ -13,6 +13,7 @@ need to read to know what's left.
    RST 7.5 source, which 8155 is which, the U39/8212 conflict, the OPTION
    socket wiring, the 8279 CLK source, etc.) is still open and needs
    someone with the actual board and a meter.
+1b. **Resolve the CLK frequency (5 MHz vs 2.5 MHz)** at the 8155 CLK pin (docs/boot-sequence.md). If 5 MHz the baud table/serial docs are off by 2.
 2. **Receiver front-end model: verify against hardware / exercise lock.**
    The synthetic front end now drives the firmware to `MASTER_FOUND` and
    `TRACK_LOOP` (Update 11), but its timing/tap/offset assumptions are
@@ -23,7 +24,9 @@ need to read to know what's left.
    of the image directly - some entries added earlier specifically to force
    discovery of code in the (then-missing) upper halves might now be
    redundant, though leaving them is harmless.
-4. **Open UX questions from the user-flow synthesis** (`docs/user-flows.md`):
+4. **Remaining datasheets:** 8205 (74LS138 equivalent, no Intel scan), 8212, AM26LS32; read 8251A pp.15-25 and 8279 pp.11-16 for timing and verify the 8251A sync-mode bit layout (written from memory).
+5. **Hardware-session aids to maintain:** keep `docs/board-trace-results.md` and `docs/boot-sequence.md` in step with whatever the trace shows.
+6. **Open UX questions from the user-flow synthesis** (`docs/user-flows.md`):
    what the two push-buttons do outside set-up mode, whether display
    dimming is firmware-controlled at all, and what the display shows during
    acquisition/tracking before a station locks.
@@ -60,6 +63,19 @@ Dated log of completed work, newest first. Old entries use the names in
 effect *at the time* - a name here may have since been superseded; treat
 this section as a historical record of reasoning, not a current reference
 (for current names, see `docs/jump-graph.md`).
+
+### Update 14 (2026-10-14): pre-hardware preparation
+
+- `ReceiverFrontEnd` takes optional `gateOffset`/`swapBC`/`periodSamples`;
+  `src/emu/sensitivity.js` sweeps them (results in docs/emulator.md): the
+  firmware cannot tell the B/C tap assignment, tolerates +/-1 sample of epoch.
+- `src/emu/boot-trace.js` + `docs/boot-sequence.md`: expected I/O access
+  order after reset; `tools/make-blink-rom.js` bring-up image.
+- `docs/board-trace-results.md`: fill-in sheet for the trace plan.
+- `docs/datasheets/8085.md` added (from the Intel 8085AH scan). It confirms
+  CLK OUT = X1/2, which exposes a 5 MHz vs 2.5 MHz inconsistency between the
+  TCXO note and the baud table in hardware.md - now Open item 1.
+- Fixed stale "upper half NOT in dump" memory-map text in hardware.md.
 
 ### Update 13 (2026-10-13): datasheet recreations
 
