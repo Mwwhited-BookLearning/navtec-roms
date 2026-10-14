@@ -37,11 +37,12 @@ index.
   differences over 8192 bytes as of the last commit.
 - **Emulator: working.** `src/emu/emu8085.js` boots both real ROM images
   through `INIT`/self-test/`READ_SWITCHES` and, with a valid switch panel,
-  into the real background tracking loop. 112/112 tests passing
+  into the real background tracking loop. 115+ tests passing
   (`npm test`). **Now reaches `MASTER_FOUND` and `TRACK_LOOP`** against the
   rebuilt synthetic front end (a model; assumptions listed in
-  `docs/emulator.md` limitation 5). Locked-state behaviour (moving TD,
-  secondary mode, dropout) is untested.
+  `docs/emulator.md` limitation 5). Locked-state: no runaway over 3M steps; signal-off for 85M steps never
+  drops lock; button presses set `RESTART_REQ` but do not re-acquire
+  (PROGRESS Updates 17-19). Moving TD and secondary mode remain untested.
 - **Web front end: working.** `src/emu/web-emu.js` + `src/emu/web/` -
   front panel, display, blinkenlights, serial console, and an illustrative
   (not real) Loran-C position-fix map. Six playbooks with screenshots in
