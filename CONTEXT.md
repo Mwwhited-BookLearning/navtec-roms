@@ -1,6 +1,6 @@
 # Context snapshot
 
-**Last updated:** 2026-10-13. This file is a living snapshot, overwritten
+**Last updated:** 2026-10-14. This file is a living snapshot, overwritten
 each session - it's the "what's true right now" complement to
 [docs/PROGRESS.md](docs/PROGRESS.md)'s permanent dated changelog. Read
 [CLAUDE.md](CLAUDE.md) alongside this for the operating rules.
@@ -16,13 +16,16 @@ index.
 
 ## Current state
 
-- **Pre-hardware prep done (2026-10-14):** boot sequence, sensitivity sweep,
-  results sheet, blink bring-up ROM, 8085 datasheet. New open question:
-  CLK is 5 MHz or 2.5 MHz (docs/boot-sequence.md).
-- **Datasheets:** `docs/datasheets/` holds recreated 8085/8155/8205/8212/8251A/8279/AM26LS32
-  datasheets; pin numbers are verified (see `docs/peripheral-pinouts.md`).
-  Board work is gated on the user powering the bare board - see
-  `docs/board-trace-plan.md`.
+- **Pre-hardware prep done (2026-10-14):** boot sequence
+  (`docs/boot-sequence.md`), front-end sensitivity sweep, results sheet
+  (`docs/board-trace-results.md`), blink bring-up ROM
+  (`tools/make-blink-rom.js`). Open question: CLK is 5 MHz or 2.5 MHz
+  (Open item 1b).
+- **Datasheets:** `docs/datasheets/` holds own-words recreations of the
+  8085, 8155, 8205, 8212, 8251A, 8279 and AM26LS32 datasheets. Pin numbers
+  are verified against Intel/TI documents (see `docs/peripheral-pinouts.md`);
+  8251A pp.18-25 are unread. Board work is gated on the user powering the
+  bare board - see `docs/board-trace-plan.md`.
 
 - **Disassembly: complete.** 0 of 137 routines and 0 of 175 variables
   remain generically named. 3 addresses (`VAR_6FCB`, `VAR_6FD9`, `D_1004`)
@@ -32,7 +35,7 @@ index.
   differences over 8192 bytes as of the last commit.
 - **Emulator: working.** `src/emu/emu8085.js` boots both real ROM images
   through `INIT`/self-test/`READ_SWITCHES` and, with a valid switch panel,
-  into the real background tracking loop. 110/110 tests passing
+  into the real background tracking loop. 112/112 tests passing
   (`npm test`). **Now reaches `MASTER_FOUND` and `TRACK_LOOP`** against the
   rebuilt synthetic front end (a model; assumptions listed in
   `docs/emulator.md` limitation 5). Locked-state behaviour (moving TD,
@@ -45,55 +48,30 @@ index.
   board's device-mapping logic as an emulated PAL16R8/20R10, with
   generated CUPL source in `pal/*.pld`. Not compiled/burned to a real chip
   - see `docs/pal-programming-guide.md` if that's ever done.
-- **Documentation:** 19 docs (see README.md's table) covering hardware,
+- **Documentation:** 22 docs (see README.md's table) covering hardware,
   firmware, protocol, front panel, the emulator, and now (as of this
   session) a Loran-C primer, a glossary/naming-conventions reference, a
   CONTRIBUTING methodology doc, and an emulator API reference.
 
 ## Open items (canonical list: `docs/PROGRESS.md`)
 
-Don't duplicate the list here - it drifts. As of this writing there are 4,
-none urgent: physical-board verification (needs the real board + a
-meter), receiver front-end bit-protocol verification (needs
-`SHIFT_IN16`/`MATCH_PULSES` re-traced), optional `disasm/nt3321-22.json`
-`entries`/`extraCode` cleanup, and a few open UX questions from
-`docs/user-flows.md`. Check `docs/PROGRESS.md`'s "Open items" section for
+Don't duplicate the list here - it drifts. As of this writing there are 6,
+none urgent: physical-board verification and the CLK-frequency check
+(need the real board + a meter), front-end model verification/untested lock
+paths, optional `disasm/nt3321-22.json` `entries`/`extraCode` cleanup,
+datasheet gaps, and a few open UX questions from `docs/user-flows.md`. Check `docs/PROGRESS.md`'s "Open items" section for
 the current, authoritative version.
 
-## Latest addition (2026-09-07, later same day)
+## History
 
-`docs/hardware-reuse.md` (proposed non-Loran reuse projects for this
-hardware - single-board, harvested-parts/breadboard, and dual-board ideas,
-since the user has two identical boards) and
-`docs/peripheral-pinouts.md` (8279 pinout fully verified against two
-independent datasheet sources; 8155/8251A pin *functions* confirmed but
-exact pin *numbers* not independently verified this session - flagged
-explicitly, cross-check before wiring). Neither the reuse ideas nor the
-pinouts have been built/tested - both are design proposals.
-
-## Most recent session's work (2026-09-07)
-
-In order: captured the user's physical-board data (crystal, chip
-designators) into `hardware.md`; built the PAL/CUPL decoder; built the
-8085 emulator; built the web front end (front panel, display,
-blinkenlights, serial console) and fixed a real bug enabling runtime
-switch changes; added the illustrative Loran-C position map; captured six
-screenshotted playbooks; wrote the `user-flows.md` operator design
-document; added a `npm test` unit/integration suite (106 tests); traced
-and renamed 9 of 11 `VAR_xxxx` placeholder variables (resolving a
-previously-open "unreconciled dual use" ambiguity in `TICK_CLOCK_CASCADE`
-along the way); named 9 of 10 `D_xxxx` auto-generated labels and 10
-`L_xxxx` labels in the one remaining low-confidence cluster; restructured
-`docs/PROGRESS.md` into Open-items-first-then-changelog; and added
-`docs/loran-c-primer.md`, `docs/glossary.md`, `CONTRIBUTING.md`,
-`docs/pal-programming-guide.md`, `docs/emulator-api.md`, and this
-file plus `CLAUDE.md`.
+Per-session detail lives in `docs/PROGRESS.md`'s dated changelog; don't
+duplicate it here.
 
 ## Quick health check
 
 ```sh
 sh tools/rebuild.sh   # must print "differences vs originals: 0"
-npm test              # must print 106+ passing, 0 failing
+npm test              # must print 112+ passing, 0 failing
 ```
 
 If either fails, something regressed since this snapshot was written -
