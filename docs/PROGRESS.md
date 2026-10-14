@@ -64,6 +64,18 @@ effect *at the time* - a name here may have since been superseded; treat
 this section as a historical record of reasoning, not a current reference
 (for current names, see `docs/jump-graph.md`).
 
+### Update 19 (2026-10-14): front-panel buttons after lock
+
+Pressing a push-button after lock (sensor rows 6 and 7 set, then `raiseIrq()`) runs
+`SCAN_SWITCHES` and sets `RESTART_REQ` (6FCE) = 2 in normal mode. It then decays
+2 -> 1 -> 0, one step per epoch, and does **not** re-enter `ACQ_START` (TRACK_STATE
+stays 80H), so the name is misleading - it behaves as a settle gate. When it reads 1,
+the SEL_A/BUTTONS block feeds `PULSE_ALIGN_ADJ2_AND_CLEAR` (0E92). With SEL_A = 0AH
+(row0 = 0), button B (0x40) visited both `TOA_SUB_10US` and `TOA_ADD_10US` twice
+(net zero; final CUR_TOA identical to the no-press run); button A (0x80) did nothing.
+Other row0 values (SEL_A 1-9, 0CH) gave no visits. So a manual +-10 us cycle-select
+is plausible but **not demonstrated** - the net-zero pair is unexplained. Not renamed.
+
 ### Update 18 (2026-10-14): loss-of-signal switch
 
 `ReceiverFrontEnd.setSignal(on)` added (+ a unit test). 85M steps with the

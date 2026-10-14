@@ -302,3 +302,10 @@ by the `MISS_LIMIT` `TOA_ALT` swap). So in this model a lost master does not
 force re-acquisition within a practical run length; whether the real firmware
 drops back only via the `SLOT_TRACKING` miss-limit path or needs a front-panel
 restart (`RESTART_REQ`) is still untested.
+
+### Button presses after lock
+
+Setting sensor rows 6/7 plus `bus.kdc.raiseIrq()` sets `RESTART_REQ`=2, which decays
+to 0 over two epochs without re-acquiring. At SEL_A=0AH, button B triggers a
+SUB10/ADD10 pair that nets to zero; button A has no visible effect. See
+PROGRESS Update 19.
