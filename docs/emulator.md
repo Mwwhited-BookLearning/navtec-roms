@@ -279,3 +279,17 @@ consistency. Treat +4 as firmware-derived, not hardware-confirmed.
 
 `node src/emu/boot-trace.js` prints the I/O access sequence after reset;
 see [boot-sequence.md](boot-sequence.md).
+
+## Locked-state behaviour (exploration, 2026-10-14)
+
+Running 12M steps past `TRACK_LOOP` against the synthetic front end (master
+only, noise 0): `TRACK_STATE` settles at 80H and the CPU never leaves the
+tracking state machine, but `MISS_CNT` climbs about 1 per ~220k steps and
+`CUR_TOA` shows the 11.0 us `SLOT_TRK_MISS` increments (`+00000110` BCD each).
+That is expected rather than a bug - the model transmits no secondary
+stations, so every secondary slot misses - but it means the model does *not*
+exercise a clean multi-station lock. Setting noise to 1.0 mid-run changes
+nothing visible in the same window (the 80H state persists; slot 0 keeps
+being re-seeded), so a true lock-loss -> re-acquire path still needs a model
+that can drop the master (not yet written). `lock-acquisition.test.js` now
+asserts only no-runaway (PC stays in ROM, state stays in the known set).

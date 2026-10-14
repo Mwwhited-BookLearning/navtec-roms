@@ -64,6 +64,16 @@ effect *at the time* - a name here may have since been superseded; treat
 this section as a historical record of reasoning, not a current reference
 (for current names, see `docs/jump-graph.md`).
 
+### Update 17 (2026-10-14): regression tests and locked-state exploration
+
+`src/emu/test/bcd-layout.test.js` pins the big-endian 0.1 us BCD layout
+(Update 16); `lock-acquisition.test.js` gained a 3M-step post-lock no-runaway
+test with and without noise (suite now 115 tests, ~1 min). Findings in
+`docs/emulator.md` ("Locked-state behaviour"): the model never produces a
+clean multi-station lock (no secondaries modelled), and noise alone does not
+drive a lock loss. Next: a front end that can drop the master and add a
+secondary.
+
 ### Update 16 (2026-10-14): TOA constants corrected (units were wrong by 100x)
 
 Coverage check: 7,992 of 8,192 bytes decode as code; the 200 data bytes are
